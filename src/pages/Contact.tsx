@@ -117,7 +117,7 @@ export default function Contact() {
 
       {/* Section 1: Department Contact Desks */}
       <section className="w-full bg-white py-10 sm:py-12">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Speak With Specialists"
             heading="Department Desks"
@@ -180,7 +180,7 @@ export default function Contact() {
 
       {/* Section 2: Physical Locations & Showrooms */}
       <section className="w-full bg-[#F8FAFC] py-10 sm:py-12 border-y border-slate-200/80">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Showrooms & Plant"
             heading="Our Locations"
@@ -248,7 +248,7 @@ export default function Contact() {
 
       {/* Section 3: Direct Message Form & Connected Portals */}
       <section className="w-full bg-white py-12">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           <div className="lg:col-span-5 space-y-5">
             <AboutTaglineHeading
               kicker="Send a Message"

@@ -66,6 +66,12 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     path: "/PortalsAdmin",
     matchPaths: ["/PortalsAdmin"],
   },
+  {
+    key: "blogs",
+    label: "Blogs",
+    path: "/BlogsAdmin",
+    matchPaths: ["/BlogsAdmin"],
+  },
 ];
 
 export const ADMIN_SHELL_PATHS: string[] = [
@@ -174,6 +180,13 @@ export function getAdminBreadcrumb(pathname: string): AdminBreadcrumbMeta {
         current: "Hardware & Portals Collage",
         title: "Related Hardware & Portals Collage",
         subtitle: "Upload collage photos and assign direct click links for the Resources page directory.",
+      };
+    case "/blogsadmin":
+      return {
+        parent: "Blogs",
+        current: "Blogger Sync & Home Curation",
+        title: "Blogs & Blogger.com Publisher",
+        subtitle: "Connect Blogger.com to auto-share posts and curate which articles appear on the Home page.",
       };
     default:
       return {

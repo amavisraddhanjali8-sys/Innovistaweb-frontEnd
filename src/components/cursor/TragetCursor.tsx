@@ -36,8 +36,28 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
     });
   }, []);
 
+  const [isDesktopCursor, setIsDesktopCursor] = React.useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const fine =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: fine)').matches;
+    return fine && window.innerWidth >= 1024;
+  });
+
   useEffect(() => {
-    if (!cursorRef.current) return;
+    const update = () => {
+      const fine =
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(pointer: fine)').matches;
+      setIsDesktopCursor(fine && window.innerWidth >= 1024);
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    if (!isDesktopCursor || !cursorRef.current) return;
 
     const originalCursor = document.body.style.cursor;
     if (hideDefaultCursor) {
@@ -313,7 +333,7 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
       spinTl.current?.kill();
       document.body.style.cursor = originalCursor;
     };
-  }, [targetSelector, spinDuration, moveCursor, constants, hideDefaultCursor]);
+  }, [isDesktopCursor, targetSelector, spinDuration, moveCursor, constants, hideDefaultCursor]);
 
   useEffect(() => {
     if (!cursorRef.current || !spinTl.current) return;
@@ -325,6 +345,10 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
         .to(cursorRef.current, { rotation: '+=360', duration: spinDuration, ease: 'none' });
     }
   }, [spinDuration]);
+
+  if (!isDesktopCursor) {
+    return null;
+  }
 
   return (
     <div ref={cursorRef} className="target-cursor-wrapper">

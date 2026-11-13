@@ -70,7 +70,7 @@ export default function Products() {
       />
 
       {/* 2. Simple Description-Free Product Categories Grid */}
-      <section className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 sm:pt-14 pb-12 sm:pb-16">
+      <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-10 sm:pt-14 pb-12 sm:pb-16">
         <div className="flex flex-col items-center">
           <AboutTaglineHeading
             heading={landingCms.categoriesHeading}

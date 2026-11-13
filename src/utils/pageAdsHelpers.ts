@@ -12,7 +12,8 @@ export type AdPageKey =
   | "category"
   | "product-details"
   | "projects"
-  | "blogs";
+  | "blogs"
+  | "news";
 
 export interface PageAdButton {
   id: string;
@@ -25,6 +26,7 @@ export interface PageAdSlide {
   image: string;
   title: string;
   linkUrl?: string;
+  paused?: boolean;
   buttons?: PageAdButton[];
 }
 
@@ -108,6 +110,12 @@ export const AD_PAGE_DEFINITIONS: AdPageDefinition[] = [
     label: "Blogs",
     routeHint: "/#/blogs",
     description: "Promotion popup displayed when visiting the Knowledge Hub articles page.",
+  },
+  {
+    pageKey: "news",
+    label: "News",
+    routeHint: "/#/news",
+    description: "Promotion popup displayed when visiting the News & Press Releases page.",
   },
 ];
 
@@ -337,6 +345,34 @@ export const DEFAULT_PAGE_ADS_CMS: PageAdsCmsPayload = {
         },
       ],
     },
+    news: {
+      pageKey: "news",
+      label: "News",
+      routeHint: "/#/news",
+      enabled: true,
+      slideshowSpeedMs: 4500,
+      ads: [
+        {
+          id: "ad-news-1",
+          title: "2026 Commercial Facade & Showroom Program",
+          image: "/assets/products/showroom.jpg",
+          linkUrl: "#/projects",
+          buttons: [
+            { id: "btn-news-1a", label: "Explore Projects", url: "#/projects" },
+            { id: "btn-news-1b", label: "Contact Team", url: "#/contact" },
+          ],
+        },
+        {
+          id: "ad-news-2",
+          title: "Precision Thermal Glazing Assemblies",
+          image: "/assets/products/facade-detail.jpg",
+          linkUrl: "#/products",
+          buttons: [
+            { id: "btn-news-2a", label: "Browse Systems", url: "#/products" },
+          ],
+        },
+      ],
+    },
   },
 };
 
@@ -355,6 +391,7 @@ export function normalizePageAdSlide(
       : `Promotion ${idx + 1}`;
   const linkUrl = sanitizeAdLinkUrl(input?.linkUrl);
   const buttons = normalizePageAdButtons(input?.buttons);
+  const paused = Boolean(input?.paused);
   const id =
     typeof input?.id === "string" && input.id.trim()
       ? input.id.trim()
@@ -364,6 +401,7 @@ export function normalizePageAdSlide(
     id,
     image: resolvedImage,
     title,
+    paused,
     ...(linkUrl ? { linkUrl } : {}),
     buttons,
   };
@@ -395,6 +433,7 @@ export function normalizeSinglePageAdsConfig(
   } else {
     ads = base.ads.map((a) => ({
       ...a,
+      paused: Boolean(a.paused),
       buttons: a.buttons ? a.buttons.map((b) => ({ ...b })) : [],
     }));
   }
@@ -442,8 +481,37 @@ export function getVisibleAdsForPage(
     return [];
   }
   return config.ads.filter(
-    (ad) => typeof ad.image === "string" && ad.image.trim().length > 0
+    (ad) =>
+      !ad.paused && typeof ad.image === "string" && ad.image.trim().length > 0
   );
+}
+
+export function toggleAdSlidePaused(
+  ads: PageAdSlide[],
+  adId: string
+): PageAdSlide[] {
+  return ads.map((ad) =>
+    ad.id === adId ? { ...ad, paused: !ad.paused } : ad
+  );
+}
+
+export function countActiveAndPausedAds(ads: PageAdSlide[] | undefined): {
+  activeCount: number;
+  pausedCount: number;
+} {
+  if (!Array.isArray(ads) || ads.length === 0) {
+    return { activeCount: 0, pausedCount: 0 };
+  }
+  let activeCount = 0;
+  let pausedCount = 0;
+  for (const ad of ads) {
+    if (ad.paused) {
+      pausedCount += 1;
+    } else {
+      activeCount += 1;
+    }
+  }
+  return { activeCount, pausedCount };
 }
 
 export {

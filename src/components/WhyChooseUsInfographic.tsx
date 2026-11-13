@@ -100,7 +100,7 @@ export default function WhyChooseUsInfographic({
       aria-label={heading}
       className="w-full bg-[#F8FAFC] border-t border-slate-200/80 py-12 sm:py-16"
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
         {/* Simple Signature Header — No description */}
         <div className="flex flex-col items-center">
           <AboutTaglineHeading heading={heading} align="center" compact />

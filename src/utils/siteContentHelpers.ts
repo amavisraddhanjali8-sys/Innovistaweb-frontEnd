@@ -120,7 +120,7 @@ export const NEWS_ARTICLES: NewsArticleItem[] = [
       "60-micron Qualicoat Class 2 powder coating",
       "Batch tensile & pull-out strength logs per extrusion lot",
     ],
-    image: "/assets/products/facade-detail.jpg",
+    image: "/assets/products/showroom.jpg",
     ctaLabel: "View Standards",
     ctaTo: "/milestones",
   },
@@ -171,6 +171,102 @@ export const NEWS_ARTICLES: NewsArticleItem[] = [
     image: "/assets/products/partition.jpg",
     ctaLabel: "Explore Partitions",
     ctaTo: "/products/category/partitions",
+  },
+  {
+    id: "news-motorized-louvers-launch",
+    title: "Solar-Tracking Aluminium Facade Louvers Released",
+    category: "Launches",
+    date: "May 2026",
+    summary:
+      "Aerofoil sun-shading blades engineered for automated east-west heat control on commercial elevations.",
+    highlights: [
+      "Extruded 6063-T6 aerofoil blades up to 3.2m span",
+      "24V concealed actuator torque linkage",
+      "Reduces perimeter peak cooling demand by 31%",
+    ],
+    image: "/assets/products/louvers.jpg",
+    ctaLabel: "Explore Facades",
+    ctaTo: "/products/category/facades",
+  },
+  {
+    id: "news-wardrobe-pantry-series",
+    title: "Bespoke Glass Wardrobe & Pantry Collection Introduced",
+    category: "Launches",
+    date: "Apr 2026",
+    summary:
+      "Ultra-slim bronze anodized frames with fluted privacy glass and silent damped hinges.",
+    highlights: [
+      "18mm perimeter architectural framing profile",
+      "Fluted, smoked, and back-painted tempered glass",
+      "Integrated diffused LED channel wiring",
+    ],
+    image: "/assets/products/wardrobe-pantry.jpg",
+    ctaLabel: "View Interiors",
+    ctaTo: "/products",
+  },
+  {
+    id: "news-galle-coastal-villa",
+    title: "Galle Fort Heritage Residence Glazing Commissioned",
+    category: "Projects",
+    date: "Mar 2026",
+    summary:
+      "Marine-anodized slim sliding panoramas and teak-grained thermally broken casements overlooking the Indian Ocean.",
+    highlights: [
+      "25-micron marine bronze anodizing specification",
+      "SS316 marine fasteners across sill drains",
+      "Custom wind-rated corner sliders up to 3.4m tall",
+    ],
+    image: "/assets/about/terrace.jpg",
+    ctaLabel: "See Projects",
+    ctaTo: "/projects",
+  },
+  {
+    id: "news-nawala-flagship-atrium",
+    title: "Harborline Corporate Atrium Shopfront Delivered",
+    category: "Projects",
+    date: "Feb 2026",
+    summary:
+      "Double-height structural glass fin atrium and automatic entrance vestibule completed in Colombo 03.",
+    highlights: [
+      "15mm toughened low-iron display fins",
+      "Heavy-duty concealed overhead door closers",
+      "Zero-threshold granite floor channel",
+    ],
+    image: "/assets/products/shopfront.jpg",
+    ctaLabel: "View Showrooms",
+    ctaTo: "/projects",
+  },
+  {
+    id: "news-wind-water-chamber-test",
+    title: "ASTM E331 Monsoon Water Penetration Test Passed",
+    category: "Standards",
+    date: "Jan 2026",
+    summary:
+      "Independent test-rig validation confirming zero interior water ingress across our 22mm sliding threshold under simulated cyclone gusts.",
+    highlights: [
+      "Tested up to 600 Pa cyclic water spray pressure",
+      "Triple EPDM compression gasket barrier",
+      "Full compliance report available to specifiers",
+    ],
+    image: "/assets/products/hero-showroom.jpg",
+    ctaLabel: "Download Specs",
+    ctaTo: "/resources",
+  },
+  {
+    id: "news-qualicoat-lab-upgrade",
+    title: "Automated Pre-Treatment & Powder Coating Line Commissioned",
+    category: "Standards",
+    date: "Dec 2025",
+    summary:
+      "Chrome-free architectural aluminium conversion bath upgrades installed at the Kelaniya fabrication facility.",
+    highlights: [
+      "Chrome-free ecological etching compliance",
+      "Spectrophotometer delta-E colour consistency check",
+      "60-micron Qualicoat Class 2 warranty backing",
+    ],
+    image: "/assets/products/roof-skylight.jpg",
+    ctaLabel: "Quality Milestones",
+    ctaTo: "/milestones",
   },
 ];
 
@@ -575,4 +671,54 @@ export function validateContactPageForm(
 
 export function isContactPageFormValid(values: ContactPageFormValues): boolean {
   return Object.keys(validateContactPageForm(values)).length === 0;
+}
+
+export interface NewsroomDepartmentSection {
+  category: Exclude<NewsCategory, "All">;
+  articles: NewsArticleItem[];
+  totalCount: number;
+}
+
+export interface NewsroomEditorialLayout {
+  centerDispatch: NewsArticleItem | null;
+  leftBriefs: NewsArticleItem[];
+  latestWire: NewsArticleItem[];
+  departmentSections: NewsroomDepartmentSection[];
+}
+
+export function buildNewsroomEditorialLayout(
+  visibleArticles: NewsArticleItem[],
+  allArticles: NewsArticleItem[] = visibleArticles
+): NewsroomEditorialLayout {
+  const centerDispatch = visibleArticles[0] || null;
+  const remaining = visibleArticles.slice(1);
+  const leftBriefs = remaining.slice(0, 2);
+  const latestWire = (visibleArticles.length >= 5 ? visibleArticles : allArticles).slice(
+    0,
+    5
+  );
+
+  const orderedCategories: Array<Exclude<NewsCategory, "All">> = [
+    "Launches",
+    "Projects",
+    "Standards",
+  ];
+
+  const departmentSections: NewsroomDepartmentSection[] = orderedCategories
+    .map((cat) => {
+      const matching = visibleArticles.filter((a) => a.category === cat);
+      return {
+        category: cat,
+        articles: matching.slice(0, 4),
+        totalCount: matching.length,
+      };
+    })
+    .filter((section) => section.articles.length > 0);
+
+  return {
+    centerDispatch,
+    leftBriefs,
+    latestWire,
+    departmentSections,
+  };
 }

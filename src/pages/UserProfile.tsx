@@ -119,12 +119,10 @@ export default function UserProfile() {
   const handleAvatarUpload = async (file: File) => {
     setAvatarUploading(true);
     const formData = new FormData();
-    formData.append("image", file);
+    formData.append("file", file);
 
     try {
-      const res = await axios.post("/api/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const res = await axios.post("/api/upload", formData);
 
       const uploadedUrl = res.data?.secure_url || res.data?.url;
       if (uploadedUrl) {

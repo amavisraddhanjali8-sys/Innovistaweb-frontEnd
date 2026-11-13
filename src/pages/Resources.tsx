@@ -105,7 +105,7 @@ export default function Resources() {
           aria-label="Download Attachments Ribbon"
           className="w-full bg-white py-10 sm:py-12 overflow-hidden"
         >
-          <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+          <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <AboutTaglineHeading
               kicker="Technical Files"
               heading="Download Attachments"
@@ -117,7 +117,7 @@ export default function Resources() {
           <div
             data-testid="attachments-ribbon-slideshow"
             data-ribbon-speed={DEFAULT_ATTACHMENTS_RIBBON_SPEED}
-            className="max-w-[1360px] mx-auto px-2 sm:px-6"
+            className="w-full max-w-[1640px] mx-auto px-2 sm:px-6 lg:px-8"
           >
             <LogoLoop
               logos={attachmentLoopItems}
@@ -190,7 +190,7 @@ export default function Resources() {
           aria-label="Related Hardware and Portals Collage"
           className="w-full bg-[#F8FAFC] py-10 sm:py-12 border-y border-slate-200/80"
         >
-          <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+          <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <div className="relative">
               <AboutTaglineHeading
                 kicker="Directory"
@@ -293,7 +293,7 @@ export default function Resources() {
         aria-label="Engineering Guidelines"
         className="w-full bg-white py-10 sm:py-12"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Client Guide"
             heading="Engineering Guidelines"
@@ -436,7 +436,7 @@ export default function Resources() {
 
       {/* Section 4: FAQs */}
       <section className="w-full bg-white pb-14">
-        <div className="max-w-[860px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Common Questions"
             heading="FAQs"

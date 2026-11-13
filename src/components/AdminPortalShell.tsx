@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ConfigProvider, Drawer, Modal } from "antd";
 import {
+  FiBookOpen,
   FiBriefcase,
   FiExternalLink,
   FiFolder,
@@ -92,10 +93,10 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   "about-cms": <FiSliders className="text-[15px]" />,
   ads: <FiImage className="text-[15px]" />,
   portals: <FiExternalLink className="text-[15px]" />,
+  blogs: <FiBookOpen className="text-[15px]" />,
 };
 
-const DEFAULT_AVATAR =
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop";
+const DEFAULT_AVATAR = "/assets/about/director.jpg";
 
 export default function AdminPortalShell({
   children,
@@ -233,7 +234,7 @@ export default function AdminPortalShell({
       <div className="min-h-screen bg-[#F5F7FA] text-[#14171A] flex flex-col">
         {/* Top Horizontal Navigation Header */}
         <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90">
-          <div className="max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
             {/* Left Brand Wordmark */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button
@@ -336,13 +337,11 @@ export default function AdminPortalShell({
           </div>
         </header>
 
-        {/* Subheader Breadcrumb + Contextual Action */}
-        <div className="w-full max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-4">
+        {/* Subheader Section Label + Contextual Action (No path slash trail) */}
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 pt-6 pb-4">
           <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2 text-[13px]">
-              <span className="font-semibold text-slate-900">{breadcrumb.parent}</span>
-              <span className="text-slate-400">/</span>
-              <span className="text-slate-500 font-medium">{breadcrumb.current}</span>
+            <div className="text-[13px] font-semibold text-slate-900">
+              {breadcrumb.current}
             </div>
 
             {headerAction ? (
@@ -369,7 +368,7 @@ export default function AdminPortalShell({
         </div>
 
         {/* Main 2-Column SaaS Workspace Grid */}
-        <div className="w-full max-w-[1380px] mx-auto px-4 sm:px-6 lg:px-8 pb-12 flex-1">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 pb-12 flex-1">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
             {/* Left Primary Workspace Card (8 Columns) */}
             <section className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-5 sm:p-7 min-w-0">

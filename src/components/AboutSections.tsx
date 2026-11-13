@@ -75,7 +75,7 @@ export function DirectorMessageSection({
         aria-label="Director's Message"
         className="w-full bg-slate-50/75 border-y border-slate-100 py-8 sm:py-11"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker={data.tagline || "Leadership Perspective"}
             heading={data.heading || "Director's Message"}
@@ -259,7 +259,7 @@ export function MeetTheTeamSection({
         data-team-collage-count={members.length}
         className="w-full bg-white py-8 sm:py-11"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Our People"
             heading="Meet The Team"
@@ -421,7 +421,7 @@ export function OurJourneySection({
         onBlurCapture={() => setIsPaused(false)}
         className="w-full bg-slate-50/75 border-y border-slate-100 py-8 sm:py-11"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Heritage & Growth"
             heading="Our Journey"
@@ -761,7 +761,7 @@ export function OurPartnersSection({
         aria-label="Our Partners"
         className="w-full bg-white py-8 sm:py-10 overflow-hidden"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Supply & Engineering"
             heading="Our Partners"
@@ -774,7 +774,7 @@ export function OurPartnersSection({
         <div
           data-ribbon-section="partners"
           data-ribbon-speed={safeSpeed}
-          className="max-w-[1320px] mx-auto px-2 sm:px-6"
+          className="w-full max-w-[1640px] mx-auto px-2 sm:px-6"
         >
           <LogoLoop
             logos={ribbonLogos}
@@ -828,7 +828,7 @@ export function OurClientsSection({
         aria-label="Our Clients"
         className="w-full bg-slate-50/75 border-y border-slate-100 py-8 sm:py-10 overflow-hidden"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Trusted Commissions"
             heading="Our Clients"
@@ -841,7 +841,7 @@ export function OurClientsSection({
         <div
           data-ribbon-section="clients"
           data-ribbon-speed={safeSpeed}
-          className="max-w-[1320px] mx-auto px-2 sm:px-6"
+          className="w-full max-w-[1640px] mx-auto px-2 sm:px-6"
         >
           <LogoLoop
             logos={ribbonLogos}
@@ -949,7 +949,7 @@ export function ClientFeedbackSection({
         onBlurCapture={() => setIsPaused(false)}
         className="w-full bg-white py-8 sm:py-11"
       >
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Verified Outcomes"
             heading="Client Feedbacks"

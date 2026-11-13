@@ -139,21 +139,14 @@ export default function CategoryLanding() {
         adminManageLabel="Edit Category Slideshow"
       />
 
-      {/* 2. Category Engineering Summary & Instant Category Switcher */}
-      <section className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-6">
+      {/* Category Engineering Summary & Instant Category Switcher */}
+      <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-8 pb-6">
         <div className="rounded-2xl border border-slate-200/85 bg-[#F8FAFC] p-5 sm:p-6 space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1.5 max-w-3xl">
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <Link
-                  to="/products"
-                  className="font-semibold text-[#22577A] hover:underline no-underline"
-                >
-                  Products
-                </Link>
-                <span aria-hidden="true">/</span>
-                <span className="font-semibold text-slate-900">
-                  {activeCategory.name}
+                <span className="font-semibold text-[#22577A]">
+                  System Collection
                 </span>
                 <span aria-hidden="true">·</span>
                 <span className="tabular-nums">
@@ -231,7 +224,7 @@ export default function CategoryLanding() {
       </section>
 
       {/* 3. Category Scoped Enhanced Filter & Product Grid */}
-      <section className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">
+      <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pb-14">
         <PageAdBannerSlideshow pageKey="category" />
         <ProductCatalogBrowser
           designs={designs}
@@ -244,7 +237,7 @@ export default function CategoryLanding() {
       {/* 4. Browse Other Categories Strip */}
       {siblingCategories.length > 0 && (
         <section className="w-full bg-[#F8FAFC] border-t border-slate-200/80 py-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <div className="flex flex-col items-center mb-6">
               <AboutTaglineHeading
                 heading="Other Categories"

@@ -2,97 +2,71 @@ import styles from "../cssModules/CustomerFeedback.module.css";
 import SimpleScrollStack, { ScrollStackItem } from "./SimpleScrollStack";
 import MainHeading from "./MainHeading";
 
+const HOME_TESTIMONIALS = [
+  {
+    id: "fb-1",
+    name: "Nalin Jayawardena",
+    role: "Managing Director · Apex Tower Holdings",
+    avatar: "/assets/about/director.jpg",
+    quote:
+      "Innovista delivered twelve storeys of solar-control curtain wall ahead of structural schedule with flawless acoustic sealing.",
+  },
+  {
+    id: "fb-2",
+    name: "Dilini Perera",
+    role: "Principal Architect · Studio Harborline",
+    avatar: "/assets/about/team-architect.jpg",
+    quote:
+      "Their 22mm slim-line thermal sliders gave our coastal villa projects crisp horizon sightlines with zero salt-air rattle.",
+  },
+  {
+    id: "fb-3",
+    name: "Roshan Fernando",
+    role: "Head of Projects · Serendib Commercial",
+    avatar: "/assets/about/team-structural.jpg",
+    quote:
+      "Laser site measurements meant every 3.4m partition bay and automatic access door slotted in cleanly on first installation.",
+  },
+  {
+    id: "fb-4",
+    name: "Kavinda De Silva",
+    role: "Operations Director · Horizon Hospitality",
+    avatar: "/assets/about/team-fabrication.jpg",
+    quote:
+      "Our resort suites saw a noticeable drop in cooling load after upgrading to Innovista double-glazed acoustic balconies.",
+  },
+];
+
 function CustomerFeedback() {
   return (
-    <div className={styles.container}>
-      <MainHeading
-        heading="What our Customer say"
-        description="All the Lorem Ipsum generators on the Internet tend to repeat predefined chunks."
-      />
-      <SimpleScrollStack>
-        <ScrollStackItem>
-          <div className={styles.card}>
-            <div className={styles.avatar}>
-              <img
-                src="https://randomuser.me/api/portraits/men/32.jpg"
-                alt="John Doe"
-              />
-            </div>
-            <h3 className={styles.designation}>CEO of TechCorp</h3>
-            <p className={styles.feedback}>
-              "Sed ut perspiciatis unde omnis iste natus error sit voluptatem
-              accusantium doloremque laudantium, totam rem aperiam, eaque ipsa
-              quae ab illo inventore veritatis et quasi architecto beatae vitae
-              dicta sunt explicabo."
-            </p>
-          </div>
-        </ScrollStackItem>
-        <ScrollStackItem>
-          <div className={styles.card}>
-            <div className={styles.avatar}>
-              <img
-                src="https://randomuser.me/api/portraits/women/44.jpg"
-                alt="Jane Smith"
-              />
-            </div>
-            <h3 className={styles.designation}>Director of Operations</h3>
-            <p className={styles.feedback}>
-              "Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit
-              aut fugit, sed quia consequuntur magni dolores eos qui ratione
-              voluptatem sequi nesciunt."
-            </p>
-          </div>
-        </ScrollStackItem>
-        <ScrollStackItem>
-          <div className={styles.card}>
-            <div className={styles.avatar}>
-              <img
-                src="https://randomuser.me/api/portraits/men/67.jpg"
-                alt="Mike Johnson"
-              />
-            </div>
-            <h3 className={styles.designation}>Founder of BuildRight</h3>
-            <p className={styles.feedback}>
-              "Ut enim ad minima veniam, quis nostrum exercitationem ullam
-              corporis suscipit laboriosam, nisi ut aliquid ex ea commodi
-              consequatur."
-            </p>
-          </div>
-        </ScrollStackItem>
-        <ScrollStackItem>
-          <div className={styles.card}>
-            <div className={styles.avatar}>
-              <img
-                src="https://randomuser.me/api/portraits/women/28.jpg"
-                alt="Sarah Williams"
-              />
-            </div>
-            <h3 className={styles.designation}>CEO of ABC Company</h3>
-            <p className={styles.feedback}>
-              "Quis autem vel eum iure reprehenderit qui in ea voluptate velit
-              esse quam nihil molestiae consequatur, vel illum qui dolorem eum
-              fugiat."
-            </p>
-          </div>
-        </ScrollStackItem>
-        <ScrollStackItem>
-          <div className={styles.card}>
-            <div className={styles.avatar}>
-              <img
-                src="https://randomuser.me/api/portraits/men/52.jpg"
-                alt="David Brown"
-              />
-            </div>
-            <h3 className={styles.designation}>CTO of InnovateTech</h3>
-            <p className={styles.feedback}>
-              "At vero eos et accusamus et iusto odio dignissimos ducimus qui
-              blanditiis praesentium voluptatum deleniti atque corrupti quos
-              dolores et quas molestias excepturi sint."
-            </p>
-          </div>
-        </ScrollStackItem>
-      </SimpleScrollStack>
-    </div>
+    <section className={styles.container} aria-label="Client Testimonials">
+      <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+        <MainHeading
+          heading="What Our Clients Say"
+          description="Verified project partners across residential developments, commercial towers, and hospitality pavilions."
+        />
+        <SimpleScrollStack>
+          {HOME_TESTIMONIALS.map((item) => (
+            <ScrollStackItem key={item.id}>
+              <div className={styles.card}>
+                <div className={styles.avatar}>
+                  <img
+                    src={item.avatar}
+                    alt={item.name}
+                    referrerPolicy="no-referrer"
+                    loading="eager"
+                    decoding="async"
+                  />
+                </div>
+                <h3 className={styles.designation}>{item.name}</h3>
+                <div className={styles.role}>{item.role}</div>
+                <p className={styles.feedback}>"{item.quote}"</p>
+              </div>
+            </ScrollStackItem>
+          ))}
+        </SimpleScrollStack>
+      </div>
+    </section>
   );
 }
 

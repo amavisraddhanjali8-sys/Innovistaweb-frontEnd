@@ -33,8 +33,10 @@ import Milestones from "../pages/Milestones";
 import ScrollToTop from "../components/ScrollToTop";
 import RequestQuotePage from "../pages/RequestQuotePage";
 import EditVisionMission from "../pages/Adminpages/EditVisionMission";
+import BlogsAdmin from "../pages/Adminpages/BlogsAdmin";
 import ProfileLogin from "../pages/ProfileLogin";
 import UserProfile from "../pages/UserProfile";
+import NotFound from "../pages/NotFound";
 import { AuthProvider } from "./AuthContext";
 import { isAdminPortalPath } from "../utils/adminPortalHelpers";
 
@@ -46,17 +48,17 @@ function MainContent() {
   const isAdminPortal = isAdminPortalPath(location.pathname);
 
   return (
-    <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+    <div style={{ position: "relative", minHeight: "100vh", display: "flex", flexDirection: "column", width: "100%", overflowX: "clip" }}>
       {!isAdminPortal && <TargetCursor spinDuration={2} hideDefaultCursor={true} />}
       {!isAdminPortal && <Navbar />}
-      <main style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      <main style={{ flex: 1, display: "flex", flexDirection: "column", width: "100%", minWidth: 0 }}>
         <MotionConfig reducedMotion="user">
           <motion.div
             key={location.pathname}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
-            style={{ flex: 1, display: "flex", flexDirection: "column" }}
+            style={{ flex: 1, display: "flex", flexDirection: "column", width: "100%", minWidth: 0 }}
           >
             <Routes location={location}>
               <Route path="/" element={<Home />} />
@@ -93,6 +95,8 @@ function MainContent() {
               <Route path="/milestones" element={<Milestones />} />
               <Route path="/request-quote" element={<RequestQuotePage />} />
               <Route path="/EditVisionMission" element={<EditVisionMission />} />
+              <Route path="/BlogsAdmin" element={<BlogsAdmin />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </motion.div>
         </MotionConfig>

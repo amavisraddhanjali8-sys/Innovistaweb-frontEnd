@@ -129,7 +129,7 @@ function Footer() {
   return (
     <footer className="w-full bg-[#F8FAFC] text-[#14171A] border-t border-slate-200 overflow-hidden">
       {/* Upper Split Consultation & Contact Block */}
-      <div className="max-w-[1200px] mx-auto px-5 sm:px-8 lg:px-10 py-12 sm:py-16">
+      <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-12 sm:py-16">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           {/* Left Column: Consultation Heading, 2x2 Contact Info Grid, Social Circles */}
           <div className="lg:col-span-5 flex flex-col justify-between space-y-7">
@@ -440,7 +440,7 @@ function Footer() {
 
       {/* Slim Architectural Service Highlight Strip (from Image 2 dark contrast strip in Innovista navy) */}
       <div className="w-full bg-gradient-to-r from-[#14171A] via-[#1B3A4E] to-[#22577A] text-white">
-        <div className="max-w-[1200px] mx-auto px-5 sm:px-8 lg:px-10 py-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <h3
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
@@ -470,8 +470,8 @@ function Footer() {
 
       {/* Lower Rounded Footer Surface with Navigation Columns & Giant Brand Wordmark (Image 1 bottom) */}
       <div className="bg-gradient-to-r from-[#14171A] via-[#1B3A4E] to-[#22577A] pt-1">
-        <div className="w-full rounded-t-[28px] sm:rounded-t-[36px] bg-gradient-to-br from-white via-[#F1F8FC] to-[#E2F1F8] pt-10 sm:pt-12 pb-6 sm:pb-8 border-t border-white/80">
-          <div className="max-w-[1200px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full rounded-t-[28px] sm:rounded-t-[36px] bg-gradient-to-br from-white via-[#F1F8FC] to-[#E2F1F8] pt-10 sm:pt-12 pb-20 md:pb-8 border-t border-white/80">
+          <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             {/* Multi-column Navigation + Direct Contact + Top-Right Social Icons */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-12 gap-7 pb-8 border-b border-slate-200/80">
               {FOOTER_LINK_COLUMNS.map((column) => (

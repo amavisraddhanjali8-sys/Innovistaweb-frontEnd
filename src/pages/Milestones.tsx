@@ -19,48 +19,42 @@ const milestones: Milestone[] = [
     title: "The Beginning",
     description:
       "Innovista Fabriconix was founded with a vision to revolutionize aluminium fabrication. Starting from a small workshop, we began our journey towards excellence.",
-    image:
-      "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=300&fit=crop",
+    image: "/assets/products/showroom.jpg",
   },
   {
     year: "2017",
     title: "First Major Project",
     description:
       "Completed our first large-scale commercial project, establishing our reputation for quality craftsmanship and precision engineering in the industry.",
-    image:
-      "https://images.unsplash.com/photo-1581094794329-c8112a89af12?w=400&h=300&fit=crop",
+    image: "/assets/products/facade-detail.jpg",
   },
   {
     year: "2019",
     title: "Expanding Horizons",
     description:
       "Expanded our operations with state-of-the-art machinery and a larger facility, enabling us to take on more ambitious projects across the region.",
-    image:
-      "https://images.unsplash.com/photo-1565008447742-97f6f38c985c?w=400&h=300&fit=crop",
+    image: "/assets/about/pavilion.jpg",
   },
   {
     year: "2021",
     title: "Innovation & Technology",
     description:
       "Integrated modern design tools and advanced fabrication technology, pushing the boundaries of what's possible in aluminium construction.",
-    image:
-      "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=400&h=300&fit=crop",
+    image: "/assets/products/window.jpg",
   },
   {
     year: "2023",
     title: "Industry Recognition",
     description:
       "Received industry awards for excellence in fabrication and design. Our commitment to quality earned us partnerships with leading construction firms.",
-    image:
-      "https://images.unsplash.com/photo-1531834685032-c34bf0d84c77?w=400&h=300&fit=crop",
+    image: "/assets/about/facade.jpg",
   },
   {
     year: "2025",
     title: "Building the Future",
     description:
       "Continuing to shape innovation and build trust. With a growing team and expanding capabilities, we are ready to take on the challenges of tomorrow.",
-    image:
-      "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=400&h=300&fit=crop",
+    image: "/assets/about/terrace.jpg",
   },
 ];
 

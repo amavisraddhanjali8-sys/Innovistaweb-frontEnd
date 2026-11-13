@@ -8,6 +8,7 @@ import {
   RELATED_PORTALS,
   RESOURCE_ATTACHMENTS,
   RESOURCE_FAQS,
+  buildNewsroomEditorialLayout,
   filterNewsArticles,
   getAttachmentDownloadHref,
   getCollageTileSpanClass,
@@ -21,12 +22,19 @@ import {
 test("news articles filter cleanly by category and search keyword", () => {
   assert.equal(filterNewsArticles(NEWS_ARTICLES, "All", "").length, NEWS_ARTICLES.length);
   const launches = filterNewsArticles(NEWS_ARTICLES, "Launches", "");
-  assert.ok(launches.length >= 2);
+  assert.ok(launches.length >= 4);
   assert.ok(launches.every((item) => item.category === "Launches"));
 
   const apex = filterNewsArticles(NEWS_ARTICLES, "All", "apex");
   assert.equal(apex.length, 1);
   assert.equal(apex[0].id, "news-apex-handover");
+
+  const newsLayout = buildNewsroomEditorialLayout(NEWS_ARTICLES);
+  assert.ok(newsLayout.centerDispatch);
+  assert.equal(newsLayout.leftBriefs.length, 2);
+  assert.equal(newsLayout.latestWire.length, 5);
+  assert.equal(newsLayout.departmentSections.length, 3);
+  assert.ok(newsLayout.departmentSections.every((sec) => sec.articles.length === 4));
 });
 
 test("resources and contact directories contain complete verified links and records", () => {

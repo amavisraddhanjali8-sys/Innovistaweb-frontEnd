@@ -32,7 +32,7 @@ function ServiceComponent({
   const textContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isAnimating) return;
+    if (!isAnimating || items.length === 0) return;
 
     const updateItems = () => {
       const endIndex = index + 4;
@@ -55,7 +55,7 @@ function ServiceComponent({
     }, duration);
 
     return () => clearTimeout(timeout);
-  }, [index, isAnimating]);
+  }, [index, isAnimating, items, duration]);
 
   useEffect(() => {
     if (textRefs.current.length > 0) {
@@ -82,10 +82,14 @@ function ServiceComponent({
   }, [index]);
 
   useGSAP(() => {
+    const mm = gsap.matchMedia();
+    const isNarrow =
+      typeof window !== "undefined" && window.innerWidth <= 900;
+
     const tl = gsap.timeline({
       scrollTrigger: {
         trigger: contentRef.current,
-        start: "top 80%",
+        start: "top 85%",
         end: "top 40%",
         toggleActions: "play none none reverse",
         onEnter: () => setIsAnimating(true),
@@ -94,20 +98,23 @@ function ServiceComponent({
     });
 
     if (imageRef.current && textContainerRef.current) {
-      // Animate both image and text container together for smoother appearance
       tl.fromTo(
         imageRef.current,
-        { x: -80, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.8, ease: "power2.out" }
+        isNarrow ? { y: 24, x: 0, opacity: 0 } : { x: -60, y: 0, opacity: 0 },
+        { x: 0, y: 0, opacity: 1, duration: 0.7, ease: "power2.out" }
       );
 
       tl.fromTo(
         textContainerRef.current,
-        { x: 50, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.8, ease: "power2.out" },
-        "<0.1" // Start almost at the same time as image
+        isNarrow ? { y: 20, x: 0, opacity: 0 } : { x: 40, y: 0, opacity: 0 },
+        { x: 0, y: 0, opacity: 1, duration: 0.7, ease: "power2.out" },
+        "<0.1"
       );
     }
+
+    return () => {
+      mm.revert();
+    };
   }, []);
 
   const goToService = (serviceIndex: number) => {

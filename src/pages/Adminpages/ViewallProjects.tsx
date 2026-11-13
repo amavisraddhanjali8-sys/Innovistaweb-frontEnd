@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Table, Button, Popconfirm, message, Tooltip } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
 import SafeImage from "../../components/SafeImage";
@@ -32,8 +32,13 @@ function ViewallProjects({
   const [total, setTotal] = useState(0);
 
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
+  const pageRef = useRef({ page: 1, limit: 10 });
+  const onStatsChangeRef = useRef(onStatsChange);
+  useEffect(() => {
+    onStatsChangeRef.current = onStatsChange;
+  }, [onStatsChange]);
 
-  const fetchProjects = async (page = 1, limit = 10) => {
+  const fetchProjects = useCallback(async (page = 1, limit = 10) => {
     try {
       setLoading(true);
       const response = await AxiosConfig.get("/projects/getAllProjects", {
@@ -41,25 +46,28 @@ function ViewallProjects({
       });
       const list: Project[] = response.data.data || [];
       const reportedTotal = response.data.total ?? list.length;
+      const nextPage = response.data.page || page;
+      const nextLimit = response.data.limit || limit;
 
+      pageRef.current = { page: nextPage, limit: nextLimit };
       setAllProjects(list);
       setTotal(reportedTotal);
-      setCurrentPage(response.data.page || page);
-      setPageSize(response.data.limit || limit);
+      setCurrentPage(nextPage);
+      setPageSize(nextLimit);
 
       const budget = list.reduce((sum, p) => sum + (Number(p.Budget) || 0), 0);
-      onStatsChange?.({ total: reportedTotal, budget });
+      onStatsChangeRef.current?.({ total: reportedTotal, budget });
     } catch (err) {
       console.error(err);
       message.error("Failed to load projects.");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchProjects(currentPage, pageSize);
-  }, [refreshTrigger]);
+    fetchProjects(pageRef.current.page, pageRef.current.limit);
+  }, [fetchProjects, refreshTrigger]);
 
   const deleteProject = async (id: number) => {
     try {

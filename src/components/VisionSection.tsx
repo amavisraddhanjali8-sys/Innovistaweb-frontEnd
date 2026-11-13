@@ -146,7 +146,7 @@ export default function VisionSection({ content: externalContent }: VisionSectio
 
   return (
     <section className="w-full bg-white pb-8 sm:pb-10">
-      <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+      <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
         {/* Quiet Admin Edit Link when logged in as Admin */}
         {user?.role === "admin" && (
           <div className="flex justify-end pb-3">
@@ -172,7 +172,7 @@ export default function VisionSection({ content: externalContent }: VisionSectio
             />
 
             {/* 2 Clean Interactive Thumbnails */}
-            <div className="mt-7 grid grid-cols-2 gap-3.5 max-w-[340px]">
+            <div className="mt-7 grid grid-cols-2 gap-3.5 max-w-[380px]">
               {content.vision.thumbnails.map((thumb, idx) => {
                 const isActive = activeThumbIndex === idx;
                 return (
@@ -182,7 +182,7 @@ export default function VisionSection({ content: externalContent }: VisionSectio
                     aria-label={`Preview ${thumb.title}`}
                     aria-pressed={isActive}
                     onClick={() => handleThumbSelect(thumb.image, idx)}
-                    className={`group relative rounded-2xl overflow-hidden bg-white border aspect-[16/10] cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3E9CBE] ${
+                    className={`group relative w-full block p-0 rounded-2xl overflow-hidden bg-slate-100 border aspect-[16/10] cursor-pointer transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3E9CBE] ${
                       isActive
                         ? "border-[#3393B8] ring-2 ring-[#3393B8]/35"
                         : "border-slate-200 opacity-85 hover:opacity-100"
@@ -191,6 +191,8 @@ export default function VisionSection({ content: externalContent }: VisionSectio
                     <img
                       src={thumb.image}
                       alt={thumb.title}
+                      loading="eager"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 block"
                     />
@@ -202,11 +204,13 @@ export default function VisionSection({ content: externalContent }: VisionSectio
 
           {/* Right Column: Clean Floating Modern Residence */}
           <div className="lg:col-span-7 flex justify-center lg:justify-end">
-            <div className="w-full max-w-[640px] aspect-[4/3] rounded-[24px] overflow-hidden bg-white flex items-center justify-center">
+            <div className="w-full max-w-[780px] aspect-[4/3] rounded-[24px] overflow-hidden bg-white flex items-center justify-center">
               <img
                 key={selectedVillaImg}
                 src={selectedVillaImg}
                 alt="Minimalist architectural glass and aluminium residence"
+                loading="eager"
+                decoding="async"
                 referrerPolicy="no-referrer"
                 style={
                   selectedVillaImg.includes("reference_villa_main")
@@ -245,17 +249,19 @@ export default function VisionSection({ content: externalContent }: VisionSectio
                 key={card.id}
                 type="button"
                 onClick={() => setInspectedCard(card)}
-                className="group text-left rounded-[24px] overflow-hidden bg-white border border-slate-100 hover:border-slate-200 hover:shadow-[0_18px_40px_-15px_rgba(15,23,42,0.10)] transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3E9CBE]"
+                className="group w-full flex flex-col p-0 text-left rounded-[24px] overflow-hidden bg-white border border-slate-100 hover:border-slate-200 hover:shadow-[0_18px_40px_-15px_rgba(15,23,42,0.10)] transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3E9CBE]"
               >
                 <div className="w-full aspect-[4/3] overflow-hidden bg-sky-50">
                   <img
                     src={card.image}
                     alt={card.title}
+                    loading="eager"
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-300 block"
                   />
                 </div>
-                <div className="px-5 py-4">
+                <div className="w-full px-5 py-4">
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     <span>{card.category}</span>
                     <span aria-hidden="true">·</span>

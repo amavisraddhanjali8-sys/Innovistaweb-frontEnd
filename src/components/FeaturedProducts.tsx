@@ -45,47 +45,26 @@ function FeaturedProducts() {
     const sm = gsap.matchMedia();
     sm.add("(max-width: 768px)", () => {
       validCards.forEach((card, index) => {
-        if (index % 2 === 0) {
-          gsap.fromTo(
-            card,
-            {
-              opacity: 0,
-              x: 50,
-              scale: 0.9,
+        gsap.fromTo(
+          card,
+          {
+            opacity: 0,
+            y: 28,
+            scale: 0.96,
+          },
+          {
+            opacity: 1,
+            y: 0,
+            scale: 1,
+            duration: 0.55,
+            ease: "power3.out",
+            scrollTrigger: {
+              trigger: card,
+              start: `top ${85 - Math.min(index, 3) * 4}%`,
+              toggleActions: "play none none reverse",
             },
-            {
-              opacity: 1,
-              x: 0,
-              scale: 1,
-              duration: 0.6,
-              ease: "power3.out",
-              scrollTrigger: {
-                trigger: card,
-                start: `top ${80 - index * 5}%`,
-                toggleActions: "play none none reverse",
-              },
-            }
-          );
-        } else {
-          gsap.fromTo(
-            card,
-            {
-              opacity: 0,
-              x: -50,
-            },
-            {
-              opacity: 1,
-              x: 0,
-              duration: 0.6,
-              ease: "power3.out",
-              scrollTrigger: {
-                trigger: card,
-                start: `top ${80 - index * 5}%`,
-                toggleActions: "play none none reverse",
-              },
-            }
-          );
-        }
+          }
+        );
       });
     });
 
@@ -107,7 +86,6 @@ function FeaturedProducts() {
             scrollTrigger: {
               trigger: card,
               start: `top ${80 - index * 5}%`,
-              onEnter: () => console.log(`Card ${index + 1} entered viewport`),
               toggleActions: "play none none reverse",
             },
           }
@@ -126,48 +104,74 @@ function FeaturedProducts() {
   };
 
   return (
-    <div
+    <section
       ref={containerRef}
-      style={{
-        marginTop: "100px",
-        marginBottom: "100px",
-      }}
+      className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 my-12 sm:my-20 overflow-x-hidden"
     >
       <div ref={headingRef}>
         <MainHeading
           heading="Our Top Picks"
-          description="All the Lorem Ipsum generators on the Internet tend to repeat predefined chunks."
+          description="Explore signature thermally broken aluminium doors, acoustic partitions, and architectural glazing systems."
         />
       </div>
 
       <div
         ref={gridRef}
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))",
-          gap: "20px",
-          marginTop: "50px",
-          padding: "0 20px",
-        }}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mt-10"
       >
-        {Array.from({ length: 6 }).map((_, index) => (
+        {[
+          {
+            id: "1",
+            title: "Aluminium Sliding Door",
+            description:
+              "Slim-line 22mm interlocking stiles engineered with dual stainless bogie rollers and recessed drainage.",
+          },
+          {
+            id: "2",
+            title: "Thermal Break Casement Window",
+            description:
+              "Multipoint European locking hardware with PA66 polyamide thermal insulation for coastal villas.",
+          },
+          {
+            id: "3",
+            title: "Acoustic Office Partition",
+            description:
+              "44 dB laminated safety glass framing in brushed anodized or matte charcoal perimeter channels.",
+          },
+          {
+            id: "4",
+            title: "Bi-Fold Panorama Door",
+            description:
+              "Flush threshold folding sashes allowing uninterrupted indoor-outdoor pavilion entertaining.",
+          },
+          {
+            id: "5",
+            title: "Structural Curtain Wall",
+            description:
+              "Solar-control double-glazed facade grid tested for high-wind commercial towers.",
+          },
+          {
+            id: "6",
+            title: "Frameless Terrace Balustrade",
+            description:
+              "Certified U-channel base-shoe aluminium anchoring with 10+10mm laminated SGP safety glass.",
+          },
+        ].map((item, index) => (
           <div
-            key={index}
+            key={item.id}
             ref={(el) => addCardRef(el, index)}
-            style={{ display: "flex", justifyContent: "center" }}
+            className="flex justify-center"
           >
             <ProductCard
-              id={`product-${index}`}
+              id={item.id}
               image={doorImage}
-              title={"Alluminium Sliding Door"}
-              description={
-                "lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit amet lorem ipsum dolor sit amet"
-              }
+              title={item.title}
+              description={item.description}
             />
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 

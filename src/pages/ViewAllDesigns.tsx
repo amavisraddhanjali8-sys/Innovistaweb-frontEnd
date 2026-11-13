@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Table,
@@ -48,7 +48,7 @@ function ViewAllDesigns() {
     DEFAULT_PRODUCT_CATEGORIES.map((c) => ({ label: c.name, value: c.name }))
   );
 
-  const fetchDesigns = async (page = 1, limit = 10) => {
+  const fetchDesigns = useCallback(async (page = 1, limit = 10) => {
     try {
       setLoading(true);
       const [pageRes, allRes] = await Promise.all([
@@ -73,10 +73,10 @@ function ViewAllDesigns() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchDesigns(currentPage, pageSize);
+    fetchDesigns(1, 10);
     AxiosConfig.get<{ data?: ProductCategory[] } | ProductCategory[]>(
       "/products/categories"
     )
@@ -95,7 +95,7 @@ function ViewAllDesigns() {
       .catch(() => {
         // default already set
       });
-  }, []);
+  }, [fetchDesigns]);
 
   const handleDelete = async (designId: number | string) => {
     try {

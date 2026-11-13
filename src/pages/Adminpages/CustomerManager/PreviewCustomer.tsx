@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Table,
   Tag,
@@ -42,11 +42,17 @@ function PreviewCustomer({
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
+  const pageRef = useRef({ page: 1, limit: 10 });
+  const onMetricsChangeRef = useRef(onMetricsChange);
+  useEffect(() => {
+    onMetricsChangeRef.current = onMetricsChange;
+  }, [onMetricsChange]);
+
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
 
-  const fetchCustomers = async (page = 1, limit = 10) => {
+  const fetchCustomers = useCallback(async (page = 1, limit = 10) => {
     try {
       setLoading(true);
       const response = await AxiosConfig.get("/customer/getAllCustomers", {
@@ -55,22 +61,25 @@ function PreviewCustomer({
 
       const list: Customer[] = response.data.data || [];
       const reportedTotal = response.data.total ?? list.length;
+      const nextPage = response.data.page || page;
+      const nextLimit = response.data.limit || limit;
 
+      pageRef.current = { page: nextPage, limit: nextLimit };
       setCustomers(list);
       setTotal(reportedTotal);
-      setCurrentPage(response.data.page || page);
-      setPageSize(response.data.limit || limit);
-      onMetricsChange?.(computeCustomerMetrics(list, reportedTotal));
+      setCurrentPage(nextPage);
+      setPageSize(nextLimit);
+      onMetricsChangeRef.current?.(computeCustomerMetrics(list, reportedTotal));
     } catch (error) {
       console.error("Error fetching customers:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchCustomers(currentPage, pageSize);
-  }, [refreshTrigger]);
+    fetchCustomers(pageRef.current.page, pageRef.current.limit);
+  }, [fetchCustomers, refreshTrigger]);
 
   const handleDelete = async (customerId: number) => {
     try {

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Table, Avatar, message, Popconfirm, Button } from "antd";
 import type { TableProps } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
@@ -25,7 +25,12 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
   const [data, setData] = useState<AdminType[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchAdmins = async () => {
+  const onCountChangeRef = useRef(onCountChange);
+  useEffect(() => {
+    onCountChangeRef.current = onCountChange;
+  }, [onCountChange]);
+
+  const fetchAdmins = useCallback(async () => {
     try {
       setLoading(true);
       const response = await AxiosConfig.get("/auth/getAllAdmins");
@@ -40,13 +45,13 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
       }));
 
       setData(formattedData);
-      onCountChange?.(formattedData.length);
+      onCountChangeRef.current?.(formattedData.length);
     } catch {
       message.error("Error fetching admins");
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleDelete = async (adminId: number) => {
     try {
@@ -113,7 +118,7 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
 
   useEffect(() => {
     fetchAdmins();
-  }, [refreshTrigger]);
+  }, [fetchAdmins, refreshTrigger]);
 
   return (
     <Table<AdminType>

@@ -40,7 +40,7 @@ function AdminLogin() {
         phone: adminObj.Admin_Phone,
         company: "Innovista Fabriconix Executive",
         role: "admin",
-        logo: adminObj.Admin_Profile || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+        logo: adminObj.Admin_Profile || "/assets/about/director.jpg",
         verified: true,
       }));
 
@@ -122,7 +122,7 @@ function AdminLogin() {
 
           <Col xs={24} md={12}>
             <Card
-              bordered={false}
+              variant="borderless"
               style={{
                 padding: 20,
                 borderRadius: "15px",

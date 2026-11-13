@@ -26,9 +26,12 @@ export function SafeImage({
   preview = true,
 }: SafeImageProps) {
   const [open, setOpen] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   if (!src) return null;
 
+  const fallbackSrc = "/assets/products/door.jpg";
+  const resolvedSrc = failedSrc === src ? fallbackSrc : src;
   const Wrapper: React.ElementType = preview ? "button" : "span";
 
   return (
@@ -47,8 +50,11 @@ export function SafeImage({
         style={{ width, height, borderRadius: style?.borderRadius }}
       >
         <img
-          src={src}
+          src={resolvedSrc}
           alt={alt}
+          onError={() => {
+            if (resolvedSrc !== fallbackSrc) setFailedSrc(src);
+          }}
           style={{
             width: width ?? "100%",
             height: height ?? "auto",
@@ -81,7 +87,7 @@ export function SafeImage({
         >
           <div className="flex items-center justify-center bg-slate-50 rounded-xl p-2">
             <img
-              src={src}
+              src={resolvedSrc}
               alt={alt}
               className="max-h-[70vh] w-auto object-contain rounded-lg"
             />

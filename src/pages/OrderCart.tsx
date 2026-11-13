@@ -11,7 +11,7 @@ import {
   Empty,
 } from "antd";
 import axios from "axios";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 const { Title, Text } = Typography;
 
@@ -29,39 +29,44 @@ function OrderCart() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form] = Form.useForm();
 
+  const loadCart = () => {
+    try {
+      const cartData = JSON.parse(localStorage.getItem("cart") || "[]");
+      setCart(Array.isArray(cartData) ? cartData : []);
+    } catch {
+      setCart([]);
+    }
+  };
+
+  const fetchCardDetails = useCallback(async (idsList: number[]) => {
+    try {
+      const ids = idsList.join(",");
+      const { data } = await axios.get(
+        `/designs/DesignDetails?ids=${ids}`
+      );
+      setCardDetails(Array.isArray(data) ? data : []);
+    } catch {
+      message.error("Failed to load cart items");
+    }
+  }, []);
+
   useEffect(() => {
     loadCart();
   }, []);
 
   useEffect(() => {
     if (cart.length > 0) {
-      fetchCardDetails();
+      fetchCardDetails(cart);
     } else {
       setCardDetails([]);
     }
-  }, [cart]);
-
-  const loadCart = () => {
-    const cartData = JSON.parse(localStorage.getItem("cart") || "[]");
-    setCart(cartData);
-  };
-
-  const fetchCardDetails = async () => {
-    try {
-      const ids = cart.join(",");
-      const { data } = await axios.get(
-        `/designs/DesignDetails?ids=${ids}`
-      );
-      setCardDetails(data);
-    } catch {
-      message.error("Failed to load cart items");
-    }
-  };
+  }, [cart, fetchCardDetails]);
 
   const removeDesign = (id: number) => {
     const updatedCart = cart.filter((item) => item !== id);
     localStorage.setItem("cart", JSON.stringify(updatedCart));
     setCart(updatedCart);
+    window.dispatchEvent(new Event("innovista-cart-updated"));
     message.success("Item removed from cart");
   };
 
@@ -91,6 +96,7 @@ function OrderCart() {
       message.success("Order placed successfully!");
       localStorage.removeItem("cart");
       setCart([]);
+      window.dispatchEvent(new Event("innovista-cart-updated"));
       setIsModalOpen(false);
       form.resetFields();
     } catch {
@@ -114,7 +120,7 @@ function OrderCart() {
                 hoverable
                 cover={
                   <img
-                    src={design.Design_Image[0]}
+                    src={design.Design_Image?.[0] || "/assets/products/door.jpg"}
                     alt={design.Design_Name}
                     style={{ height: 200, objectFit: "cover" }}
                   />

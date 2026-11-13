@@ -295,48 +295,8 @@ export default function ProductDetails() {
 
   return (
     <div className="w-full bg-white text-[#14171A]">
-      {/* 1. Breadcrumb Strip */}
-      <nav
-        aria-label="Breadcrumb"
-        className="w-full bg-slate-50/90 border-y border-slate-200/80"
-      >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Link to="/" className="hover:text-[#22577A] no-underline text-slate-600">
-              Innovista
-            </Link>
-            <span aria-hidden="true">»</span>
-            <Link
-              to="/products"
-              className="hover:text-[#22577A] no-underline text-slate-600"
-            >
-              Products
-            </Link>
-            <span aria-hidden="true">»</span>
-            <Link
-              to={`/products/category/${categorySlug}`}
-              className="hover:text-[#22577A] no-underline text-slate-600"
-            >
-              {primaryCategory}
-            </Link>
-            <span aria-hidden="true">»</span>
-            <span className="font-semibold text-[#22577A]">{design.Design_Name}</span>
-          </div>
-
-          {user?.role === "admin" && (
-            <Link
-              to="/ViewAllDesigns"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#22577A] hover:text-[#3393B8] no-underline"
-            >
-              <FiSliders className="text-xs" />
-              <span>Edit in Admin</span>
-            </Link>
-          )}
-        </div>
-      </nav>
-
-      {/* 2. Product Hero Gallery & Overview */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+      {/* Product Hero Gallery & Overview */}
+      <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-8 sm:py-12">
         {loading && !rawDesign ? (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-pulse">
             <div className="lg:col-span-6 aspect-[4/3] bg-slate-200" />
@@ -421,8 +381,22 @@ export default function ProductDetails() {
             {/* Right Overview & Quote CTA */}
             <div className="lg:col-span-6 space-y-5">
               <div>
-                <div className="inline-block text-[11px] font-bold uppercase tracking-[0.16em] text-[#3393B8] mb-1.5">
-                  {primaryCategory}
+                <div className="flex items-center justify-between gap-3 mb-1.5">
+                  <Link
+                    to={`/products/category/${categorySlug}`}
+                    className="inline-block text-[11px] font-bold uppercase tracking-[0.16em] text-[#3393B8] hover:text-[#22577A] no-underline"
+                  >
+                    {primaryCategory}
+                  </Link>
+                  {user?.role === "admin" && (
+                    <Link
+                      to="/ViewAllDesigns"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#22577A] hover:text-[#3393B8] border border-slate-200 rounded-lg px-2.5 py-1 no-underline"
+                    >
+                      <FiSliders className="text-xs" />
+                      <span>Edit in Admin</span>
+                    </Link>
+                  )}
                 </div>
                 <h1
                   style={{
@@ -517,14 +491,11 @@ export default function ProductDetails() {
 
       {/* 3. Dynamic Technical Tabs (Hidden completely if none configured) */}
       {availableTabs.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-14">
+        <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pb-14">
           <div
             role="tablist"
             aria-label="Product technical specification tabs"
-            style={{
-              gridTemplateColumns: `repeat(${Math.min(availableTabs.length, 4)}, minmax(0, 1fr))`,
-            }}
-            className="grid bg-[#F1F5F9] border border-slate-200/80 rounded-t-xl overflow-hidden"
+            className="grid grid-cols-2 sm:grid-cols-4 bg-[#F1F5F9] border border-slate-200/80 rounded-t-xl overflow-hidden"
           >
             {availableTabs.map((tab) => {
               const isActive = activeTab === tab.key;
@@ -764,7 +735,7 @@ export default function ProductDetails() {
           id="product-certifications"
           className="w-full bg-white py-12 border-t border-slate-100"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 space-y-8">
             <AboutTaglineHeading
               kicker="Tested Compliance & Lab Reports"
               heading="Certifications"
@@ -918,7 +889,7 @@ export default function ProductDetails() {
       {/* 6. Performance & Technical Advantages (Hidden if empty) */}
       {design.advantages && design.advantages.length > 0 && (
         <section id="product-advantages" className="w-full bg-white py-12">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <AboutTaglineHeading
               kicker="Core Engineering Benefits"
               heading="Performance & Technical Advantages"
@@ -969,7 +940,7 @@ export default function ProductDetails() {
           id="product-customizations"
           className="w-full bg-slate-50/75 border-y border-slate-100 py-12"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <AboutTaglineHeading
               kicker="Tailored Specifications"
               heading={`Customization Options For ${design.Design_Name}`}
@@ -1029,7 +1000,7 @@ export default function ProductDetails() {
             }}
           />
 
-          <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="relative z-10 max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <div className="text-center max-w-2xl mx-auto mb-10">
               <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5CB6D2]">
                 End-To-End Project Delivery
@@ -1070,7 +1041,7 @@ export default function ProductDetails() {
           id="product-client-installations"
           className="w-full bg-white py-12 border-t border-slate-100"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <AboutTaglineHeading
               kicker="Site Proof & References"
               heading="Client Installations"
@@ -1144,7 +1115,7 @@ export default function ProductDetails() {
           id="product-related"
           className="w-full bg-slate-50/75 border-t border-slate-100 py-14"
         >
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
             <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-8">
               <AboutTaglineHeading
                 kicker="Compatible Systems"

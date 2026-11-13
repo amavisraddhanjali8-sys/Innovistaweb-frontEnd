@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   ALL_AD_PAGE_KEYS,
   DEFAULT_PAGE_ADS_CMS,
+  countActiveAndPausedAds,
   getNextSlideIndex,
   getPrevSlideIndex,
   getVisibleAdsForPage,
@@ -13,6 +14,7 @@ import {
   normalizePageAdsCms,
   normalizeSinglePageAdsConfig,
   sanitizeAdLinkUrl,
+  toggleAdSlidePaused,
 } from "./pageAdsHelpers.ts";
 
 describe("pageAdsHelpers", () => {
@@ -36,6 +38,7 @@ describe("pageAdsHelpers", () => {
     assert.equal(isValidAdPageKey("product-details"), true);
     assert.equal(isValidAdPageKey("projects"), true);
     assert.equal(isValidAdPageKey("blogs"), true);
+    assert.equal(isValidAdPageKey("news"), true);
     assert.equal(isValidAdPageKey("home"), true);
     assert.equal(isValidAdPageKey("unknown-page"), false);
   });
@@ -60,6 +63,52 @@ describe("pageAdsHelpers", () => {
       "blogs"
     );
     assert.equal(slow.slideshowSpeedMs, 20000);
+  });
+
+  it("preserves individual paused state and excludes paused slides from public popup visibility", () => {
+    const normalizedDefault = normalizePageAdSlide(
+      { id: "a1", image: "/assets/products/door.jpg" },
+      0
+    );
+    assert.equal(normalizedDefault?.paused, false);
+
+    const normalizedPaused = normalizePageAdSlide(
+      { id: "a2", image: "/assets/products/window.jpg", paused: true },
+      1
+    );
+    assert.equal(normalizedPaused?.paused, true);
+
+    const cfg = normalizeSinglePageAdsConfig(
+      {
+        enabled: true,
+        ads: [
+          { id: "a1", image: "/assets/products/door.jpg", title: "Active Ad", paused: false },
+          { id: "a2", image: "/assets/products/window.jpg", title: "Paused Ad", paused: true },
+        ],
+      },
+      "home"
+    );
+
+    const visible = getVisibleAdsForPage(cfg);
+    assert.equal(visible.length, 1);
+    assert.equal(visible[0].id, "a1");
+    assert.deepEqual(countActiveAndPausedAds(cfg.ads), {
+      activeCount: 1,
+      pausedCount: 1,
+    });
+
+    const toggled = toggleAdSlidePaused(cfg.ads, "a2");
+    assert.equal(toggled[1].paused, false);
+    assert.equal(
+      getVisibleAdsForPage({ ...cfg, ads: toggled }).length,
+      2
+    );
+
+    const allPaused = toggleAdSlidePaused(cfg.ads, "a1");
+    assert.equal(
+      getVisibleAdsForPage({ ...cfg, ads: allPaused }).length,
+      0
+    );
   });
 
   it("sanitizes unsafe click-through links and filters invalid referral buttons", () => {

@@ -92,7 +92,7 @@ export default function ShowcaseHeroSlideshow({
       >
         {/* Top Utility Strip (Back link on Category pages / Admin Quick Edit) */}
         {(backLink || (user?.role === "admin" && adminManageTo)) && (
-          <div className="relative z-30 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-3 mb-2">
+          <div className="relative z-30 w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 flex items-center justify-between gap-3 mb-2">
             <div>
               {backLink && (
                 <Link

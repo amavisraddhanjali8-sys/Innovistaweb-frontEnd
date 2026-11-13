@@ -14,7 +14,7 @@ const images = [image1, image2, image3, image4, image5];
 
 export default function ImageSlider() {
   const [current, setCurrent] = useState<number>(0);
-  const [isPlaying, setIsPlaying] = useState<boolean>(true);
+  const [isPlaying] = useState<boolean>(true);
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -30,10 +30,6 @@ export default function ImageSlider() {
     setCurrent((prev) => (prev === 0 ? images.length - 1 : prev - 1));
   }, []);
 
-  const togglePlayPause = useCallback(() => {
-    setIsPlaying((prev) => !prev);
-  }, []);
-
   useEffect(() => {
     if (!isPlaying) return;
 
@@ -43,6 +39,16 @@ export default function ImageSlider() {
 
   useEffect(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
       switch (e.key) {
         case "ArrowLeft":
           prevSlide();
@@ -50,15 +56,12 @@ export default function ImageSlider() {
         case "ArrowRight":
           nextSlide();
           break;
-        case " ":
-          e.preventDefault();
-          break;
       }
     };
 
     globalThis.addEventListener("keydown", handleKeyPress);
     return () => globalThis.removeEventListener("keydown", handleKeyPress);
-  }, [prevSlide, nextSlide, togglePlayPause]);
+  }, [prevSlide, nextSlide]);
 
   return (
     <div className={styles.sliderContainer}>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Table, Button, Popconfirm, message, Tag } from "antd";
 import { FiBriefcase, FiLayers, FiSliders, FiStar } from "react-icons/fi";
@@ -31,7 +31,7 @@ function AdminFeedback() {
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
-  const fetchFeedbacks = async (page = 1, limit = 10) => {
+  const fetchFeedbacks = useCallback(async (page = 1, limit = 10) => {
     try {
       setLoading(true);
       const response = await axios.get("/feedback/allFeedbacks", {
@@ -47,7 +47,7 @@ function AdminFeedback() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const handleDelete = async (id: number) => {
     try {
@@ -61,8 +61,8 @@ function AdminFeedback() {
   };
 
   useEffect(() => {
-    fetchFeedbacks(currentPage, pageSize);
-  }, []);
+    fetchFeedbacks(1, 10);
+  }, [fetchFeedbacks]);
 
   const fbMetrics = computeFeedbackMetrics(feedbacks, total);
 

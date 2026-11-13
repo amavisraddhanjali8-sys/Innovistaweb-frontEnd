@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Table, Tag, Select, Input, message } from "antd";
 import { FiSearch } from "react-icons/fi";
 import AxiosConfig from "../../Context/AxiosConfig";
@@ -50,8 +50,12 @@ function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
   const [total, setTotal] = useState(0);
 
   const [loadingOrder, setLoadingOrder] = useState<string | null>(null);
+  const onMetricsChangeRef = useRef(onMetricsChange);
+  useEffect(() => {
+    onMetricsChangeRef.current = onMetricsChange;
+  }, [onMetricsChange]);
 
-  const fetchOrders = async (page = 1, limit = 10) => {
+  const fetchOrders = useCallback(async (page = 1, limit = 10) => {
     try {
       setLoading(true);
       const response = await AxiosConfig.get("/order/getAllOrders", {
@@ -65,17 +69,17 @@ function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
       setTotal(reportedTotal);
       setCurrentPage(response.data.page || page);
       setPageSize(response.data.limit || limit);
-      onMetricsChange?.(computeOrderMetrics(list, reportedTotal));
+      onMetricsChangeRef.current?.(computeOrderMetrics(list, reportedTotal));
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchOrders(currentPage, pageSize);
-  }, []);
+    fetchOrders(1, 10);
+  }, [fetchOrders]);
 
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     try {

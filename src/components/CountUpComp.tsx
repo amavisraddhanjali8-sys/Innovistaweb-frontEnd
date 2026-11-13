@@ -20,7 +20,7 @@ interface CountUpCompProps {
 function CountUpComp({
   number,
   title,
-  duration = 4,
+  duration = 1.4,
   suffix = "+",
   prefix = "",
   decimals = 0,
@@ -38,11 +38,14 @@ function CountUpComp({
 
   useEffect(() => {
     if (!enableScrollTrigger) return;
+    const node = statItemRef.current;
+    if (!node) return;
 
+    let timerId: ReturnType<typeof setTimeout> | null = null;
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting && !hasAnimated) {
-          setTimeout(() => {
+          timerId = setTimeout(() => {
             setIsVisible(true);
             setHasAnimated(true);
           }, delay);
@@ -54,14 +57,12 @@ function CountUpComp({
       }
     );
 
-    if (statItemRef.current) {
-      observer.observe(statItemRef.current);
-    }
+    observer.observe(node);
 
     return () => {
-      if (statItemRef.current) {
-        observer.unobserve(statItemRef.current);
-      }
+      if (timerId) clearTimeout(timerId);
+      observer.unobserve(node);
+      observer.disconnect();
     };
   }, [enableScrollTrigger, hasAnimated, delay]);
 

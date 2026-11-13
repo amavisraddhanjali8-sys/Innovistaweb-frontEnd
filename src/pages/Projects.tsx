@@ -140,7 +140,7 @@ function Projects() {
 
       {/* Portfolio Metrics Strip matching VisionSection architectural pillars */}
       <section className="w-full bg-white py-6 sm:py-8">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <div className="rounded-2xl border border-slate-200 bg-[#F8FAFC] p-5 sm:p-6 grid grid-cols-2 lg:grid-cols-4 gap-5">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#22577A]/80">
@@ -198,7 +198,7 @@ function Projects() {
 
       {/* Main Signature Installations Section */}
       <section className="w-full bg-white pb-12 sm:pb-16">
-        <div className="max-w-[1160px] mx-auto px-5 sm:px-8 lg:px-10">
+        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
           <AboutTaglineHeading
             kicker="Proven Delivery"
             heading="Signature Installations"

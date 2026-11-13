@@ -53,6 +53,26 @@ import {
   normalizeRelatedPortals,
   type RelatedPortalItem,
 } from "./src/utils/siteContentHelpers";
+import {
+  BLOGGER_COVER_FALLBACKS,
+  DEFAULT_BLOGGER_CONFIG,
+  DEFAULT_BLOG_POSTS,
+  buildBloggerAtomUrl,
+  buildBloggerFeedUrl,
+  buildExcerpt,
+  computeReadTime,
+  filterBlogPosts,
+  formatBlogDisplayDate,
+  getHomePageBlogs,
+  mergeSyncedBloggerPosts,
+  normalizeBloggerOrigin,
+  parseBloggerApiV3Response,
+  parseBloggerAtomFeed,
+  parseBloggerJsonFeed,
+  sanitizeBlogHtml,
+  type BlogPostItem,
+  type BloggerConnectionConfig,
+} from "./src/utils/blogBloggerHelpers";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,7 +121,7 @@ let admins: Admin[] = [
     Admin_Email: "admin@innovista.com",
     Admin_Phone: "+94 77 123 4567",
     Admin_Password: "admin123",
-    Admin_Profile: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+    Admin_Profile: "/assets/about/director.jpg",
   },
   {
     AdminId: 2,
@@ -109,7 +129,7 @@ let admins: Admin[] = [
     Admin_Email: "manager@innovista.com",
     Admin_Phone: "+94 71 987 6543",
     Admin_Password: "admin123",
-    Admin_Profile: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop",
+    Admin_Profile: "/assets/about/team-structural.jpg",
   },
 ];
 
@@ -234,7 +254,7 @@ let customers: Customer[] = [
     Cus_Email: "duminda@zenithcapital.lk",
     Cus_PhoneNumber: "+94 77 455 1200",
     Cus_CompanyName: "Zenith Capital Residencies",
-    Cus_Logo: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&h=100&fit=crop",
+    Cus_Logo: "/assets/logos/client-zenith.svg",
     Verify_State: true,
     Purchase_Goods: ["Sliding Doors", "Glass Balustrades", "Window Systems"],
   },
@@ -244,7 +264,7 @@ let customers: Customer[] = [
     Cus_Email: "kavinda@novatech.io",
     Cus_PhoneNumber: "+94 77 333 9988",
     Cus_CompanyName: "NovaTech Solutions",
-    Cus_Logo: "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=100&h=100&fit=crop",
+    Cus_Logo: "/assets/logos/client-novatech.svg",
     Verify_State: true,
     Purchase_Goods: ["Acoustic Partitions", "Pivot Doors"],
   },
@@ -280,14 +300,14 @@ const orders: Order[] = [
     Client_Number: "+94 77 455 1200",
     Customer: {
       Cus_CompanyName: "Zenith Capital Residencies",
-      Cus_Logo: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&h=100&fit=crop",
+      Cus_Logo: "/assets/logos/client-zenith.svg",
       Purchase_Goods: ["Sliding Doors", "Glass Balustrades"],
     },
     Designs: [
       {
         Design: {
           Design_Name: "Minimalist Slimline Sliding Door System",
-          Design_Image: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=800&auto=format&fit=crop",
+          Design_Image: "/assets/products/door.jpg",
         },
       },
     ],
@@ -301,14 +321,14 @@ const orders: Order[] = [
     Client_Number: "+94 77 333 9988",
     Customer: {
       Cus_CompanyName: "NovaTech Solutions",
-      Cus_Logo: "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=100&h=100&fit=crop",
+      Cus_Logo: "/assets/logos/client-novatech.svg",
       Purchase_Goods: ["Acoustic Partitions"],
     },
     Designs: [
       {
         Design: {
           Design_Name: "Acoustic Frameless Glass Office Partition",
-          Design_Image: "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=800&auto=format&fit=crop",
+          Design_Image: "/assets/products/partition.jpg",
         },
       },
     ],
@@ -339,7 +359,7 @@ let feedbacks: Feedback[] = [
     Rating: 5,
     Feed_back_comment: "The floor-to-ceiling slimline glass doors transformed our luxury villa project. The structural finish and weather resistance are world class.",
     Feed_Back_Images: [
-      "/assets/aistudio/1ab77d9a369543a7bc865d1d42116ba4_4d6c0340.jpg",
+      "/assets/about/terrace.jpg",
     ],
     Design: {
       Design_Name: "Minimalist Slimline Sliding Door System",
@@ -354,7 +374,7 @@ let feedbacks: Feedback[] = [
     Rating: 5,
     Feed_back_comment: "Acoustic insulation is top notch. Precision installation completed ahead of schedule with spotless attention to detailing.",
     Feed_Back_Images: [
-      "https://images.unsplash.com/photo-1497366216548-37526070297c?q=80&w=600&auto=format&fit=crop",
+      "/assets/products/partition.jpg",
     ],
     Design: {
       Design_Name: "Acoustic Frameless Glass Office Partition",
@@ -413,6 +433,109 @@ let pageAdsCms: PageAdsCmsPayload = DEFAULT_PAGE_ADS_CMS;
 
 // Related Hardware & Portals Collage CMS store (editable by admin)
 let relatedPortals: RelatedPortalItem[] = normalizeRelatedPortals(RELATED_PORTALS);
+
+// Blogs & Blogger.com Sync CMS store
+let bloggerConfig: BloggerConnectionConfig = { ...DEFAULT_BLOGGER_CONFIG };
+let blogPosts: BlogPostItem[] = DEFAULT_BLOG_POSTS.map((p) => ({ ...p }));
+let lastAutoSyncAttemptAt = 0;
+
+async function syncFromBloggerSource(
+  targetUrl: string,
+  blogId = "",
+  apiKey = ""
+): Promise<{
+  posts: BlogPostItem[];
+  blogTitle: string;
+  addedCount: number;
+  updatedCount: number;
+  syncedTotal: number;
+}> {
+  let parsedTitle = bloggerConfig.blogTitle || "Blogger Feed";
+  let incomingPosts: BlogPostItem[] = [];
+
+  if (blogId.trim() && apiKey.trim()) {
+    const v3Url = `https://www.googleapis.com/blogger/v3/blogs/${encodeURIComponent(
+      blogId.trim()
+    )}/posts?key=${encodeURIComponent(apiKey.trim())}&maxResults=25`;
+    const v3Res = await fetch(v3Url, {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+    });
+    if (!v3Res.ok) {
+      throw new Error(`Blogger API v3 returned HTTP ${v3Res.status}`);
+    }
+    const v3Json = await v3Res.json();
+    const parsedV3 = parseBloggerApiV3Response(v3Json);
+    incomingPosts = parsedV3.posts;
+  } else {
+    const jsonUrl = buildBloggerFeedUrl(targetUrl, 25);
+    if (!jsonUrl) {
+      throw new Error("Please enter a valid Blogger.com URL (e.g. https://yourblog.blogspot.com).");
+    }
+
+    const feedRes = await fetch(jsonUrl, {
+      signal: AbortSignal.timeout(8000),
+      headers: {
+        Accept: "application/json, application/atom+xml, text/xml;q=0.9",
+        "User-Agent": "Innovista-Blog-Sync/1.0",
+      },
+    });
+
+    if (feedRes.ok) {
+      const contentType = feedRes.headers.get("content-type") || "";
+      const rawText = await feedRes.text();
+      if (contentType.includes("json") || rawText.trim().startsWith("{")) {
+        const json = JSON.parse(rawText);
+        const parsed = parseBloggerJsonFeed(json);
+        parsedTitle = parsed.blogTitle;
+        incomingPosts = parsed.posts;
+      } else {
+        const parsed = parseBloggerAtomFeed(rawText);
+        parsedTitle = parsed.blogTitle;
+        incomingPosts = parsed.posts;
+      }
+    } else {
+      const atomUrl = buildBloggerAtomUrl(targetUrl, 25);
+      const atomRes = await fetch(atomUrl, {
+        signal: AbortSignal.timeout(8000),
+        headers: { Accept: "application/atom+xml, text/xml" },
+      });
+      if (!atomRes.ok) {
+        throw new Error(`Blogger feed returned HTTP ${feedRes.status}`);
+      }
+      const atomXml = await atomRes.text();
+      const parsed = parseBloggerAtomFeed(atomXml);
+      parsedTitle = parsed.blogTitle;
+      incomingPosts = parsed.posts;
+    }
+  }
+
+  const mergeRes = mergeSyncedBloggerPosts(blogPosts, incomingPosts);
+  blogPosts = mergeRes.merged;
+
+  bloggerConfig = {
+    ...bloggerConfig,
+    blogUrl: normalizeBloggerOrigin(targetUrl) || bloggerConfig.blogUrl,
+    blogId: blogId.trim(),
+    apiKey: apiKey.trim(),
+    blogTitle: parsedTitle,
+    lastSyncedAt: new Date().toISOString(),
+    lastSyncStatus: "success",
+    lastSyncCount: incomingPosts.length,
+    lastSyncMessage:
+      incomingPosts.length > 0
+        ? `Synced ${incomingPosts.length} post${incomingPosts.length === 1 ? "" : "s"} from ${parsedTitle}.`
+        : `Connected to ${parsedTitle}, no public posts returned yet.`,
+  };
+
+  return {
+    posts: blogPosts,
+    blogTitle: parsedTitle,
+    addedCount: mergeRes.addedCount,
+    updatedCount: mergeRes.updatedCount,
+    syncedTotal: incomingPosts.length,
+  };
+}
 
 // =================== API ENDPOINTS ===================
 
@@ -480,7 +603,7 @@ app.post("/auth/register", (req: Request, res: Response) => {
     Admin_Email,
     Admin_Phone: Admin_Phone || "",
     Admin_Password: Admin_Password || "admin123",
-    Admin_Profile: Admin_Profile || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+    Admin_Profile: Admin_Profile || "/assets/about/director.jpg",
   };
   admins.push(newAdmin);
   return res.json({ message: "Admin registered successfully!", admin: newAdmin });
@@ -536,6 +659,8 @@ app.get("/admin/summary", (_req: Request, res: Response) => {
     totalProjectBudget,
     feedbacks: feedbacks.length,
     unreadNotifications,
+    blogs: blogPosts.length,
+    homeBlogs: blogPosts.filter((b) => b.showOnHome).length,
   });
 });
 
@@ -789,7 +914,7 @@ app.post("/customer/login", (req: Request, res: Response) => {
       Cus_Email: email.includes("@") ? email : `${email}@example.com`,
       Cus_PhoneNumber: email.includes("@") ? "+94 77 123 4567" : email,
       Cus_CompanyName: "Innovista Client Partner",
-      Cus_Logo: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+      Cus_Logo: "/assets/logos/client-zenith.svg",
       Cus_Password: password || "customer123",
       Verify_State: true,
       Purchase_Goods: ["Architectural Glazing", "Custom Aluminium"],
@@ -1504,6 +1629,313 @@ app.delete("/api/resources/portals/:id", (req: Request, res: Response) => {
   return res.json({
     message: "Portal collage tile deleted!",
     items: relatedPortals,
+  });
+});
+
+// Blogs & Blogger.com Synchronization Endpoints
+app.get("/api/blogs", async (req: Request, res: Response) => {
+  const shouldAutoSync =
+    req.query.autoSync === "1" || req.query.forceSync === "1";
+  const hasBloggerTarget = Boolean(
+    bloggerConfig.blogUrl || (bloggerConfig.blogId && bloggerConfig.apiKey)
+  );
+  const isStale = Date.now() - lastAutoSyncAttemptAt > 60_000;
+
+  if (
+    shouldAutoSync &&
+    hasBloggerTarget &&
+    bloggerConfig.autoSyncOnVisit &&
+    (req.query.forceSync === "1" || isStale)
+  ) {
+    lastAutoSyncAttemptAt = Date.now();
+    try {
+      await syncFromBloggerSource(
+        bloggerConfig.blogUrl,
+        bloggerConfig.blogId,
+        bloggerConfig.apiKey
+      );
+    } catch (err) {
+      bloggerConfig = {
+        ...bloggerConfig,
+        lastSyncStatus: "error",
+        lastSyncMessage:
+          err instanceof Error ? err.message : "Failed to refresh Blogger feed.",
+      };
+    }
+  }
+
+  const homeOnly = req.query.homeOnly === "true" || req.query.homeOnly === "1";
+  const category = typeof req.query.category === "string" ? req.query.category : "All";
+  const query = typeof req.query.q === "string" ? req.query.q : "";
+  const sourceParam =
+    req.query.source === "blogger" || req.query.source === "local"
+      ? req.query.source
+      : "all";
+
+  const list = homeOnly
+    ? getHomePageBlogs(blogPosts)
+    : filterBlogPosts(blogPosts, category, query, sourceParam);
+
+  return res.json({
+    posts: list,
+    total: blogPosts.length,
+    homeCount: blogPosts.filter((b) => b.showOnHome).length,
+    config: {
+      ...bloggerConfig,
+      apiKey: bloggerConfig.apiKey ? "••••••••" : "",
+      hasApiKey: Boolean(bloggerConfig.apiKey),
+    },
+  });
+});
+
+app.post("/api/blogs/sync-blogger", async (req: Request, res: Response) => {
+  const requestedUrl =
+    typeof req.body?.blogUrl === "string"
+      ? req.body.blogUrl.trim()
+      : bloggerConfig.blogUrl;
+  const requestedBlogId =
+    typeof req.body?.blogId === "string"
+      ? req.body.blogId.trim()
+      : bloggerConfig.blogId;
+  const requestedApiKey =
+    typeof req.body?.apiKey === "string" && req.body.apiKey !== "••••••••"
+      ? req.body.apiKey.trim()
+      : bloggerConfig.apiKey;
+  const autoSyncOnVisit =
+    typeof req.body?.autoSyncOnVisit === "boolean"
+      ? req.body.autoSyncOnVisit
+      : bloggerConfig.autoSyncOnVisit;
+
+  bloggerConfig = {
+    ...bloggerConfig,
+    blogUrl: normalizeBloggerOrigin(requestedUrl) || requestedUrl,
+    blogId: requestedBlogId,
+    apiKey: requestedApiKey,
+    autoSyncOnVisit,
+  };
+
+  if (!bloggerConfig.blogUrl && !(bloggerConfig.blogId && bloggerConfig.apiKey)) {
+    return res.status(400).json({
+      message: "Enter a Blogger.com URL (e.g. https://yourblog.blogspot.com) or Blog ID + API key.",
+    });
+  }
+
+  try {
+    lastAutoSyncAttemptAt = Date.now();
+    const syncRes = await syncFromBloggerSource(
+      bloggerConfig.blogUrl,
+      bloggerConfig.blogId,
+      bloggerConfig.apiKey
+    );
+
+    return res.json({
+      message: `Synced ${syncRes.syncedTotal} posts from Blogger (${syncRes.addedCount} new, ${syncRes.updatedCount} updated).`,
+      posts: blogPosts,
+      addedCount: syncRes.addedCount,
+      updatedCount: syncRes.updatedCount,
+      syncedTotal: syncRes.syncedTotal,
+      config: {
+        ...bloggerConfig,
+        apiKey: bloggerConfig.apiKey ? "••••••••" : "",
+        hasApiKey: Boolean(bloggerConfig.apiKey),
+      },
+    });
+  } catch (err) {
+    const errMsg =
+      err instanceof Error ? err.message : "Could not connect to Blogger.com feed.";
+    bloggerConfig = {
+      ...bloggerConfig,
+      lastSyncedAt: new Date().toISOString(),
+      lastSyncStatus: "error",
+      lastSyncMessage: errMsg,
+    };
+    return res.status(502).json({
+      message: `Blogger sync saved configuration, but remote feed fetch failed: ${errMsg}`,
+      config: {
+        ...bloggerConfig,
+        apiKey: bloggerConfig.apiKey ? "••••••••" : "",
+        hasApiKey: Boolean(bloggerConfig.apiKey),
+      },
+      posts: blogPosts,
+    });
+  }
+});
+
+app.put("/api/blogs/config", (req: Request, res: Response) => {
+  const nextUrl =
+    typeof req.body?.blogUrl === "string"
+      ? normalizeBloggerOrigin(req.body.blogUrl) || req.body.blogUrl.trim()
+      : bloggerConfig.blogUrl;
+  const nextBlogId =
+    typeof req.body?.blogId === "string"
+      ? req.body.blogId.trim()
+      : bloggerConfig.blogId;
+  const nextApiKey =
+    typeof req.body?.apiKey === "string" && req.body.apiKey !== "••••••••"
+      ? req.body.apiKey.trim()
+      : bloggerConfig.apiKey;
+  const autoSyncOnVisit =
+    typeof req.body?.autoSyncOnVisit === "boolean"
+      ? req.body.autoSyncOnVisit
+      : bloggerConfig.autoSyncOnVisit;
+
+  if (req.body?.disconnect === true) {
+    bloggerConfig = { ...DEFAULT_BLOGGER_CONFIG };
+    if (req.body?.removeSyncedPosts) {
+      blogPosts = blogPosts.filter((p) => p.source !== "blogger");
+    }
+    return res.json({
+      message: "Blogger connection disconnected.",
+      config: { ...bloggerConfig, hasApiKey: false },
+      posts: blogPosts,
+    });
+  }
+
+  bloggerConfig = {
+    ...bloggerConfig,
+    blogUrl: nextUrl,
+    blogId: nextBlogId,
+    apiKey: nextApiKey,
+    autoSyncOnVisit,
+    lastSyncMessage: nextUrl
+      ? `Connected to ${nextUrl}. Click Sync Now to fetch latest posts.`
+      : DEFAULT_BLOGGER_CONFIG.lastSyncMessage,
+  };
+
+  return res.json({
+    message: "Blogger integration settings saved.",
+    config: {
+      ...bloggerConfig,
+      apiKey: bloggerConfig.apiKey ? "••••••••" : "",
+      hasApiKey: Boolean(bloggerConfig.apiKey),
+    },
+  });
+});
+
+app.put("/api/blogs/home-selection", (req: Request, res: Response) => {
+  const homeIds: string[] = Array.isArray(req.body?.homeIds)
+    ? req.body.homeIds.map(String)
+    : [];
+  const orderMap = new Map<string, number>();
+  homeIds.forEach((id, idx) => orderMap.set(id, idx + 1));
+
+  blogPosts = blogPosts.map((post) => {
+    const order = orderMap.get(post.id);
+    if (order !== undefined) {
+      return { ...post, showOnHome: true, homeOrder: order };
+    }
+    return { ...post, showOnHome: false };
+  });
+
+  return res.json({
+    message: "Home page blog selection updated!",
+    posts: blogPosts,
+    homePosts: getHomePageBlogs(blogPosts),
+  });
+});
+
+app.post("/api/blogs", (req: Request, res: Response) => {
+  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
+  if (!title) {
+    return res.status(400).json({ message: "Blog title is required." });
+  }
+  const rawHtml =
+    typeof req.body?.contentHtml === "string" && req.body.contentHtml.trim()
+      ? req.body.contentHtml
+      : `<p>${typeof req.body?.excerpt === "string" ? req.body.excerpt.trim() : title}</p>`;
+  const sanitizedHtml = sanitizeBlogHtml(rawHtml);
+  const nowIso = new Date().toISOString();
+  const category =
+    typeof req.body?.category === "string" && req.body.category.trim()
+      ? req.body.category.trim()
+      : "Architectural Journal";
+  const labels = Array.isArray(req.body?.labels)
+    ? req.body.labels.map(String).filter(Boolean)
+    : [category];
+  const nextHomeOrder =
+    blogPosts.reduce((max, p) => Math.max(max, p.homeOrder || 0), 0) + 1;
+
+  const created: BlogPostItem = {
+    id: `blog-${Date.now()}`,
+    title,
+    excerpt:
+      typeof req.body?.excerpt === "string" && req.body.excerpt.trim()
+        ? req.body.excerpt.trim()
+        : buildExcerpt(sanitizedHtml),
+    contentHtml: sanitizedHtml,
+    date: formatBlogDisplayDate(nowIso),
+    publishedAt: nowIso,
+    readTime:
+      typeof req.body?.readTime === "string" && req.body.readTime.trim()
+        ? req.body.readTime.trim()
+        : computeReadTime(sanitizedHtml),
+    category,
+    labels,
+    author:
+      typeof req.body?.author === "string" && req.body.author.trim()
+        ? req.body.author.trim()
+        : "Innovista Editorial",
+    coverImage:
+      typeof req.body?.coverImage === "string" && req.body.coverImage.trim()
+        ? req.body.coverImage.trim()
+        : BLOGGER_COVER_FALLBACKS[blogPosts.length % BLOGGER_COVER_FALLBACKS.length],
+    source: req.body?.source === "blogger" ? "blogger" : "local",
+    bloggerUrl:
+      typeof req.body?.bloggerUrl === "string" ? req.body.bloggerUrl.trim() : "",
+    featured: Boolean(req.body?.featured),
+    showOnHome: Boolean(req.body?.showOnHome),
+    homeOrder:
+      typeof req.body?.homeOrder === "number" ? req.body.homeOrder : nextHomeOrder,
+  };
+
+  blogPosts.unshift(created);
+  return res.json({
+    message: "Blog post published!",
+    data: created,
+    posts: blogPosts,
+  });
+});
+
+app.put("/api/blogs/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  const idx = blogPosts.findIndex((b) => b.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ message: "Blog post not found." });
+  }
+  const existing = blogPosts[idx];
+  const nextHtml =
+    typeof req.body?.contentHtml === "string"
+      ? sanitizeBlogHtml(req.body.contentHtml)
+      : existing.contentHtml;
+
+  const updated: BlogPostItem = {
+    ...existing,
+    ...req.body,
+    id: existing.id,
+    contentHtml: nextHtml,
+    excerpt:
+      typeof req.body?.excerpt === "string" && req.body.excerpt.trim()
+        ? req.body.excerpt.trim()
+        : existing.excerpt,
+  };
+  blogPosts[idx] = updated;
+  return res.json({
+    message: "Blog post updated!",
+    data: updated,
+    posts: blogPosts,
+  });
+});
+
+app.delete("/api/blogs/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  const before = blogPosts.length;
+  blogPosts = blogPosts.filter((b) => b.id !== id);
+  if (blogPosts.length === before) {
+    return res.status(404).json({ message: "Blog post not found." });
+  }
+  return res.json({
+    message: "Blog post deleted.",
+    posts: blogPosts,
   });
 });
 

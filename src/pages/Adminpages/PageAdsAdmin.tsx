@@ -18,6 +18,8 @@ import {
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
+  PauseCircleOutlined,
+  PlayCircleOutlined,
   PlusOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -32,6 +34,7 @@ import {
   AD_SPEED_PRESETS,
   DEFAULT_PAGE_ADS_CMS,
   clampSlideshowSpeedMs,
+  countActiveAndPausedAds,
   isValidAdPageKey,
   moveArrayItem,
   normalizePageAdButtons,
@@ -65,6 +68,7 @@ export default function PageAdsAdmin() {
   const [draftTitle, setDraftTitle] = useState("");
   const [draftImage, setDraftImage] = useState(AD_ASSET_PRESETS[0].url);
   const [draftLinkUrl, setDraftLinkUrl] = useState("#/products");
+  const [draftPaused, setDraftPaused] = useState(false);
   const [draftButtons, setDraftButtons] = useState<PageAdButton[]>([]);
   const [savingModalAd, setSavingModalAd] = useState(false);
 
@@ -120,6 +124,9 @@ export default function PageAdsAdmin() {
     [cms]
   );
 
+  const { activeCount: activePageAdCount, pausedCount: pausedPageAdCount } =
+    useMemo(() => countActiveAndPausedAds(activeConfig.ads), [activeConfig.ads]);
+
   const updateActivePageConfig = (
     updater: (prev: PageAdsConfig) => PageAdsConfig
   ) => {
@@ -159,6 +166,7 @@ export default function PageAdsAdmin() {
     setDraftTitle(`${activeDef.label} Promotion ${activeConfig.ads.length + 1}`);
     setDraftImage(preset.url);
     setDraftLinkUrl("#/products");
+    setDraftPaused(false);
     setDraftButtons([
       {
         id: `btn-${Date.now()}`,
@@ -174,6 +182,7 @@ export default function PageAdsAdmin() {
     setDraftTitle(ad.title || "");
     setDraftImage(ad.image || "");
     setDraftLinkUrl(ad.linkUrl || "");
+    setDraftPaused(Boolean(ad.paused));
     setDraftButtons(
       Array.isArray(ad.buttons) ? ad.buttons.map((b) => ({ ...b })) : []
     );
@@ -191,6 +200,7 @@ export default function PageAdsAdmin() {
         title: draftTitle.trim() || `${activeDef.label} Promotion`,
         image: draftImage.trim(),
         linkUrl: draftLinkUrl.trim(),
+        paused: draftPaused,
         buttons: normalizePageAdButtons(draftButtons),
       };
 
@@ -365,6 +375,45 @@ export default function PageAdsAdmin() {
     }
   };
 
+  const handleTogglePauseAd = async (slide: PageAdSlide) => {
+    const nextPaused = !slide.paused;
+    try {
+      const res = await AxiosConfig.put(
+        `/ads/cms/${encodeURIComponent(activePageKey)}/ads/${encodeURIComponent(
+          slide.id
+        )}`,
+        {
+          ...slide,
+          paused: nextPaused,
+        }
+      );
+      if (res.data?.page) {
+        setCms((prev) => ({
+          pages: {
+            ...prev.pages,
+            [activePageKey]: normalizeSinglePageAdsConfig(
+              res.data.page,
+              activePageKey
+            ),
+          },
+        }));
+      }
+      msgApi.success(
+        nextPaused
+          ? "Advertisement paused (hidden from public popup)."
+          : "Advertisement resumed and live in popup."
+      );
+    } catch {
+      updateActivePageConfig((prev) => ({
+        ...prev,
+        ads: prev.ads.map((ad) =>
+          ad.id === slide.id ? { ...ad, paused: nextPaused } : ad
+        ),
+      }));
+      msgApi.warning("Updated in draft — click Save to persist.");
+    }
+  };
+
   const handleAddButtonToAd = (slideId: string) => {
     updateActivePageConfig((prev) => ({
       ...prev,
@@ -472,12 +521,12 @@ export default function PageAdsAdmin() {
     <AdminPortalShell
       sectionCode="AD-CMS"
       sectionTitle="Page Advertisement Slideshows"
-      sectionSubtitle="Add, edit, delete advertisement images, referral buttons, and automatic slideshow animation speeds for every card page."
+      sectionSubtitle="Add, edit, pause/resume, or delete popup advertisement images and referral CTA buttons for every public page."
       kpiLabel="Published Ads"
       kpiValue={totalPublishedAds}
-      kpiNote={`${enabledPageCount} of ${AD_PAGE_DEFINITIONS.length} card pages active`}
-      kpiStatusText={activeConfig.enabled ? "ACTIVE" : "PAUSED"}
-      kpiStatusTone={activeConfig.enabled ? "green" : "navy"}
+      kpiNote={`${enabledPageCount} of ${AD_PAGE_DEFINITIONS.length} pages active`}
+      kpiStatusText={activeConfig.enabled && activePageAdCount > 0 ? "ACTIVE" : "PAUSED"}
+      kpiStatusTone={activeConfig.enabled && activePageAdCount > 0 ? "green" : "navy"}
       headerAction={{
         label: `Save ${activeDef.label} Settings`,
         onClick: handleSaveActivePage,
@@ -497,16 +546,14 @@ export default function PageAdsAdmin() {
           value: `${(activeConfig.slideshowSpeedMs / 1000).toFixed(1)}s`,
         },
         {
-          label: "Ad Count",
-          value: `${activeConfig.ads.length} ${
-            activeConfig.ads.length === 1 ? "Slide" : "Slides"
-          }`,
+          label: "Popup Status",
+          value: `${activePageAdCount} Active · ${pausedPageAdCount} Paused`,
         },
       ]}
       bannerRightTitle="Public Behaviour"
       bannerRightLines={[
-        "Ads pop up automatically on page entry at natural image proportions.",
-        "Pages with zero ads or paused status stay completely hidden.",
+        "Ads pop up cleanly on page entry showing only the image and action buttons.",
+        "Individually paused ads stay manageable here and remain hidden from visitors.",
       ]}
     >
       {msgContextHolder}
@@ -682,15 +729,15 @@ export default function PageAdsAdmin() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  Live Promotion Ad Preview (Image-Sized + Referral Buttons)
+                  Live Promotion Popup Preview (Image + Buttons Only)
                 </h2>
                 <p className="text-xs text-slate-500">
-                  Pops up automatically when visitors enter {activeDef.label}, sized to image proportions with top-right Exit (X) and{" "}
-                  {(activeConfig.slideshowSpeedMs / 1000).toFixed(1)}s slideshow.
+                  Visitors see only the centered image popup with overlay referral CTA buttons, Exit (X), and{" "}
+                  {(activeConfig.slideshowSpeedMs / 1000).toFixed(1)}s rotation for active slides.
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                {activeConfig.enabled && activeConfig.ads.length > 0 && (
+                {activeConfig.enabled && activePageAdCount > 0 && (
                   <Button
                     type="primary"
                     size="small"
@@ -710,8 +757,8 @@ export default function PageAdsAdmin() {
               </div>
             </div>
 
-            {activeConfig.enabled && activeConfig.ads.length > 0 ? (
-              <div className="rounded-xl bg-slate-100/80 border border-slate-200/80 p-4">
+            {activeConfig.enabled && activePageAdCount > 0 ? (
+              <div className="rounded-xl bg-slate-900/5 border border-slate-200/80 p-4">
                 <PageAdBannerSlideshow
                   pageKey={activePageKey}
                   variant="inline"
@@ -722,8 +769,10 @@ export default function PageAdsAdmin() {
             ) : (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 py-8 px-4 text-center text-xs text-slate-500">
                 {!activeConfig.enabled
-                  ? "Advertisements are paused and hidden on the public page."
-                  : "No advertisement images added yet. Pages with zero ads stay hidden cleanly."}
+                  ? "Page advertisements are paused globally for this page."
+                  : activeConfig.ads.length === 0
+                  ? "No advertisement images added yet. Pages with zero ads stay hidden cleanly."
+                  : "All advertisements on this page are currently paused individually."}
               </div>
             )}
 
@@ -737,16 +786,15 @@ export default function PageAdsAdmin() {
             )}
           </div>
 
-          {/* Published Ads List & Add / Edit / Delete CRUD */}
+          {/* Published Ads List & Add / Edit / Pause / Delete CRUD */}
           <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  3. Manage Advertisements for {activeDef.label} (
-                  {activeConfig.ads.length})
+                  3. Manage Advertisements for {activeDef.label} ({activeConfig.ads.length})
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Add new ads, edit existing promotions or referral buttons, reorder slides, or delete ads.
+                  {activePageAdCount} active · {pausedPageAdCount} paused — add, edit, pause/resume, reorder slides, or delete ads.
                 </p>
               </div>
 
@@ -803,17 +851,28 @@ export default function PageAdsAdmin() {
                 {activeConfig.ads.map((ad, idx) => (
                   <div
                     key={ad.id}
-                    className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start"
+                    className={`rounded-xl border p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-start transition-colors ${
+                      ad.paused
+                        ? "border-amber-200 bg-amber-50/35"
+                        : "border-slate-200 bg-slate-50/60"
+                    }`}
                   >
                     {/* Image Thumbnail + Upload */}
                     <div className="lg:col-span-4 space-y-2">
-                      <div className="w-full rounded-lg overflow-hidden bg-slate-200/75 border border-slate-200 p-2 flex items-center justify-center min-h-[120px]">
+                      <div className="relative w-full rounded-lg overflow-hidden bg-slate-200/75 border border-slate-200 p-2 flex items-center justify-center min-h-[120px]">
                         <img
                           src={ad.image}
                           alt={ad.title}
                           referrerPolicy="no-referrer"
-                          className="max-h-48 w-auto h-auto max-w-full object-contain rounded"
+                          className={`max-h-48 w-auto h-auto max-w-full object-contain rounded transition-opacity ${
+                            ad.paused ? "opacity-55 grayscale-[25%]" : ""
+                          }`}
                         />
+                        {ad.paused && (
+                          <span className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-amber-500 text-white text-[10px] font-bold uppercase tracking-wider shadow-xs">
+                            Paused
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex flex-wrap items-center gap-2">
@@ -864,8 +923,19 @@ export default function PageAdsAdmin() {
 
                     {/* Ad Metadata Inputs */}
                     <div className="lg:col-span-6 space-y-3">
-                      <div className="text-xs font-bold text-[#22577A] uppercase tracking-wider">
-                        Advertisement #{idx + 1}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-bold text-[#22577A] uppercase tracking-wider">
+                          Advertisement #{idx + 1}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                            ad.paused
+                              ? "bg-amber-100 text-amber-800 border border-amber-200"
+                              : "bg-emerald-100 text-emerald-800 border border-emerald-200"
+                          }`}
+                        >
+                          {ad.paused ? "PAUSED" : "ACTIVE"}
+                        </span>
                       </div>
 
                       <div>
@@ -954,7 +1024,7 @@ export default function PageAdsAdmin() {
                             {(ad.buttons || []).map((btn, btnIdx) => (
                               <div
                                 key={btn.id}
-                                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-white border border-slate-200 rounded-lg p-2"
+                                className="grid grid-cols-1 sm:grid-cols-[170px_minmax(0,1fr)_auto] items-center gap-2 bg-white border border-slate-200 rounded-lg p-2"
                               >
                                 <Input
                                   size="small"
@@ -968,7 +1038,6 @@ export default function PageAdsAdmin() {
                                       e.target.value
                                     )
                                   }
-                                  className="sm:w-44"
                                 />
                                 <Input
                                   size="small"
@@ -982,7 +1051,6 @@ export default function PageAdsAdmin() {
                                       e.target.value
                                     )
                                   }
-                                  className="flex-1"
                                 />
                                 <Button
                                   size="small"
@@ -1000,8 +1068,28 @@ export default function PageAdsAdmin() {
                       </div>
                     </div>
 
-                    {/* Edit / Reorder / Delete Actions */}
-                    <div className="lg:col-span-2 flex lg:flex-col items-center lg:items-end justify-end gap-2">
+                    {/* Edit / Pause / Reorder / Delete Actions */}
+                    <div className="lg:col-span-2 flex flex-wrap lg:flex-col items-center lg:items-end justify-end gap-2">
+                      <Button
+                        size="small"
+                        type={ad.paused ? "primary" : "default"}
+                        icon={
+                          ad.paused ? (
+                            <PlayCircleOutlined />
+                          ) : (
+                            <PauseCircleOutlined />
+                          )
+                        }
+                        onClick={() => handleTogglePauseAd(ad)}
+                        aria-label={
+                          ad.paused
+                            ? `Resume ${ad.title}`
+                            : `Pause ${ad.title}`
+                        }
+                      >
+                        {ad.paused ? "Resume" : "Pause"}
+                      </Button>
+
                       <Button
                         size="small"
                         icon={<EditOutlined />}
@@ -1160,6 +1248,18 @@ export default function PageAdsAdmin() {
             />
           </div>
 
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5">
+            <div>
+              <div className="text-xs font-bold text-slate-800">
+                Pause Advertisement
+              </div>
+              <div className="text-[11px] text-slate-500">
+                Paused ads stay saved in Admin but are hidden from public popups.
+              </div>
+            </div>
+            <Switch checked={draftPaused} onChange={setDraftPaused} />
+          </div>
+
           {/* Referral Buttons inside Modal */}
           <div className="border-t border-slate-100 pt-3 space-y-2">
             <div className="flex items-center justify-between">
@@ -1188,7 +1288,7 @@ export default function PageAdsAdmin() {
             {draftButtons.map((btn, idx) => (
               <div
                 key={btn.id}
-                className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2"
+                className="grid grid-cols-1 sm:grid-cols-[175px_minmax(0,1fr)_auto] items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-2"
               >
                 <Input
                   size="small"
@@ -1202,7 +1302,6 @@ export default function PageAdsAdmin() {
                       )
                     );
                   }}
-                  className="sm:w-44"
                 />
                 <Input
                   size="small"
@@ -1216,7 +1315,6 @@ export default function PageAdsAdmin() {
                       )
                     );
                   }}
-                  className="flex-1"
                 />
                 <Button
                   size="small"

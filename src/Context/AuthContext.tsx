@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           email: "admin@innovista.com",
           role: "admin",
           company: "Innovista Fabriconix HQ",
-          logo: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+          logo: "/assets/about/director.jpg",
           verified: true,
         };
       }
@@ -115,7 +115,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logo:
         customerData.Cus_Logo ||
         customerData.logo ||
-        "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=200&h=200&fit=crop",
+        "/assets/logos/client-zenith.svg",
       verified: customerData.Verify_State !== undefined ? customerData.Verify_State : true,
       purchaseGoods: customerData.Purchase_Goods || [],
     };
@@ -136,7 +136,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       logo:
         adminData.Admin_Profile ||
         adminData.logo ||
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+        "/assets/about/director.jpg",
       verified: true,
     };
 
