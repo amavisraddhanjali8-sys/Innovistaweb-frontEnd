@@ -1,19 +1,18 @@
-import  { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Table,
   Tag,
-  Image,
   Space,
   Button,
   Modal,
   Form,
   Input,
-  Card,
   Popconfirm,
+  message,
 } from "antd";
 import AxiosConfig from "../../../Context/AxiosConfig";
-
-// Removed unused Title destructuring
+import SafeImage from "../../../components/SafeImage";
+import { computeCustomerMetrics, type CustomerMetrics } from "../../../utils/adminPortalHelpers";
 
 type Customer = {
   CustomerId: number;
@@ -27,11 +26,18 @@ type Customer = {
   Purchase_Goods?: string[];
 };
 
-function PreviewCustomer() {
+interface PreviewCustomerProps {
+  refreshTrigger?: number;
+  onMetricsChange?: (metrics: CustomerMetrics) => void;
+}
+
+function PreviewCustomer({
+  refreshTrigger = 0,
+  onMetricsChange,
+}: PreviewCustomerProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
@@ -40,19 +46,21 @@ function PreviewCustomer() {
   const [isModalVisible, setIsModalVisible] = useState<boolean>(false);
   const [form] = Form.useForm();
 
-  // Fetch customers with pagination
   const fetchCustomers = async (page = 1, limit = 10) => {
     try {
       setLoading(true);
-
       const response = await AxiosConfig.get("/customer/getAllCustomers", {
         params: { page, limit },
       });
 
-      setCustomers(response.data.data);
-      setTotal(response.data.total);
-      setCurrentPage(response.data.page);
-      setPageSize(response.data.limit);
+      const list: Customer[] = response.data.data || [];
+      const reportedTotal = response.data.total ?? list.length;
+
+      setCustomers(list);
+      setTotal(reportedTotal);
+      setCurrentPage(response.data.page || page);
+      setPageSize(response.data.limit || limit);
+      onMetricsChange?.(computeCustomerMetrics(list, reportedTotal));
     } catch (error) {
       console.error("Error fetching customers:", error);
     } finally {
@@ -62,39 +70,32 @@ function PreviewCustomer() {
 
   useEffect(() => {
     fetchCustomers(currentPage, pageSize);
-  }, []);
+  }, [refreshTrigger]);
 
-  // Delete customer
   const handleDelete = async (customerId: number) => {
     try {
       await AxiosConfig.delete("/customer/deleteCustomer", {
         params: { customerId },
       });
-
-      // Refetch current page after delete
+      message.success("Customer removed.");
       fetchCustomers(currentPage, pageSize);
-    } catch (error) {
-      console.error("Error deleting customer:", error);
+    } catch {
+      message.error("Failed to remove customer.");
     }
   };
 
-  // Edit customer
   const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer);
-
     form.setFieldsValue({
       ...customer,
       Purchase_Goods: customer.Purchase_Goods?.join(", ") || "",
     });
-
     setIsModalVisible(true);
   };
 
-  // Update customer
   const handleUpdate = async () => {
     try {
       const values = await form.validateFields();
-
       const updatedCustomer: Customer = {
         CustomerId: editingCustomer?.CustomerId ?? 0,
         Cus_Name: values.Cus_Name,
@@ -105,92 +106,100 @@ function PreviewCustomer() {
         Cus_Password: editingCustomer?.Cus_Password ?? "",
         Verify_State: editingCustomer?.Verify_State ?? false,
         Purchase_Goods: values.Purchase_Goods
-          ? values.Purchase_Goods.split(",").map((item: string) => item.trim())
+          ? values.Purchase_Goods.split(",").map((item: string) => item.trim()).filter(Boolean)
           : [],
       };
 
       await AxiosConfig.put("/customer/updateCustomer", updatedCustomer);
-
+      message.success("Customer updated.");
       setIsModalVisible(false);
       setEditingCustomer(null);
       form.resetFields();
-
       fetchCustomers(currentPage, pageSize);
-    } catch (error) {
-      console.error("Error updating customer:", error);
+    } catch {
+      message.error("Could not update customer.");
     }
   };
 
   const columns = [
-
     {
-      title: "Name",
+      title: "Client",
       dataIndex: "Cus_Name",
       key: "Cus_Name",
-    },
-    {
-      title: "Email",
-      dataIndex: "Cus_Email",
-      key: "Cus_Email",
-    },
-    {
-      title: "Phone",
-      dataIndex: "Cus_PhoneNumber",
-      key: "Cus_PhoneNumber",
+      render: (name: string, record: Customer) => (
+        <div className="flex items-center gap-3">
+          {record.Cus_Logo ? (
+            <SafeImage
+              src={record.Cus_Logo}
+              alt={record.Cus_CompanyName}
+              width={36}
+              height={36}
+              style={{ objectFit: "cover", borderRadius: 8 }}
+              preview={false}
+            />
+          ) : (
+            <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 shrink-0" />
+          )}
+          <div>
+            <div className="text-xs font-semibold text-slate-900">{name}</div>
+            <div className="text-[11px] text-slate-500">{record.Cus_Email}</div>
+          </div>
+        </div>
+      ),
     },
     {
       title: "Company",
       dataIndex: "Cus_CompanyName",
       key: "Cus_CompanyName",
-    },
-    {
-      title: "Logo",
-      dataIndex: "Cus_Logo",
-      key: "Cus_Logo",
-      render: (url: string) => (
-        <Image
-          src={url}
-          alt="Company Logo"
-          width={50}
-          height={50}
-          style={{ objectFit: "contain" }}
-          preview={false}
-        />
+      render: (company: string, record: Customer) => (
+        <div>
+          <div className="text-xs font-medium text-slate-800">{company}</div>
+          <div className="text-[11px] text-slate-500 tabular-nums">
+            {record.Cus_PhoneNumber}
+          </div>
+        </div>
       ),
     },
     {
-      title: "Purchase Goods",
+      title: "Purchased Suites",
       dataIndex: "Purchase_Goods",
       key: "Purchase_Goods",
       render: (goods: string[]) =>
-        goods?.length ? goods.join(", ") : <Tag color="default">None</Tag>,
+        goods?.length ? (
+          <span className="text-xs text-slate-600">{goods.join(", ")}</span>
+        ) : (
+          <Tag color="default">None</Tag>
+        ),
     },
     {
-      title: "Verified",
+      title: "Status",
       dataIndex: "Verify_State",
       key: "Verify_State",
       render: (verified: boolean) =>
         verified ? (
           <Tag color="green">Verified</Tag>
         ) : (
-          <Tag color="red">Not Verified</Tag>
+          <Tag color="red">Pending</Tag>
         ),
     },
     {
       title: "Actions",
       key: "actions",
+      align: "right" as const,
       render: (_: unknown, record: Customer) => (
-        <Space>
-          <Button type="primary" onClick={() => handleEdit(record)}>
+        <Space size="small">
+          <Button size="small" type="primary" onClick={() => handleEdit(record)}>
             Edit
           </Button>
           <Popconfirm
-            title="Are you sure to delete this customer?"
+            title="Remove this customer?"
             onConfirm={() => handleDelete(record.CustomerId)}
-            okText="Yes"
-            cancelText="No"
+            okText="Remove"
+            cancelText="Cancel"
           >
-            <Button danger>Delete</Button>
+            <Button size="small" danger>
+              Delete
+            </Button>
           </Popconfirm>
         </Space>
       ),
@@ -198,27 +207,14 @@ function PreviewCustomer() {
   ];
 
   return (
-    <div style={{ margin: "30px", padding: "20px" }}>
-      <h2
-        style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-        }}
-      >
-        Customer List
-      </h2>
-
+    <>
       <Table
         rowKey="CustomerId"
         columns={columns}
         dataSource={customers}
         loading={loading}
-        bordered
+        size="middle"
+        scroll={{ x: 640 }}
         pagination={{
           current: currentPage,
           pageSize: pageSize,
@@ -231,9 +227,8 @@ function PreviewCustomer() {
         }}
       />
 
-      {/* Edit Modal */}
       <Modal
-        title="Edit Customer"
+        title={<span className="font-bold text-slate-900">Edit Customer</span>}
         open={isModalVisible}
         onCancel={() => {
           setIsModalVisible(false);
@@ -243,43 +238,41 @@ function PreviewCustomer() {
         onOk={handleUpdate}
         okText="Save Changes"
       >
-        <Card bordered={false}>
-          <Form form={form} layout="vertical">
-            <Form.Item
-              name="Cus_Name"
-              label="Name"
-              rules={[{ required: true }]}
-            >
-              <Input />
-            </Form.Item>
+        <Form form={form} layout="vertical">
+          <Form.Item
+            name="Cus_Name"
+            label="Name"
+            rules={[{ required: true }]}
+          >
+            <Input />
+          </Form.Item>
 
-            <Form.Item
-              name="Cus_Email"
-              label="Email"
-              rules={[{ required: true, type: "email" }]}
-            >
-              <Input />
-            </Form.Item>
+          <Form.Item
+            name="Cus_Email"
+            label="Email"
+            rules={[{ required: true, type: "email" }]}
+          >
+            <Input />
+          </Form.Item>
 
-            <Form.Item name="Cus_PhoneNumber" label="Phone">
-              <Input />
-            </Form.Item>
+          <Form.Item name="Cus_PhoneNumber" label="Phone">
+            <Input />
+          </Form.Item>
 
-            <Form.Item name="Cus_CompanyName" label="Company">
-              <Input />
-            </Form.Item>
+          <Form.Item name="Cus_CompanyName" label="Company">
+            <Input />
+          </Form.Item>
 
-            <Form.Item name="Cus_Logo" label="Logo URL">
-              <Input />
-            </Form.Item>
+          <Form.Item name="Cus_Logo" label="Logo URL">
+            <Input />
+          </Form.Item>
 
-            <Form.Item name="Purchase_Goods" label="Purchase Goods">
-              <Input placeholder="Comma separated values" />
-            </Form.Item>
-          </Form>
-        </Card>
+          <Form.Item name="Purchase_Goods" label="Purchase Goods">
+            <Input placeholder="Comma separated values" />
+          </Form.Item>
+        </Form>
       </Modal>
-    </div>
+    </>
   );
 }
 

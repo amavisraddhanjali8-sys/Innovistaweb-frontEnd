@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 215 60" fill="none">
+  <circle cx="26" cy="30" r="18" fill="#14171A"/>
+  <rect x="20" y="18" width="12" height="16" rx="2" stroke="#FFFFFF" stroke-width="2.5"/>
+  <circle cx="26" cy="40" r="2.5" fill="#E60000"/>
+  <text x="54" y="30" font-family="Plus Jakarta Sans, Arial, sans-serif" font-weight="800" font-size="17.5" letter-spacing="0.4" fill="#14171A">NORDICLOCK</text>
+  <text x="54" y="45" font-family="Inter, Arial, sans-serif" font-weight="600" font-size="9.5" letter-spacing="2" fill="#475569">HARDWARE SWEDEN</text>
+</svg>

@@ -24,14 +24,6 @@
   --font-weight-medium: 500;
   --font-weight-semibold: 600;
   --font-weight-bold: 700;
-  --font-weight-extrabold: 800;
-
-  --spacing-xs: 0.25rem;
-  --spacing-sm: 0.5rem;
-  --spacing-md: 1rem;
-  --spacing-lg: 1.5rem;
-  --spacing-xl: 2rem;
-
   --screen-ssm: 480px;
   --screen-sm: 640px;
   --screen-md: 768px;
@@ -49,17 +41,27 @@
   --text-caption: clamp(0.75rem, 0.9vw, 0.875rem);
 }
 
-body {
-  background-color: var(--color-white);
+:root {
+  --spacing-xs: 0.25rem;
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
 }
 
-*,
-*::after,
-*::before {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: var(--font-sans), sans-serif;
+@layer base {
+  body {
+    background-color: var(--color-white);
+  }
+
+  *,
+  *::after,
+  *::before {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    font-family: var(--font-sans), sans-serif;
+  }
 }
 
 .about-section-spacing {
@@ -105,4 +107,37 @@ body {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+}
+
+@keyframes roadmapDashFlow {
+  to {
+    stroke-dashoffset: -32;
+  }
+}
+
+@keyframes roadmapBeaconPulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scale(1.38);
+    opacity: 0.15;
+  }
+}
+
+.roadmap-dash-flow {
+  animation: roadmapDashFlow 1.6s linear infinite;
+}
+
+.roadmap-beacon-pulse {
+  animation: roadmapBeaconPulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .roadmap-dash-flow,
+  .roadmap-beacon-pulse {
+    animation: none;
+  }
 }

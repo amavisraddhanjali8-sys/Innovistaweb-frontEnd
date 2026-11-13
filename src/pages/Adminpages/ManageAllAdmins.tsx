@@ -1,14 +1,5 @@
 import React, { useEffect, useState } from "react";
-import {
-  Space,
-  Table,
-  Tag,
-  Avatar,
-  Spin,
-  message,
-  Popconfirm,
-  Button,
-} from "antd";
+import { Table, Avatar, message, Popconfirm, Button } from "antd";
 import type { TableProps } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
 import { DeleteOutlined } from "@ant-design/icons";
@@ -22,7 +13,15 @@ interface AdminType {
   Admin_Profile?: string;
 }
 
-const ManageAllAdmins: React.FC = () => {
+interface ManageAllAdminsProps {
+  refreshTrigger?: number;
+  onCountChange?: (count: number) => void;
+}
+
+const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
+  refreshTrigger = 0,
+  onCountChange,
+}) => {
   const [data, setData] = useState<AdminType[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,6 +40,7 @@ const ManageAllAdmins: React.FC = () => {
       }));
 
       setData(formattedData);
+      onCountChange?.(formattedData.length);
     } catch {
       message.error("Error fetching admins");
     } finally {
@@ -51,90 +51,80 @@ const ManageAllAdmins: React.FC = () => {
   const handleDelete = async (adminId: number) => {
     try {
       await AxiosConfig.delete(`/auth/RemoveAdmin?adminId=${adminId}`);
-      message.success("Admin deleted successfully!");
+      message.success("Admin removed.");
       fetchAdmins();
     } catch {
-      message.error("Failed to delete admin");
+      message.error("Cannot remove the only remaining admin.");
     }
   };
 
   const columns: TableProps<AdminType>["columns"] = [
     {
-      title: "Name",
+      title: "Operator",
       dataIndex: "Admin_Name",
       key: "Admin_Name",
-      
-    },
-    {
-      title: "Email",
-      dataIndex: "Admin_Email",
-      key: "Admin_Email",
+      render: (name: string, record) => (
+        <div className="flex items-center gap-3">
+          <Avatar
+            src={record.Admin_Profile}
+            size={34}
+            style={{ backgroundColor: "#22577A", fontWeight: 600 }}
+          >
+            {name?.charAt(0)?.toUpperCase() || "A"}
+          </Avatar>
+          <div>
+            <div className="text-xs font-semibold text-slate-900">{name}</div>
+            <div className="text-[11px] text-slate-500">{record.Admin_Email}</div>
+          </div>
+        </div>
+      ),
     },
     {
       title: "Phone",
       dataIndex: "Admin_Phone",
       key: "Admin_Phone",
-    },
-    {
-      title: "Profile",
-      dataIndex: "Admin_Profile",
-      key: "Admin_Profile",
-      render: (profile) =>
-        profile ? (
-          <Avatar src={profile} />
-        ) : (
-          <Tag color="default">No Image</Tag>
-        ),
+      render: (phone: string) => (
+        <span className="text-xs text-slate-600 tabular-nums">{phone || "—"}</span>
+      ),
     },
     {
       title: "Action",
       key: "action",
+      align: "right",
       render: (_, record) => (
-        <Space size="middle">
-          <Popconfirm
-            title="Are you sure you want to delete this admin?"
-            okText="Yes"
-            cancelText="No"
-            onConfirm={() => handleDelete(record.AdminId)}
+        <Popconfirm
+          title="Remove this admin?"
+          okText="Remove"
+          cancelText="Cancel"
+          onConfirm={() => handleDelete(record.AdminId)}
+        >
+          <Button
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            disabled={data.length <= 1}
           >
-            <Button danger icon={<DeleteOutlined />}>
-              Delete
-            </Button>
-          </Popconfirm>
-        </Space>
+            Remove
+          </Button>
+        </Popconfirm>
       ),
     },
   ];
 
   useEffect(() => {
     fetchAdmins();
-  }, []);
+  }, [refreshTrigger]);
 
   return (
-    <Spin spinning={loading} tip="Loading admins...">
-      <h2
-        style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-        }}
-      >
-        Manage Admins
-      </h2>
-      <Table<AdminType>
-        columns={columns}
-        dataSource={data}
-        rowKey="AdminId"
-        pagination={{ pageSize: 5 }}
-        style={{
-          margin: "50px",
-        }}
-      />
-    </Spin>
+    <Table<AdminType>
+      columns={columns}
+      dataSource={data}
+      loading={loading}
+      rowKey="AdminId"
+      size="middle"
+      scroll={{ x: 520 }}
+      pagination={{ pageSize: 6, hideOnSinglePage: true }}
+    />
   );
 };
 

@@ -50,10 +50,10 @@ function OrderCart() {
     try {
       const ids = cart.join(",");
       const { data } = await axios.get(
-        `https://innovista-backend-hvt3.vercel.app/designs/DesignDetails?ids=${ids}`
+        `/designs/DesignDetails?ids=${ids}`
       );
       setCardDetails(data);
-    } catch (error) {
+    } catch {
       message.error("Failed to load cart items");
     }
   };
@@ -73,7 +73,7 @@ function OrderCart() {
     setIsModalOpen(true);
   };
 
-  const createOrder = async (values: any) => {
+  const createOrder = async (values: { name: string; email: string; phone: string }) => {
     const payload = {
       Order_Status: "PENDING",
       Client_Name: values.name,
@@ -84,7 +84,7 @@ function OrderCart() {
 
     try {
       await axios.post(
-        "https://innovista-backend-hvt3.vercel.app/order/createOrder",
+        "/order/createOrder",
         payload
       );
 
@@ -93,7 +93,7 @@ function OrderCart() {
       setCart([]);
       setIsModalOpen(false);
       form.resetFields();
-    } catch (error) {
+    } catch {
       message.error("Failed to create order");
     }
   };

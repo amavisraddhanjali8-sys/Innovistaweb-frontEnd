@@ -3,7 +3,7 @@ import styled from 'styled-components';
 
 interface ContactButtonProps {
   onClick?: () => void;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 const ContactButton: React.FC<ContactButtonProps> = ({ onClick, ...props }) => {

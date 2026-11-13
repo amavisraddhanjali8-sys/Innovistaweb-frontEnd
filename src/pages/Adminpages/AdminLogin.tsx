@@ -25,16 +25,26 @@ type FieldType = {
 function AdminLogin() {
   const onFinish: FormProps<FieldType>["onFinish"] = async (values) => {
     try {
-      console.log(values.username, values.password);
       const response = await axios.post(
-        `https://innovista-backend-hvt3.vercel.app/auth/login?email=${values.username}&password=${values.password}`,
+        `/auth/login?email=${values.username}&password=${values.password}`,
       );
 
-      alert(response.data.message);
+      message.success(response.data.message || "Login successful!");
       sessionStorage.setItem("accessToken", response.data.tokens.accessToken);
       localStorage.setItem("refreshToken", response.data.tokens.refreshToken);
+      const adminObj = response.data.admin || { Admin_Name: "Super Admin", Admin_Email: values.username };
+      sessionStorage.setItem("userProfile", JSON.stringify({
+        id: adminObj.AdminId || 1,
+        name: adminObj.Admin_Name || "Super Admin",
+        email: adminObj.Admin_Email || values.username,
+        phone: adminObj.Admin_Phone,
+        company: "Innovista Fabriconix Executive",
+        role: "admin",
+        logo: adminObj.Admin_Profile || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&h=200&fit=crop",
+        verified: true,
+      }));
 
-      window.location.href = "/admin-home";
+      window.location.href = "#/admin-home";
     } catch {
       message.error("Login failed! Please check your credentials.");
     }
@@ -52,9 +62,9 @@ function AdminLogin() {
   const HandleEmailSubmit = async () => {
     try {
       const response = await axios.post(
-        `https://innovista-backend-hvt3.vercel.app/auth/ResetPassword?email=${AdminEmail}`,
+        `/auth/ResetPassword?email=${AdminEmail}`,
       );
-      alert(response.data.message);
+      message.success(response.data.message || "Reset link sent");
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error submitting email:", error);
@@ -122,7 +132,11 @@ function AdminLogin() {
             >
               <Form
                 name="login"
-                initialValues={{ remember: true }}
+                initialValues={{
+                  username: "admin@innovista.com",
+                  password: "admin123",
+                  remember: true,
+                }}
                 style={{ width: "100%" }}
                 onFinish={onFinish}
                 onFinishFailed={onFinishFailed}

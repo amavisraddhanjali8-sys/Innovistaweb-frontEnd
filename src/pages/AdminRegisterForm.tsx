@@ -3,10 +3,15 @@ import { Button, Form, Input, Upload, message } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import AxiosConfig from "../Context/AxiosConfig";
 
-const AdminRegisterForm: React.FC = () => {
+interface AdminRegisterFormProps {
+  onSuccess?: () => void;
+}
+
+const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
   const [form] = Form.useForm();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   const uploadImageToCloudinary = async (file: File) => {
     const data = new FormData();
@@ -16,130 +21,145 @@ const AdminRegisterForm: React.FC = () => {
 
     try {
       setUploading(true);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: data,
+      });
 
-      const res = await fetch(
-        "https://api.cloudinary.com/v1_1/dqabfysqj/image/upload",
-        {
-          method: "POST",
-          body: data,
-        }
-      );
-
-      const cloudinaryData = await res.json();
-
-      if (cloudinaryData.url) {
-        setImageUrl(cloudinaryData.url);
-        message.success("Image uploaded successfully!");
-        form.setFieldsValue({ Admin_Profile: cloudinaryData.url });
+      const uploadData = await res.json();
+      if (uploadData.url || uploadData.secure_url) {
+        const finalUrl = uploadData.secure_url || uploadData.url;
+        setImageUrl(finalUrl);
+        message.success("Image uploaded successfully.");
+        form.setFieldsValue({ Admin_Profile: finalUrl });
       } else {
         throw new Error("Image upload failed");
       }
     } catch {
-      message.error("Image upload error!");
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          const finalUrl = e.target.result as string;
+          setImageUrl(finalUrl);
+          message.success("Image loaded.");
+          form.setFieldsValue({ Admin_Profile: finalUrl });
+        }
+      };
+      reader.readAsDataURL(file);
     } finally {
       setUploading(false);
     }
   };
 
-  type Adminvalues = {
+  type AdminValues = {
     Admin_Name: string;
     Admin_Email: string;
     Admin_Phone: string;
     Admin_Profile: string;
   };
 
-  const onFinish = async (values: Adminvalues) => {
+  const onFinish = async (values: AdminValues) => {
     try {
-      const response = await AxiosConfig.post("/auth/register", {
+      setSubmitting(true);
+      await AxiosConfig.post("/auth/register", {
         Admin_Name: values.Admin_Name,
         Admin_Email: values.Admin_Email,
         Admin_Phone: values.Admin_Phone,
         Admin_Profile: imageUrl,
       });
 
-      message.success("Admin Registered Successfully!");
+      message.success("Admin registered successfully.");
       form.resetFields();
       setImageUrl(null);
-      console.log("Success:", response);
+      onSuccess?.();
     } catch {
-      message.error("Registration failed!");
+      message.error("Registration failed.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-
     <Form
       form={form}
       layout="vertical"
       onFinish={onFinish}
       autoComplete="off"
     >
-      <Form.Item
-        name="Admin_Name"
-        label="Admin Name"
-        rules={[{ required: true, message: "Please input Admin Name!" }]}
-      >
-        <Input placeholder="Enter admin name" />
-      </Form.Item>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+        <Form.Item
+          name="Admin_Name"
+          label="Admin Name"
+          rules={[{ required: true, message: "Please input Admin Name." }]}
+        >
+          <Input placeholder="Enter full name" />
+        </Form.Item>
+
+        <Form.Item
+          name="Admin_Phone"
+          label="Phone Number"
+          rules={[{ required: true, message: "Please input Admin Phone." }]}
+        >
+          <Input placeholder="+94 77 000 0000" />
+        </Form.Item>
+      </div>
 
       <Form.Item
         name="Admin_Email"
         label="Admin Email"
         rules={[
-          { type: "email", message: "Invalid email format!" },
-          { required: true, message: "Please input Admin Email!" },
+          { type: "email", message: "Invalid email format." },
+          { required: true, message: "Please input Admin Email." },
         ]}
       >
-        <Input placeholder="Enter admin email" />
+        <Input placeholder="operator@innovista.com" />
       </Form.Item>
 
-      <Form.Item
-        name="Admin_Phone"
-        label="Admin Phone"
-        rules={[{ required: true, message: "Please input Admin Phone!" }]}
-      >
-        <Input placeholder="Enter phone number" />
-      </Form.Item>
-
-      {/* IMAGE UPLOAD */}
-      <Form.Item label="Admin Profile Image">
-        <Upload
-          beforeUpload={(file) => {
-            uploadImageToCloudinary(file);
-            return false; // stop default upload
-          }}
-          showUploadList={false}
-        >
-          <Button icon={<UploadOutlined />} loading={uploading}>
-            {uploading ? "Uploading..." : "Upload Image"}
-          </Button>
-        </Upload>
-
-        {imageUrl && (
-          <img
-            src={imageUrl}
-            style={{
-              width: 120,
-              marginTop: 15,
-              borderRadius: 10,
-              border: "1px solid #ddd",
+      <Form.Item label="Profile Avatar">
+        <div className="flex items-center gap-4 flex-wrap">
+          <Upload
+            beforeUpload={(file) => {
+              uploadImageToCloudinary(file);
+              return false;
             }}
-            alt="uploaded"
-          />
-        )}
+            showUploadList={false}
+          >
+            <Button icon={<UploadOutlined />} loading={uploading}>
+              {uploading ? "Uploading..." : "Upload Photo"}
+            </Button>
+          </Upload>
+
+          {imageUrl && (
+            <img
+              src={imageUrl}
+              alt="Admin avatar preview"
+              className="w-12 h-12 rounded-full object-cover border border-slate-200"
+            />
+          )}
+        </div>
       </Form.Item>
 
       <Form.Item name="Admin_Profile" hidden>
         <Input />
       </Form.Item>
 
-      <Form.Item>
-        <Button type="primary" htmlType="submit" block style={{ marginTop: "10px" }}>
+      <Form.Item className="mb-0 pt-2">
+        <Button
+          type="primary"
+          htmlType="submit"
+          loading={submitting}
+          style={{
+            background: "#22577A",
+            borderColor: "#22577A",
+            borderRadius: 10,
+            height: 40,
+            fontWeight: 600,
+          }}
+        >
           Register Admin
         </Button>
       </Form.Item>
     </Form>
-
   );
 };
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import styles from "../cssModules/BlogsPage.module.css";
+import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
 
 type BlogItem = {
   id: number;
@@ -129,6 +130,8 @@ function Blogs() {
           </div>
         </div>
       </section>
+
+      <PageAdBannerSlideshow pageKey="blogs" />
 
       <section className={styles.content}>
         <div className={styles.main}>

@@ -1,0 +1,8 @@
+{
+  "name": "Innovista Fabriconix",
+  "description": "Architectural aluminium and steel fabrication showcase with admin portal, real-time management, and customizable Vision & Mission showcases.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

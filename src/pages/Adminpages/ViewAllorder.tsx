@@ -1,7 +1,10 @@
-import  { useEffect, useState } from "react";
-import { Table, Tag, Image, Select, message } from "antd";
+import { useEffect, useState } from "react";
+import { Table, Tag, Select, Input, message } from "antd";
+import { FiSearch } from "react-icons/fi";
 import AxiosConfig from "../../Context/AxiosConfig";
 import XlfileGenerate from "./XlfileGenerate";
+import SafeImage from "../../components/SafeImage";
+import { computeOrderMetrics, type OrderMetrics } from "../../utils/adminPortalHelpers";
 
 export const OrderStatus = {
   PENDING: "PENDING",
@@ -12,7 +15,7 @@ export const OrderStatus = {
 
 type OrderStatus = (typeof OrderStatus)[keyof typeof OrderStatus];
 
-type Order = {
+export type Order = {
   OrderID: string;
   Order_Date: string;
   Order_Status: OrderStatus;
@@ -31,33 +34,38 @@ type Order = {
   }[];
 };
 
-function ViewAllorder() {
+interface ViewAllorderProps {
+  onMetricsChange?: (metrics: OrderMetrics) => void;
+  onStatusUpdated?: () => void;
+}
+
+function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
   const [loadingOrder, setLoadingOrder] = useState<string | null>(null);
 
-  // Fetch orders with pagination
   const fetchOrders = async (page = 1, limit = 10) => {
     try {
       setLoading(true);
-
       const response = await AxiosConfig.get("/order/getAllOrders", {
         params: { page, limit },
       });
 
-      // Expected response:
-      // { data: Order[], total: number, page: number, limit: number }
+      const list: Order[] = response.data.data || [];
+      const reportedTotal = response.data.total ?? list.length;
 
-      setOrders(response.data.data);
-      setTotal(response.data.total);
-      setCurrentPage(response.data.page);
-      setPageSize(response.data.limit);
+      setOrders(list);
+      setTotal(reportedTotal);
+      setCurrentPage(response.data.page || page);
+      setPageSize(response.data.limit || limit);
+      onMetricsChange?.(computeOrderMetrics(list, reportedTotal));
     } catch (error) {
       console.error("Error fetching orders:", error);
     } finally {
@@ -69,14 +77,13 @@ function ViewAllorder() {
     fetchOrders(currentPage, pageSize);
   }, []);
 
-  // Update order status
   const updateOrderStatus = async (orderId: string, status: OrderStatus) => {
     try {
       setLoadingOrder(orderId);
       await AxiosConfig.put(`/order/ChangeStates?orderId=${orderId}&Status=${status}`);
-      message.success(`Status updated to ${status}!`);
-      // Refetch current page after update (industry standard)
-      fetchOrders(currentPage, pageSize);
+      message.success(`Order status updated to ${status}`);
+      await fetchOrders(currentPage, pageSize);
+      onStatusUpdated?.();
     } catch (error) {
       console.error("Error updating status:", error);
       message.error("Failed to update status.");
@@ -92,102 +99,106 @@ function ViewAllorder() {
       case "SEND":
         return "blue";
       case "VIEWORDER":
-        return "purple";
+        return "cyan";
       case "COMPLETED":
         return "green";
       default:
-        return "gray";
+        return "default";
     }
   };
 
+  const filteredOrders = orders.filter((order) => {
+    const matchesStatus =
+      statusFilter === "ALL" || order.Order_Status === statusFilter;
+    const q = searchQuery.trim().toLowerCase();
+    const matchesSearch =
+      !q ||
+      order.OrderID?.toLowerCase().includes(q) ||
+      order.Client_Name?.toLowerCase().includes(q) ||
+      order.Client_Email?.toLowerCase().includes(q) ||
+      order.Customer?.Cus_CompanyName?.toLowerCase().includes(q);
+    return matchesStatus && matchesSearch;
+  });
+
   const columns = [
     {
-      title: "Order Date",
-      dataIndex: "Order_Date",
-      key: "Order_Date",
-      render: (date: string) => new Date(date).toLocaleString(),
+      title: "Order & Date",
+      dataIndex: "OrderID",
+      key: "OrderID",
+      render: (id: string, record: Order) => (
+        <div>
+          <div className="text-xs font-bold text-[#22577A] tabular-nums">{id}</div>
+          <div className="text-[11px] text-slate-400 tabular-nums">
+            {new Date(record.Order_Date).toLocaleDateString()}
+          </div>
+        </div>
+      ),
+    },
+    {
+      title: "Client",
+      dataIndex: "Client_Name",
+      key: "Client_Name",
+      render: (name: string, record: Order) => (
+        <div>
+          <div className="text-xs font-semibold text-slate-900">{name}</div>
+          <div className="text-[11px] text-slate-500">{record.Client_Email}</div>
+          {record.Customer?.Cus_CompanyName && (
+            <div className="text-[11px] text-slate-400">
+              {record.Customer.Cus_CompanyName}
+            </div>
+          )}
+        </div>
+      ),
+    },
+    {
+      title: "Designs",
+      dataIndex: "Designs",
+      key: "Designs",
+      render: (designs: Order["Designs"]) => (
+        <div className="space-y-1">
+          {designs?.map((item, i) => {
+            const img = Array.isArray(item.Design?.Design_Image)
+              ? item.Design?.Design_Image[0]
+              : item.Design?.Design_Image;
+            return (
+              <div key={i} className="flex items-center gap-2">
+                {img && (
+                  <SafeImage
+                    src={img}
+                    alt={item.Design?.Design_Name || "Design"}
+                    width={32}
+                    height={32}
+                    style={{ objectFit: "cover", borderRadius: 6 }}
+                  />
+                )}
+                <span className="text-xs text-slate-700 font-medium">
+                  {item.Design?.Design_Name || "Custom System"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      ),
     },
     {
       title: "Status",
       dataIndex: "Order_Status",
       key: "Order_Status",
       render: (status: OrderStatus) => (
-        <Tag color={getStatusColor(status)}>{status}</Tag>
+        <Tag color={getStatusColor(status)} style={{ fontWeight: 600 }}>
+          {status}
+        </Tag>
       ),
-    },
-    {
-      title: "Client Name",
-      dataIndex: "Client_Name",
-      key: "Client_Name",
-    },
-    {
-      title: "Client Email",
-      dataIndex: "Client_Email",
-      key: "Client_Email",
-    },
-    {
-      title: "Company Name",
-      dataIndex: ["Customer", "Cus_CompanyName"],
-      key: "Cus_CompanyName",
-    },
-    {
-      title: "Company Logo",
-      dataIndex: ["Customer", "Cus_Logo"],
-      key: "Cus_Logo",
-      render: (logo: string) => (logo ? <Image src={logo} width={50} /> : "-"),
-    },
-    {
-      title: "Purchase Goods",
-      dataIndex: ["Customer", "Purchase_Goods"],
-      key: "Purchase_Goods",
-      render: (goods: string[]) =>
-        goods?.length ? (
-          goods.map((g, i) => <Tag key={i}>{g}</Tag>)
-        ) : (
-          <Tag color="default">None</Tag>
-        ),
-    },
-    {
-      title: "Design Names",
-      dataIndex: "Designs",
-      key: "Design_Names",
-      render: (designs: Order["Designs"]) =>
-        designs?.map((item, i) => (
-          <Tag key={i} color="blue">
-            {item.Design?.Design_Name}
-          </Tag>
-        )),
-    },
-    {
-      title: "Design Images",
-      dataIndex: "Designs",
-      key: "Design_Images",
-      render: (designs: Order["Designs"]) =>
-        designs?.flatMap((item, i) =>
-          (item.Design
-            ? Array.isArray(item.Design.Design_Image)
-              ? item.Design.Design_Image
-              : [item.Design.Design_Image]
-            : []
-          )
-            .filter((img): img is string => typeof img === "string" && !!img)
-            .map((img, index) => (
-              <Image
-                key={`${i}-${index}`}
-                src={img}
-                width={70}
-                style={{ marginRight: 8 }}
-              />
-            )),
-        ),
     },
     {
       title: "Update Status",
       key: "action",
+      align: "right" as const,
       render: (_: unknown, record: Order) => (
         <Select
+          size="small"
           value={record.Order_Status}
-          style={{ width: 160 }}
+          style={{ width: 138 }}
           loading={loadingOrder === record.OrderID}
           onChange={(value) =>
             updateOrderStatus(record.OrderID, value as OrderStatus)
@@ -204,30 +215,49 @@ function ViewAllorder() {
   ];
 
   return (
-    <div style={{ padding: 20, marginTop: "20px" }}>
-      <h2
-        style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-        }}
-      >
-        All Orders
-      </h2>
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {["ALL", ...Object.values(OrderStatus)].map((status) => {
+            const active = statusFilter === status;
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setStatusFilter(status)}
+                className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold border transition-colors cursor-pointer whitespace-nowrap ${
+                  active
+                    ? "bg-[#22577A] text-white border-[#22577A]"
+                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-white"
+                }`}
+              >
+                {status === "ALL" ? "All Orders" : status}
+              </button>
+            );
+          })}
+        </div>
 
-      <XlfileGenerate orders={orders} />
+        <div className="flex items-center gap-2">
+          <Input
+            allowClear
+            size="middle"
+            prefix={<FiSearch className="text-slate-400" />}
+            placeholder="Search orders..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{ width: 210 }}
+          />
+          <XlfileGenerate orders={filteredOrders} />
+        </div>
+      </div>
 
       <Table
         rowKey={(r) => r.OrderID}
         columns={columns}
-        dataSource={orders}
+        dataSource={filteredOrders}
         loading={loading}
-        bordered
-        scroll={{ x: true }}
+        size="middle"
+        scroll={{ x: 680 }}
         pagination={{
           current: currentPage,
           pageSize: pageSize,

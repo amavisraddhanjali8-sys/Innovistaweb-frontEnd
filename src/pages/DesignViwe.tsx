@@ -25,7 +25,7 @@ function DesignView() {
   const fetchCategoryDetails = async (categoryName: string) => {
     try {
       const response = await axios.get(
-        `https://innovista-backend-hvt3.vercel.app/designs/byCategory?category=${categoryName}`
+        `/designs/byCategory?category=${categoryName}`
       );
       setDesigns(response.data);
     } catch (error) {
@@ -42,13 +42,25 @@ const AddtoCart = (designID: string) => {
   try {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
 
-
     if (!cart.includes(designID)) {
       cart.push(designID);
     }
 
     localStorage.setItem("cart", JSON.stringify(cart));
-    alert("Design added to cart!");
+    // Use antd message or non-blocking notification
+    const feedbackEl = document.createElement("div");
+    feedbackEl.innerText = "Design added to cart!";
+    feedbackEl.style.position = "fixed";
+    feedbackEl.style.bottom = "24px";
+    feedbackEl.style.right = "24px";
+    feedbackEl.style.backgroundColor = "#22577a";
+    feedbackEl.style.color = "#fff";
+    feedbackEl.style.padding = "10px 18px";
+    feedbackEl.style.borderRadius = "8px";
+    feedbackEl.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
+    feedbackEl.style.zIndex = "9999";
+    document.body.appendChild(feedbackEl);
+    setTimeout(() => feedbackEl.remove(), 2500);
   } catch (error) {
     console.error("Error adding to cart:", error);
   }

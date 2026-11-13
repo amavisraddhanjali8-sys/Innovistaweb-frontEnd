@@ -1,45 +1,62 @@
-import React, { useState } from "react";
-import {
-  Button,
-  Card,
-  Input,
-  Form,
-  Space,
-  message,
-} from "antd";
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button, message } from "antd";
+import { FiCheckCircle, FiFolder, FiLayers, FiList } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
-import SidebarOFADmin from "../components/SidebarOFADmin";
-
-// Removed unused Title destructuring
-const { TextArea } = Input;
-
-/* ✅ 1. Define Type */
-interface DesignFormData {
-  DesignID: number;
-  Design_Name: string;
-  Design_Image: string[];
-  Design_Description: string;
-  Categories: string[];
-  Design_Colors: string[];
-  Design_BlogPosts: string[];
-  Design_Sizes: string[];
-}
+import AdminPortalShell from "../components/AdminPortalShell";
+import AdminProductDetailFields from "../components/AdminProductDetailFields";
+import {
+  DEFAULT_DESIGNS_CATALOG,
+  DEFAULT_PRODUCT_CATEGORIES,
+  createEmptyDesignDraft,
+  normalizeDesignItem,
+  type DesignItem,
+  type ProductCategory,
+} from "../utils/productCatalogHelpers";
 
 export default function DesignForm() {
+  const navigate = useNavigate();
   const [submitted, setSubmitted] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [refreshTick, setRefreshTick] = useState<number>(0);
+  const [createdId, setCreatedId] = useState<string | number | null>(null);
+  const [allDesigns, setAllDesigns] = useState<DesignItem[]>(() =>
+    DEFAULT_DESIGNS_CATALOG.map((d) => normalizeDesignItem(d))
+  );
+  const [categoryOptions, setCategoryOptions] = useState<{ label: string; value: string }[]>(
+    DEFAULT_PRODUCT_CATEGORIES.map((c) => ({ label: c.name, value: c.name }))
+  );
+  const [formData, setFormData] = useState<DesignItem>(() => createEmptyDesignDraft());
 
-  const [formData, setFormData] = useState<DesignFormData>({
-    DesignID: 0,
-    Design_Name: "",
-    Design_Image: [],
-    Design_Description: "",
-    Categories: [],
-    Design_Colors: [],
-    Design_BlogPosts: [],
-    Design_Sizes: [],
-  });
+  useEffect(() => {
+    Promise.all([
+      AxiosConfig.get<{ data?: ProductCategory[] } | ProductCategory[]>(
+        "/products/categories"
+      ),
+      AxiosConfig.get("/designs/all", { params: { page: 1, limit: 100 } }),
+    ])
+      .then(([catRes, desRes]) => {
+        const list = Array.isArray(catRes.data)
+          ? catRes.data
+          : Array.isArray(catRes.data?.data)
+          ? catRes.data.data
+          : [];
+        if (list.length > 0) {
+          setCategoryOptions(
+            list.map((c) => ({ label: c.name, value: c.name }))
+          );
+        }
+        if (Array.isArray(desRes.data?.data)) {
+          setAllDesigns(
+            desRes.data.data.map((d: Partial<DesignItem>) => normalizeDesignItem(d))
+          );
+        }
+      })
+      .catch(() => {
+        // defaults already populated
+      });
+  }, [refreshTick]);
 
-  /* ✅ 2. Fix event type */
   const handleImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -48,216 +65,164 @@ export default function DesignForm() {
 
     const data = new FormData();
     data.append("file", file);
-    data.append("upload_preset", "InnovistaImage");
-    data.append("cloud_name", "dqabfysqj");
 
     try {
-      const res = await fetch(
-        "https://api.cloudinary.com/v1_1/dqabfysqj/image/upload",
-        {
-          method: "POST",
-          body: data,
-        }
-      );
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: data,
+      });
 
       const result = await res.json();
-
-      if (!result.secure_url) {
-        message.error("Upload failed");
+      if (result.secure_url || result.url) {
+        setFormData((prev) => ({
+          ...prev,
+          Design_Image: [...(prev.Design_Image || []), result.secure_url || result.url],
+        }));
+        message.success("Image uploaded.");
         return;
       }
-
-      setFormData((prev) => ({
-        ...prev,
-        Design_Image: [...prev.Design_Image, result.secure_url],
-      }));
+      message.error("Upload failed");
     } catch {
-      message.error("Upload error");
-    }
-  };
-
-  /* ✅ 3. Fix index typing */
-  const handleDeleteImage = (index: number) => {
-    const updated = [...formData.Design_Image];
-    updated.splice(index, 1);
-    setFormData({ ...formData, Design_Image: updated });
-  };
-
-  /* ✅ 4. Strong typing for field */
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-    field: keyof DesignFormData,
-    index?: number
-  ) => {
-    if (index !== undefined) {
-      const arr = [...(formData[field] as string[])];
-      arr[index] = e.target.value;
-      setFormData({ ...formData, [field]: arr });
-    } else {
-      setFormData({ ...formData, [field]: e.target.value });
-    }
-  };
-
-  const addArrayField = (field: keyof DesignFormData) => {
-    const current = formData[field];
-
-    if (Array.isArray(current)) {
-      setFormData({
-        ...formData,
-        [field]: [...current, ""],
-      });
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        if (e.target?.result) {
+          setFormData((prev) => ({
+            ...prev,
+            Design_Image: [...(prev.Design_Image || []), e.target!.result as string],
+          }));
+          message.success("Image loaded.");
+        }
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   const handleSubmit = async () => {
+    if (!formData.Design_Name.trim()) {
+      message.warning("Please enter a Product Name.");
+      return;
+    }
     try {
-      await AxiosConfig.post("/designs/create", formData);
+      setSubmitting(true);
+      const res = await AxiosConfig.post("/designs/create", formData);
+      const savedId = res.data?.data?.DesignID ?? null;
+      setCreatedId(savedId);
+      message.success("Product published to catalog.");
       setSubmitted(true);
+      setRefreshTick((t) => t + 1);
 
       setFormData({
-        DesignID: 0,
+        ...createEmptyDesignDraft(),
         Design_Name: "",
-        Design_Image: [],
         Design_Description: "",
+        Design_Image: [],
         Categories: [],
-        Design_Colors: [],
-        Design_BlogPosts: [],
-        Design_Sizes: [],
       });
     } catch {
-      message.error("Error submitting design.");
+      message.error("Error submitting product.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  if (submitted) {
-    return (
-      <Card style={{ maxWidth: 600, margin: "40px auto", textAlign: "center" }}>
-        <h2 style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-          color: "green"
-        }}>
-          🎉 Design Added Successfully!
-        </h2>
-
-        <Button type="primary" onClick={() => setSubmitted(false)}>
-          Add Another
-        </Button>
-      </Card>
-    );
-  }
-
   return (
-    <>
-      <SidebarOFADmin />
-
-      <Card style={{ maxWidth: 650, margin: "40px auto", marginBottom: "100px" }}>
-        <h2
-          style={{
-            textAlign: "center",
-            marginTop: "30px",
-            marginBottom: "25px",
-            fontSize: "28px",
-            fontWeight: "600",
-            letterSpacing: "0.5px",
-            fontFamily: "revert-layer",
-          }}
-        >
-          Add New Design
-        </h2>
-     
-
-        <Form layout="vertical" onFinish={handleSubmit}>
-          <Form.Item label="Design Name">
-            <Input
-              value={formData.Design_Name}
-              onChange={(e) => handleChange(e, "Design_Name")}
-            />
-          </Form.Item>
-
-          <Form.Item label="Design Description">
-            <TextArea
-              rows={4}
-              value={formData.Design_Description}
-              onChange={(e) => handleChange(e, "Design_Description")}
-            />
-          </Form.Item>
-
-          <Form.Item label="Upload Images">
-            <Input type="file" onChange={handleImageUpload} />
-
-            <Space direction="vertical" style={{ marginTop: 10 }}>
-              {formData.Design_Image.map((img, i) => (
-                <div key={i} style={{ position: "relative" }}>
-                  <img
-                    src={img}
-                    alt="Preview"
-                    style={{
-                      width: 120,
-                      borderRadius: 8,
-                      border: "1px solid #ddd",
-                    }}
-                  />
-                  <Button
-                    danger
-                    type="primary"
-                    size="small"
-                    style={{
-                      position: "absolute",
-                      top: 5,
-                      right: 5,
-                    }}
-                    onClick={() => handleDeleteImage(i)}
-                  >
-                    X
-                  </Button>
-                </div>
-              ))}
-            </Space>
-          </Form.Item>
-
-          {(
-            [
-              "Categories",
-              "Design_Colors",
-              "Design_BlogPosts",
-              "Design_Sizes",
-            ] as (keyof DesignFormData)[]
-          ).map((field) => (
-            <Form.Item key={field} label={field.replace(/_/g, " ")}>
-              <Space direction="vertical" style={{ width: "100%" }}>
-                {(formData[field] as string[]).map((val, i) => (
-                  <Input
-                    key={i}
-                    value={val}
-                    placeholder={`Enter ${field}`}
-                    onChange={(e) => handleChange(e, field, i)}
-                  />
-                ))}
-
-                <Button
-                  type="dashed"
-                  block
-                  onClick={() => addArrayField(field)}
-                >
-                  + Add {field}
-                </Button>
-              </Space>
-            </Form.Item>
-          ))}
-
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block>
-              Submit Design
+    <AdminPortalShell
+      sectionCode="Product Studio"
+      sectionTitle="Add New Product System"
+      sectionSubtitle="Publish architectural products with full performance specs, configurations, FAQs, and linked products."
+      refreshTrigger={refreshTick}
+      bannerLeftLines={[
+        { label: "Images Attached", value: String(formData.Design_Image?.length || 0) },
+        { label: "Linked Products", value: String(formData.relatedProductIds?.length || 0) },
+        { label: "Configs Ready", value: String(formData.configurations?.length || 0) },
+      ]}
+      headerAction={{
+        label: "View All Products",
+        icon: <FiList className="text-[13px]" />,
+        onClick: () => navigate("/ViewAllDesigns"),
+      }}
+      railTopAction={{
+        label: "Manage Catalog",
+        icon: <FiLayers className="text-[13px]" />,
+        onClick: () => navigate("/ViewAllDesigns"),
+      }}
+      railSecondaryLeft={{
+        label: "All Products",
+        icon: <FiList className="text-[13px]" />,
+        onClick: () => navigate("/ViewAllDesigns"),
+      }}
+      railSecondaryRight={{
+        label: "Categories CMS",
+        icon: <FiFolder className="text-[13px]" />,
+        onClick: () => navigate("/ProductCategoriesAdmin"),
+      }}
+      railPrimaryAction={{
+        label: "Publish Product",
+        icon: <FiCheckCircle className="text-[14px]" />,
+        loading: submitting,
+        onClick: handleSubmit,
+      }}
+    >
+      {submitted ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-8 text-center space-y-4">
+          <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto text-xl">
+            <FiCheckCircle />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Product Added Successfully
+            </h2>
+            <p className="text-xs text-slate-600 mt-1">
+              The new system and its full detail page are now live in the catalog.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            {createdId && (
+              <Button onClick={() => navigate(`/products/${createdId}`)}>
+                Open Live Product Page
+              </Button>
+            )}
+            <Button onClick={() => navigate("/ViewAllDesigns")}>
+              Manage All Products
             </Button>
-          </Form.Item>
-        </Form>
-      </Card>
-    </>
+            <Button
+              type="primary"
+              onClick={() => setSubmitted(false)}
+              style={{ background: "#22577A", borderColor: "#22577A" }}
+            >
+              Add Another Product
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <AdminProductDetailFields
+            value={formData}
+            onChange={setFormData}
+            allDesigns={allDesigns}
+            categoryOptions={categoryOptions}
+            onUploadImage={handleImageUpload}
+          />
+
+          <div className="pt-2 border-t border-slate-100 flex justify-end">
+            <Button
+              type="primary"
+              loading={submitting}
+              onClick={handleSubmit}
+              style={{
+                background: "#22577A",
+                borderColor: "#22577A",
+                height: 42,
+                paddingInline: 28,
+                fontWeight: 600,
+                borderRadius: 10,
+              }}
+            >
+              Publish Product System
+            </Button>
+          </div>
+        </div>
+      )}
+    </AdminPortalShell>
   );
 }

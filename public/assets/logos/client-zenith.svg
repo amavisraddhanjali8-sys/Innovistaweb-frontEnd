@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 225 60" fill="none">
+  <rect x="8" y="12" width="36" height="36" rx="9" fill="#14171A"/>
+  <path d="M16 20H36L16 40H36" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="54" y="30" font-family="Plus Jakarta Sans, Arial, sans-serif" font-weight="800" font-size="18" fill="#14171A">ZENITH</text>
+  <text x="54" y="45" font-family="Inter, Arial, sans-serif" font-weight="600" font-size="9.5" letter-spacing="1.8" fill="#22577A">CAPITAL RESIDENCIES</text>
+</svg>

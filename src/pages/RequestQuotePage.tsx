@@ -1,4 +1,5 @@
-import { useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { useLocation } from "react-router-dom";
 import styles from "../cssModules/RequestQuotePage.module.css";
 
 type ProjectType =
@@ -86,9 +87,8 @@ const requiredLabels: Record<
 };
 
 export default function RequestQuotePage() {
-  const [bannerImage] = useState<string>(
-    "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=1600&q=80",
-  );
+  const location = useLocation();
+  const [bannerImage] = useState<string>("/assets/products/hero-showroom.jpg");
   const [form, setForm] = useState<QuoteFormState>(initialFormState);
   const [files, setFiles] = useState<File[]>([]);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -97,6 +97,22 @@ export default function RequestQuotePage() {
   const [submitError, setSubmitError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const productName = params.get("product");
+    const accessoryName = params.get("accessory");
+    if (productName) {
+      const featureText = accessoryName
+        ? `Selected Architectural System: ${productName} (Accessory Variant: ${accessoryName})`
+        : `Selected Architectural System: ${productName}`;
+      setForm((prev) => ({
+        ...prev,
+        projectTitle: prev.projectTitle || `Quotation Request: ${productName}`,
+        additionalFeatures: prev.additionalFeatures || featureText,
+      }));
+    }
+  }, [location.search]);
 
   const mergeFiles = (incomingFiles: File[]) => {
     setFiles((prev) => {

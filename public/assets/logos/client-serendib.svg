@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 225 60" fill="none">
+  <circle cx="26" cy="30" r="16" stroke="#3393B8" stroke-width="3.5"/>
+  <path d="M14 33C20 26 32 26 38 33" stroke="#22577A" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="26" cy="21" r="3" fill="#E60000"/>
+  <text x="52" y="30" font-family="Plus Jakarta Sans, Arial, sans-serif" font-weight="800" font-size="18" fill="#14171A">SERENDIB</text>
+  <text x="52" y="45" font-family="Inter, Arial, sans-serif" font-weight="600" font-size="9.5" letter-spacing="2" fill="#3393B8">COASTAL RESORTS</text>
+</svg>

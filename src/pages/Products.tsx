@@ -1,339 +1,139 @@
-
-import Productpage from "../assets/Images/Productpage.jpg";
-import { Typography, Card, Row, Col, Button } from "antd";
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
+import { FiArrowRight, FiSliders } from "react-icons/fi";
+import AxiosConfig from "../Context/AxiosConfig";
+import { useAuth } from "../Context/AuthContext";
+import AboutTaglineHeading from "../components/AboutTaglineHeading";
+import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
+import WhyChooseUsInfographic from "../components/WhyChooseUsInfographic";
+import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
+import {
+  DEFAULT_PRODUCT_CATEGORIES,
+  DEFAULT_PRODUCT_LANDING_CMS,
+  normalizeProductCategory,
+  normalizeProductLandingCms,
+  type ProductCategory,
+  type ProductLandingCms,
+} from "../utils/productCatalogHelpers";
 
-import DoorsImg from "../assets/Images/Productpage.jpg";
-import WindowsImg from "../assets/Images/Productpage.jpg";
-import PartitionImg from "../assets/Images/Productpage.jpg";
-import ShopFrontImg from "../assets/Images/Productpage.jpg";
-import LouversImg from "../assets/Images/Productpage.jpg";
-import BathroomsImg from "../assets/Images/Productpage.jpg";
-import RoofImg from "../assets/Images/Productpage.jpg";
-import TileImg from "../assets/Images/Productpage.jpg";
-import LaddersImg from "../assets/Images/Productpage.jpg";
-import RacksImg from "../assets/Images/Productpage.jpg";
-import WardrobeImg from "../assets/Images/Productpage.jpg";
-import PantryImg from "../assets/Images/Productpage.jpg";
-import SteelImage from "../assets/Images/Productpage.jpg";
+export default function Products() {
+  const { user } = useAuth();
+  const [landingCms, setLandingCms] = useState<ProductLandingCms>(
+    DEFAULT_PRODUCT_LANDING_CMS
+  );
+  const [categories, setCategories] = useState<ProductCategory[]>(
+    DEFAULT_PRODUCT_CATEGORIES
+  );
 
-const categories = [
-  { name: "Doors", img: DoorsImg },
-  { name: "Windows", img: WindowsImg },
-  { name: "Partition", img: PartitionImg },
-  { name: "Shop Front", img: ShopFrontImg },
-  { name: "Louvers", img: LouversImg },
-  { name: "Bathrooms", img: BathroomsImg },
-  { name: "Roof", img: RoofImg },
-  { name: "Tile Skirting", img: TileImg },
-  { name: "Ladders", img: LaddersImg },
-  { name: "Racks", img: RacksImg },
-  { name: "Wardrobe", img: WardrobeImg },
-  { name: "Pantry Cupboard", img: PantryImg },
-];
+  useEffect(() => {
+    let active = true;
+    const loadCms = async () => {
+      try {
+        const cmsRes = await AxiosConfig.get("/products/cms");
+        if (!active) return;
 
-function Products() {
-  const handleNavigate = (categoryName: string) => {
-    window.location.href = `/DesignViwe?category=${encodeURIComponent(
-      categoryName
-    )}`;
-  };
+        if (cmsRes.data?.landing) {
+          setLandingCms(normalizeProductLandingCms(cmsRes.data.landing));
+        }
+        if (
+          Array.isArray(cmsRes.data?.categories) &&
+          cmsRes.data.categories.length > 0
+        ) {
+          setCategories(
+            cmsRes.data.categories.map((cat: Partial<ProductCategory>, idx: number) =>
+              normalizeProductCategory(cat, idx)
+            )
+          );
+        }
+      } catch {
+        // Keep verified local defaults cleanly
+      }
+    };
+
+    loadCms();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
-    <div style={{ width: "100%", overflow: "hidden" }}>
-      <motion.div
-        initial={{ opacity: 0, scale: 1.05 }}
-        animate={{ opacity: 1, scale: 1 }}
-        transition={{ duration: 1 }}
-        style={{
-          position: "relative",
-          height: "70vh",
-          width: "100%",
-          backgroundImage: `url(${Productpage})`,
-          backgroundSize: "cover",
-          backgroundPosition: "center",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: "0 5%",
-        }}
-      >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "linear-gradient(to right, rgba(0,0,0,0.7), rgba(0,0,0,0.2))",
-          }}
-        ></div>
+    <div className="w-full bg-white flex flex-col">
+      {/* 1. Simple Architectural Product Hero Slideshow */}
+      <ShowcaseHeroSlideshow
+        slides={landingCms.heroSlides}
+        slideshowSpeedMs={landingCms.slideshowSpeedMs}
+        ariaLabel="Innovista Product Portfolio Slideshow"
+        hideSubheadline
+        adminManageTo="/ProductCategoriesAdmin?tab=slideshow"
+        adminManageLabel="Edit Slideshow"
+      />
 
-        <motion.div
-          initial={{ y: 40, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 1, delay: 0.3 }}
-          style={{
-            position: "relative",
-            zIndex: 2,
-            maxWidth: "700px",
-          }}
-        >
-          <Typography.Title
-            level={2}
-            style={{
-              color: "white",
-              fontFamily: "revert-layer",
-              fontSize: "clamp(2rem, 5vw, 3rem)",
-              marginBottom: "10px",
-            }}
-          >
-            <b>Discover Endless Choices</b>
-          </Typography.Title>
+      {/* 2. Simple Description-Free Product Categories Grid */}
+      <section className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 sm:pt-14 pb-12 sm:pb-16">
+        <div className="flex flex-col items-center">
+          <AboutTaglineHeading
+            heading={landingCms.categoriesHeading}
+            align="center"
+            compact
+          />
+          {user?.role === "admin" && (
+            <Link
+              to="/ProductCategoriesAdmin?tab=categories"
+              className="-mt-1 mb-6 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-white hover:border-[#22577A] px-3.5 py-1.5 text-xs font-semibold text-[#22577A] no-underline transition-colors"
+            >
+              <FiSliders className="text-xs" />
+              <span>Manage Categories</span>
+            </Link>
+          )}
+        </div>
 
-          <Typography.Title
-            level={4}
-            style={{
-              color: "white",
-              fontFamily: "revert-layer",
-              fontSize: "clamp(1.2rem, 3vw, 1.6rem)",
-              marginBottom: "20px",
-            }}
-          >
-            <b>Across Every Category</b>
-          </Typography.Title>
+        <PageAdBannerSlideshow pageKey="products" />
 
-          <Typography.Paragraph
-            style={{
-              color: "white",
-              fontFamily: "revert-layer",
-              fontSize: "clamp(1rem, 2.5vw, 1.2rem)",
-              lineHeight: "1.8",
-              marginBottom: "30px",
-            }}
-          >
-            From elegant doors and windows to modern bathroom fittings and
-            partitions, discover everything you need under one roof crafted for
-            durability, style, and quality.
-          </Typography.Paragraph>
-        </motion.div>
-      </motion.div>
-
-      <div
-        style={{
-          textAlign: "center",
-          padding: "40px 20px 20px 20px",
-          backgroundColor: "#f0f0f0",
-        }}
-      >
-        <Typography.Text
-          style={{
-            fontSize: "28px",
-            fontWeight: 600,
-            background:
-              "linear-gradient(90deg, #ff4d4f, #ffa940, #52c41a, #1890ff, #722ed1)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            display: "inline-block",
-          }}
-        >
-          <u style={{ textDecorationColor: "#4d97ff", paddingBottom: "4px" }}>
-            Product Categories
-          </u>
-        </Typography.Text>
-      </div>
-
-      <div style={{ padding: "40px 60px", backgroundColor: "#fff" }}>
-        <Row gutter={[24, 24]} justify="center">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch mt-2">
           {categories.map((cat, idx) => (
-            <Col xs={12} sm={8} md={6} lg={4} key={idx}>
-              <motion.div
-                whileHover={{ scale: 1.05 }}
-                transition={{ duration: 0.3 }}
-              >
-                <Card
-                  hoverable
-                  cover={
-                    <img
-                      alt={cat.name}
-                      src={cat.img}
-                      style={{
-                        height: "150px",
-                        objectFit: "cover",
-                        borderTopLeftRadius: "10px",
-                        borderTopRightRadius: "10px",
-                      }}
-                    />
-                  }
-                  style={{
-                    borderRadius: "12px",
-                    overflow: "hidden",
-                    textAlign: "center",
-                    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-                  }}
-                >
-                  <Typography.Text strong style={{ fontSize: "16px" }}>
-                    {cat.name}
-                  </Typography.Text>
-                  <Button
-                    style={{
-                      margin: 10,
-                    }}
-                    onClick={() => handleNavigate(cat.name)}
-                  >
-                    View Details
-                  </Button>
-                </Card>
-              </motion.div>
-            </Col>
-          ))}
-        </Row>
-        <div style={{ textAlign: "center", marginTop: "20px" }}></div>
-      </div>
-      <div>
-        <Row
-          gutter={[32, 32]}
-          style={{
-            background: "linear-gradient(135deg, #f8f9fa, #eef3f8)",
-            borderRadius: "20px",
-            margin: "60px 0",
-            boxShadow: "0 6px 20px rgba(0,0,0,0.08)",
-            overflow: "hidden",
-          }}
-        >
-          <Col xs={24} md={8} style={{ padding: "40px 30px" }}>
             <motion.div
-              initial={{ x: -50, opacity: 0 }}
-              whileInView={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.8 }}
-            >
-              <Typography.Text
-                style={{
-                  fontSize: "clamp(2rem, 5vw, 3rem)",
-                  fontWeight: 700,
-                  lineHeight: 1.2,
-                  color: "#b1a7a7ff",
-                  display: "inline-block",
-                }}
-              >
-                Why Choose Our Products
-              </Typography.Text>
-            </motion.div>
-          </Col>
-
-          <Col xs={24} md={16} style={{ padding: "40px 30px" }}>
-            <motion.div
-              initial={{ x: 50, opacity: 0 }}
-              whileInView={{ x: 0, opacity: 1 }}
-              transition={{ duration: 0.8 }}
-            >
-              <Typography.Paragraph
-                style={{
-                  fontSize: "18px",
-                  fontWeight: 500,
-                  lineHeight: "1.9",
-                  color: "#333",
-                  maxWidth: "700px",
-                  margin: "0 auto",
-                  textAlign: "justify",
-                }}
-              >
-                We provide the best services with a guarantee. As trusted
-                leaders in the industry, we always bring the finest options to
-                our customers and clients. Quality and reliability are at the
-                heart of what we do, and we never compromise on excellence. Our
-                products are built to last, designed for performance, and backed
-                by a promise of trust.
-              </Typography.Paragraph>
-            </motion.div>
-          </Col>
-        </Row>
-      </div>
-      <div
-        style={{
-          padding: "80px 40px",
-          background: "#fff",
-          position: "relative",
-        }}
-      >
-        <Row gutter={[32, 32]} align="middle" justify="center">
-          <Col xs={24} md={8} style={{ textAlign: "left" }}>
-            <motion.div
-              initial={{ opacity: 0, x: -40 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-              style={{ marginBottom: "60px" }}
-            >
-              <Typography.Title level={4}>Unmatched Quality</Typography.Title>
-              <Typography.Paragraph>
-                We use premium materials and strict quality checks to ensure
-                every product lasts for years.
-              </Typography.Paragraph>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: -40 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-            >
-              <Typography.Title level={4}>
-                Modern & Elegant Designs
-              </Typography.Title>
-              <Typography.Paragraph>
-                We provide customized solutions to meet your unique property
-                requirements.
-              </Typography.Paragraph>
-            </motion.div>
-          </Col>
-          <Col xs={24} md={8} style={{ textAlign: "left" }}>
-            <motion.img
-              src={SteelImage}
-              alt="Why Choose Us"
-              initial={{ scale: 0.9, opacity: 0 }}
-              whileInView={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 1 }}
-              style={{
-                width: "100%",
-                maxWidth: "420px",
-                borderRadius: "0 0 50% 50%",
-                objectFit: "cover",
-                boxShadow: "0 8px 20px rgba(0,0,0,0.15)",
+              key={cat.CategoryID}
+              initial={{ opacity: 0.9, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: "some" }}
+              transition={{
+                duration: 0.32,
+                delay: Math.min(idx * 0.04, 0.2),
+                ease: [0.16, 1, 0.3, 1],
               }}
-            />
-          </Col>
-
-          <Col xs={24} md={8} style={{ textAlign: "left" }}>
-            <motion.div
-              initial={{ opacity: 0, x: 40 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8 }}
-              style={{ marginBottom: "60px" }}
+              className="flex"
             >
-              <Typography.Title level={4}>
-                Trusted Partnerships
-              </Typography.Title>
-              <Typography.Paragraph>
-                Our team has an in-depth understanding of the industry and
-                strong collaborations worldwide.
-              </Typography.Paragraph>
-            </motion.div>
+              <Link
+                to={`/products/category/${cat.slug}`}
+                className="group w-full bg-white rounded-2xl border border-slate-200/85 hover:border-[#3393B8]/70 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_28px_rgba(34,87,122,0.10)] transition-all duration-200 overflow-hidden flex flex-col no-underline"
+              >
+                <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
+                  <img
+                    src={cat.coverImage}
+                    alt={cat.name}
+                    referrerPolicy="no-referrer"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                  />
+                </div>
 
-            <motion.div
-              initial={{ opacity: 0, x: 40 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.8, delay: 0.2 }}
-            >
-              <Typography.Title level={4}>
-                Customer-Centered Service
-              </Typography.Title>
-              <Typography.Paragraph>
-                We are proud members of leading associations and have received
-                accolades for our outstanding service.
-              </Typography.Paragraph>
+                <div className="px-4 py-4 sm:px-5 flex items-center justify-between gap-3">
+                  <h3 className="text-[16px] font-bold text-slate-900 group-hover:text-[#22577A] transition-colors truncate">
+                    {cat.name}
+                  </h3>
+                  <FiArrowRight className="text-base text-[#22577A] shrink-0 transition-transform duration-200 group-hover:translate-x-1" />
+                </div>
+              </Link>
             </motion.div>
-          </Col>
-        </Row>
-      </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 3. Infographics Style "Why Choose Us" Section (Editable in Admin Panel) */}
+      <WhyChooseUsInfographic
+        heading={landingCms.whyChooseHeading}
+        items={landingCms.whyChooseUs}
+      />
     </div>
   );
 }
-
-export default Products;

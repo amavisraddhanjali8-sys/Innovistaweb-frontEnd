@@ -1,30 +1,46 @@
 import { useEffect, useState } from "react";
-import { Table, Button, Popconfirm, message, Tag, Image } from "antd";
+import { useNavigate } from "react-router-dom";
+import { Table, Button, Popconfirm, message, Tag } from "antd";
+import { FiBriefcase, FiLayers, FiSliders, FiStar } from "react-icons/fi";
 import axios from "axios";
 import AxiosConfig from "../../Context/AxiosConfig";
-import SidebarOFADmin from "../../components/SidebarOFADmin";
+import AdminPortalShell from "../../components/AdminPortalShell";
+import SafeImage from "../../components/SafeImage";
+import { computeFeedbackMetrics } from "../../utils/adminPortalHelpers";
+
+type Feedback = {
+  Feed_backId: number;
+  Customer: {
+    Cus_Name: string;
+    Cus_CompanyName: string;
+  };
+  Rating: number;
+  Feed_back_comment: string;
+  Feed_Back_Images: string[];
+  Design: {
+    Design_Name: string;
+  };
+};
 
 function AdminFeedback() {
+  const navigate = useNavigate();
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  const[currentPage, setCurrentPage]=useState(1);
-  const[pageSize, setPageSize]=useState(10);
-  const[total, setTotal]=useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
-  // Fetch all feedbacks
   const fetchFeedbacks = async (page = 1, limit = 10) => {
     try {
       setLoading(true);
-      const response = await axios.get(
-        "https://innovista-backend-hvt3.vercel.app/feedback/allFeedbacks",{
-          params: { page, limit },  
-        }
-      );
-      setFeedbacks(response.data.data);
-      setTotal(response.data.total);
-      setCurrentPage(response.data.page);
-      setPageSize(response.data.limit);
+      const response = await axios.get("/feedback/allFeedbacks", {
+        params: { page, limit },
+      });
+      setFeedbacks(response.data.data || []);
+      setTotal(response.data.total ?? (response.data.data?.length || 0));
+      setCurrentPage(response.data.page || page);
+      setPageSize(response.data.limit || limit);
     } catch (error) {
       console.error("Error fetching feedbacks:", error);
       message.error("Failed to load feedbacks");
@@ -48,106 +64,136 @@ function AdminFeedback() {
     fetchFeedbacks(currentPage, pageSize);
   }, []);
 
+  const fbMetrics = computeFeedbackMetrics(feedbacks, total);
 
-  type Feedback = {
-    Feed_backId: number;
-    Customer: { 
-      Cus_Name: string;
-      Cus_CompanyName: string;
-    };
-    Rating: number;
-    Feed_back_comment: string;
-    Feed_Back_Images: string[];
-    Design: {
-      Design_Name: string;
-    };
-  };
-
-
-  // Define table columns
   const columns = [
     {
-      title: "Customer Name",
+      title: "Client",
       dataIndex: ["Customer", "Cus_Name"],
       key: "Cus_Name",
+      render: (name: string, record: Feedback) => (
+        <div>
+          <div className="text-xs font-semibold text-slate-900">{name}</div>
+          <div className="text-[11px] text-slate-500">
+            {record.Customer?.Cus_CompanyName}
+          </div>
+        </div>
+      ),
     },
     {
-      title: "Company",
-      dataIndex: ["Customer", "Cus_CompanyName"],
-      key: "Cus_CompanyName",
+      title: "Design",
+      dataIndex: ["Design", "Design_Name"],
+      key: "Design_Name",
+      render: (name: string) => (
+        <span className="text-xs font-medium text-[#22577A]">{name}</span>
+      ),
     },
     {
       title: "Rating",
       dataIndex: "Rating",
       key: "Rating",
       render: (rating: number) => (
-        <Tag color={rating >= 4 ? "green" : "red"}>{rating} ⭐</Tag>
+        <Tag color={rating >= 4 ? "green" : "red"} style={{ fontWeight: 600 }}>
+          {rating} / 5
+        </Tag>
       ),
     },
     {
       title: "Comment",
       dataIndex: "Feed_back_comment",
       key: "Feed_back_comment",
+      render: (comment: string) => (
+        <p className="text-xs text-slate-600 max-w-[260px] line-clamp-2 m-0">
+          {comment}
+        </p>
+      ),
     },
     {
-      title: "Feedback Images",
+      title: "Photos",
       dataIndex: "Feed_Back_Images",
       key: "Feed_Back_Images",
-      render: (images: string[]) =>
-        images?.map((img, index) => (
-          <Image
-            key={index}
-            src={img}
-            width={60}
-            height={60}
-            style={{ marginRight: 8, objectFit: "cover" }}
-          />
-        )),
-    },
-    {
-      title: "Design Name",
-      dataIndex: ["Design", "Design_Name"],
-      key: "Design_Name",
+      render: (images: string[]) => (
+        <div className="flex items-center gap-1.5">
+          {images?.map((img, index) => (
+            <SafeImage
+              key={index}
+              src={img}
+              alt={`Feedback photo ${index + 1}`}
+              width={44}
+              height={44}
+              style={{ objectFit: "cover", borderRadius: 8 }}
+            />
+          ))}
+        </div>
+      ),
     },
     {
       title: "Action",
       key: "action",
-      render: (_: undefined, record: Feedback) => (
+      align: "right" as const,
+      render: (_: unknown, record: Feedback) => (
         <Popconfirm
-          title="Are you sure to delete this feedback?"
+          title="Delete this review?"
           onConfirm={() => handleDelete(record.Feed_backId)}
-          okText="Yes"
-          cancelText="No"
+          okText="Delete"
+          cancelText="Cancel"
         >
-          <Button danger>Delete</Button>
+          <Button size="small" danger>
+            Delete
+          </Button>
         </Popconfirm>
       ),
     },
   ];
 
   return (
-    <div style={{ padding: 20 }}>
-      <SidebarOFADmin />
-      <h2
-        style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-        }}
-      >
-        Admin Feedback Page
-      </h2>
+    <AdminPortalShell
+      sectionCode="Client Reviews"
+      sectionTitle="Customer Feedback"
+      sectionSubtitle="Inspect product testimonials, star ratings, and installation photos."
+      bannerLeftLines={[
+        { label: "Total Reviews", value: String(fbMetrics.total) },
+        { label: "Average Rating", value: `${fbMetrics.averageRating} / 5.0` },
+        { label: "5-Star Reviews", value: String(fbMetrics.fiveStarCount) },
+      ]}
+      headerAction={{
+        label: "About Testimonials",
+        icon: <FiSliders className="text-[13px]" />,
+        onClick: () => navigate("/EditVisionMission?tab=feedbacks"),
+      }}
+      railTopAction={{
+        label: "Manage About Reviews",
+        icon: <FiStar className="text-[13px]" />,
+        onClick: () => navigate("/EditVisionMission?tab=feedbacks"),
+      }}
+      kpiLabel="Average Rating"
+      kpiValue={`${fbMetrics.averageRating} / 5`}
+      kpiNote={`${fbMetrics.total} reviews`}
+      kpiStatusText={`${fbMetrics.fiveStarCount} five-star submissions`}
+      kpiStatusTone="green"
+      railSecondaryLeft={{
+        label: "All Designs",
+        icon: <FiLayers className="text-[13px]" />,
+        onClick: () => navigate("/ViewAllDesigns"),
+      }}
+      railSecondaryRight={{
+        label: "Projects",
+        icon: <FiBriefcase className="text-[13px]" />,
+        onClick: () => navigate("/AddProjects"),
+      }}
+      railPrimaryAction={{
+        label: "Edit About Feedbacks",
+        icon: <FiSliders className="text-[14px]" />,
+        onClick: () => navigate("/EditVisionMission?tab=feedbacks"),
+      }}
+    >
       <Table
         rowKey="Feed_backId"
         dataSource={feedbacks}
         columns={columns}
         loading={loading}
-        bordered
-        scroll={{ x: true }}
+        size="middle"
+        scroll={{ x: 680 }}
         pagination={{
           current: currentPage,
           pageSize: pageSize,
@@ -159,7 +205,7 @@ function AdminFeedback() {
           },
         }}
       />
-    </div>
+    </AdminPortalShell>
   );
 }
 

@@ -1,7 +1,11 @@
 import { Form, Input, Button, message, Select } from "antd";
 import AxiosConfig from "../../../Context/AxiosConfig";
 
-function CreateCustomer() {
+interface CreateCustomerProps {
+  onSuccess?: () => void;
+}
+
+function CreateCustomer({ onSuccess }: CreateCustomerProps) {
   const [form] = Form.useForm();
 
   interface CustomerFormValues {
@@ -44,40 +48,26 @@ function CreateCustomer() {
       );
 
       if (
-        res.data && res.data.message ===
-        "Customer registered successfully. Check your email for verification."
+        res.data &&
+        res.data.message ===
+          "Customer registered successfully. Check your email for verification."
       ) {
-        message.success("Customer registered successfully!");
+        message.success("Customer registered successfully.");
         form.resetFields();
+        onSuccess?.();
       } else {
         message.error("Failed to register customer");
       }
-    } catch  {
+    } catch {
       message.error("An error occurred while registering the customer");
     }
   };
 
-
-    
-
   return (
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: 20, border: "solid gray 1px" , marginTop:"60px" }}>
-      <h2
-        style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-        }}
-      >
-        Register Customer
-      </h2>
-      <Form form={form} layout="vertical" onFinish={onFinish}>
+    <Form form={form} layout="vertical" onFinish={onFinish}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
         <Form.Item
-          label="Name"
+          label="Contact Name"
           name="name"
           rules={[{ required: true, message: "Please enter customer name" }]}
         >
@@ -85,7 +75,7 @@ function CreateCustomer() {
         </Form.Item>
 
         <Form.Item
-          label="Email"
+          label="Email Address"
           name="email"
           rules={[
             {
@@ -95,7 +85,7 @@ function CreateCustomer() {
             },
           ]}
         >
-          <Input placeholder="example@email.com" />
+          <Input placeholder="example@company.com" />
         </Form.Item>
 
         <Form.Item
@@ -103,7 +93,7 @@ function CreateCustomer() {
           name="phone"
           rules={[{ required: true, message: "Please enter phone number" }]}
         >
-          <Input placeholder="+1-555-123-4567" />
+          <Input placeholder="+94 77 123 4567" />
         </Form.Item>
 
         <Form.Item
@@ -111,11 +101,13 @@ function CreateCustomer() {
           name="company"
           rules={[{ required: true, message: "Please enter company name" }]}
         >
-          <Input placeholder="Innovista Ltd." />
+          <Input placeholder="Innovista Partner Ltd." />
         </Form.Item>
+      </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
         <Form.Item
-          label="Logo URL"
+          label="Company Logo URL"
           name="logo"
           rules={[{ required: true, message: "Please provide logo URL" }]}
         >
@@ -123,34 +115,45 @@ function CreateCustomer() {
         </Form.Item>
 
         <Form.Item
-          label="Password"
+          label="Account Password"
           name="password"
           rules={[{ required: true, message: "Please enter password" }]}
         >
           <Input.Password placeholder="Enter secure password" />
         </Form.Item>
+      </div>
 
-        <Form.Item
-          label="Purchased Goods"
-          name="goods"
-          rules={[{ required: true, message: "Please select purchased goods" }]}
+      <Form.Item
+        label="Purchased Goods"
+        name="goods"
+        rules={[{ required: true, message: "Please select purchased goods" }]}
+      >
+        <Select mode="tags" placeholder="Select or add purchased suites">
+          <Select.Option value="Sliding Doors">Sliding Doors</Select.Option>
+          <Select.Option value="Window Systems">Window Systems</Select.Option>
+          <Select.Option value="Acoustic Partitions">
+            Acoustic Partitions
+          </Select.Option>
+          <Select.Option value="Glass Balustrades">Glass Balustrades</Select.Option>
+        </Select>
+      </Form.Item>
+
+      <Form.Item className="mb-0 pt-2">
+        <Button
+          type="primary"
+          htmlType="submit"
+          style={{
+            background: "#22577A",
+            borderColor: "#22577A",
+            borderRadius: 10,
+            height: 40,
+            fontWeight: 600,
+          }}
         >
-          <Select mode="tags" placeholder="Select or add goods">
-            <Select.Option value="Office Furniture">
-              Office Furniture
-            </Select.Option>
-            <Select.Option value="Electronics">Electronics</Select.Option>
-            <Select.Option value="Software">Software</Select.Option>
-          </Select>
-        </Form.Item>
-
-        <Form.Item>
-          <Button type="primary" htmlType="submit" block>
-            Register Customer
-          </Button>
-        </Form.Item>
-      </Form>
-    </div>
+          Register Customer
+        </Button>
+      </Form.Item>
+    </Form>
   );
 }
 

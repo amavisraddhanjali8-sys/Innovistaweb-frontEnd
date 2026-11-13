@@ -17,9 +17,9 @@ function CustomerVerify() {
     }
 
     axios
-      .post(`https://innovista-backend-hvt3.vercel.app/customer/verifyCustomer?customerId=${customerId}`)
+      .post(`/customer/verifyCustomer?customerId=${customerId}`)
       .then((res) => {
-        if (res.data && res.data.message === "Email verified successfully") {
+        if (res.data && (res.data.message === "Email verified successfully" || res.data.message?.includes("verified"))) {
           setMessage("✅ You verified your account successfully!");
           setTimeout(() => navigate("/"), 2000);
         } else {

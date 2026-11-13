@@ -1,48 +1,47 @@
 import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import { useEffect, useState } from "react";
-import { Button } from "antd";
+import { FiLogOut } from "react-icons/fi";
 import axios from "axios";
+import { useAuth } from "../Context/AuthContext";
 
 function LogoutButton() {
   const [userID, setUserID] = useState<string | null>(null);
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   useEffect(() => {
     const token = sessionStorage.getItem("accessToken");
     if (token) {
-      const decodedToken: string = jwtDecode(token);
-      setUserID(decodedToken.sub);
-      console.log(decodedToken.sub);
+      try {
+        const decodedToken = jwtDecode<{ sub?: string }>(token);
+        setUserID(decodedToken?.sub || "1");
+      } catch {
+        setUserID("1");
+      }
     }
   }, []);
 
   const handleLogout = async () => {
     try {
-      console.log(userID);
-      await axios.post(`https://innovista-backend-hvt3.vercel.app/auth/logout?adminId=${userID}`);
-      sessionStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      alert("Logout successful");
-      navigate("/admin-login", { replace: true });
+      await axios.post(`/auth/logout?adminId=${userID || 1}`);
     } catch (error) {
       console.error("Logout failed", error);
+    } finally {
+      logout();
+      navigate("/profile-login", { replace: true });
     }
   };
 
   return (
-    <Button
+    <button
+      type="button"
       onClick={handleLogout}
-      style={{
-        backgroundColor: "#ff4d4f",
-        color: "white",
-        border: "none",
-        borderRadius: "4px",
-        cursor: "pointer",
-      }}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-[#E60000] hover:text-[#E60000] text-xs font-semibold text-slate-700 transition-colors cursor-pointer whitespace-nowrap"
     >
-      LogOut
-    </Button>
+      <FiLogOut className="text-[13px]" />
+      <span>Logout</span>
+    </button>
   );
 }
 

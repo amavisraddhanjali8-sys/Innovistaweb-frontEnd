@@ -1,6 +1,8 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import gsap from "gsap";
 import styles from "../cssModules/ProductCard.module.css";
+import RequestQuoteModal from "./RequestQuoteModal";
 
 type Props = {
   id: string;
@@ -10,6 +12,8 @@ type Props = {
 };
 
 function ProductCard({ id, image, title, description }: Props) {
+  const navigate = useNavigate();
+  const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
   const imageRef = useRef<HTMLImageElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -139,18 +143,31 @@ function ProductCard({ id, image, title, description }: Props) {
       </div>
       <div ref={buttonsRef} className={styles.buttonContainer}>
         <button
+          type="button"
           className={`${styles.quoteBtn} cursor-target`}
-          onClick={handleButtonClick}
+          onClick={(e) => {
+            handleButtonClick(e);
+            setQuoteModalOpen(true);
+          }}
         >
           Request Quote
         </button>
         <button
+          type="button"
           className={`${styles.viewMoreBtn} cursor-target`}
-          onClick={handleButtonClick}
+          onClick={(e) => {
+            handleButtonClick(e);
+            navigate("/products");
+          }}
         >
           View More
         </button>
       </div>
+      <RequestQuoteModal
+        open={quoteModalOpen}
+        onClose={() => setQuoteModalOpen(false)}
+        productName={title}
+      />
     </div>
   );
 }

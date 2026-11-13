@@ -1,5 +1,6 @@
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
+import { FiDownload } from "react-icons/fi";
 
 interface Design {
   Design_Name?: string;
@@ -35,7 +36,7 @@ export default function XlfileGenerate({ orders }: XlfileGenerateProps) {
     if (!orders || orders.length === 0) return;
 
     const excelData = orders.flatMap((order: Order) =>
-      order.Designs?.map((designItem: DesignItem) => ({
+      (order.Designs?.length ? order.Designs : [{}]).map((designItem: DesignItem) => ({
         OrderID: order.OrderID,
         OrderDate: new Date(order.Order_Date).toLocaleString(),
         OrderStatus: order.Order_Status,
@@ -51,7 +52,6 @@ export default function XlfileGenerate({ orders }: XlfileGenerateProps) {
       }))
     );
 
-
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
@@ -65,24 +65,18 @@ export default function XlfileGenerate({ orders }: XlfileGenerateProps) {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
 
-    saveAs(file, `AllOrders_${new Date().toISOString()}.xlsx`);
+    saveAs(file, `AllOrders_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
   return (
     <button
+      type="button"
       onClick={downloadExcel}
-      style={{
-        padding: "10px 15px",
-        background: "#007bff",
-        color: "white",
-        border: "none",
-        borderRadius: "6px",
-        cursor: "pointer",
-        marginBottom: "15px",
-        fontSize: "16px",
-      }}
+      disabled={!orders || orders.length === 0}
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-[#22577A] text-xs font-semibold text-[#22577A] disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
     >
-      📥 Download Excel{" "}
+      <FiDownload className="text-[13px]" />
+      <span>Export Excel</span>
     </button>
   );
 }

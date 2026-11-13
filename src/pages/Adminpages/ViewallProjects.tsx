@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Table, Button, Popconfirm, message, Image, Tooltip } from "antd";
+import { Table, Button, Popconfirm, message, Tooltip } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
+import SafeImage from "../../components/SafeImage";
+import { formatCurrencyLkr } from "../../utils/adminPortalHelpers";
 
 type Project = {
   ProjectID: number;
@@ -13,29 +15,40 @@ type Project = {
   Budget: number;
 };
 
-function ViewallProjects() {
+interface ViewallProjectsProps {
+  refreshTrigger?: number;
+  onStatsChange?: (stats: { total: number; budget: number }) => void;
+}
+
+function ViewallProjects({
+  refreshTrigger = 0,
+  onStatsChange,
+}: ViewallProjectsProps) {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
-  // Pagination state (industry standard)
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
 
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
 
-  // Fetch projects with pagination
   const fetchProjects = async (page = 1, limit = 10) => {
     try {
       setLoading(true);
-
       const response = await AxiosConfig.get("/projects/getAllProjects", {
         params: { page, limit },
       });
-      setAllProjects(response.data.data);
-      setTotal(response.data.total);
-      setCurrentPage(response.data.page);
-      setPageSize(response.data.limit);
+      const list: Project[] = response.data.data || [];
+      const reportedTotal = response.data.total ?? list.length;
+
+      setAllProjects(list);
+      setTotal(reportedTotal);
+      setCurrentPage(response.data.page || page);
+      setPageSize(response.data.limit || limit);
+
+      const budget = list.reduce((sum, p) => sum + (Number(p.Budget) || 0), 0);
+      onStatsChange?.({ total: reportedTotal, budget });
     } catch (err) {
       console.error(err);
       message.error("Failed to load projects.");
@@ -46,18 +59,14 @@ function ViewallProjects() {
 
   useEffect(() => {
     fetchProjects(currentPage, pageSize);
-  }, []);
+  }, [refreshTrigger]);
 
-  // Delete project
   const deleteProject = async (id: number) => {
     try {
       await AxiosConfig.delete("/projects/deleteProject", {
         params: { ProjectID: id },
       });
-
-      message.success("Project deleted successfully!");
-
-      // Refetch current page after delete
+      message.success("Project deleted.");
       fetchProjects(currentPage, pageSize);
     } catch (err) {
       console.error(err);
@@ -67,130 +76,111 @@ function ViewallProjects() {
 
   const columns = [
     {
-      title: "Title",
+      title: "Project",
       dataIndex: "Project_Title",
       key: "Project_Title",
-      width: 200,
-    },
-    {
-      title: "Description",
-      dataIndex: "Project_Description",
-      key: "Project_Description",
-      width: 250,
-      ellipsis: true,
-      render: (text: string, record: Project) => (
-        <Tooltip
-          title={text}
-          open={hoveredRow === record.ProjectID}
-          placement="topLeft"
-        >
-          <span>{text}</span>
-        </Tooltip>
-      ),
-    },
-    {
-      title: "Images",
-      dataIndex: "Project_Images",
-      key: "Project_Images",
-      width: 180,
-      render: (images: string[]) =>
-        images?.length ? (
-          <div style={{ display: "flex", gap: 10 }}>
-            {images.map((url, i) => (
-              <Image
-                key={i}
-                src={url}
-                width={50}
-                height={50}
-                style={{ objectFit: "cover", borderRadius: 6 }}
-              />
-            ))}
+      render: (title: string, record: Project) => (
+        <div className="flex items-center gap-3">
+          {record.Project_Images?.[0] ? (
+            <SafeImage
+              src={record.Project_Images[0]}
+              alt={title}
+              width={48}
+              height={48}
+              style={{ objectFit: "cover", borderRadius: 8 }}
+            />
+          ) : (
+            <div className="w-12 h-12 rounded-lg bg-slate-100 border border-slate-200 shrink-0" />
+          )}
+          <div className="min-w-0 max-w-[230px]">
+            <div className="text-xs font-semibold text-slate-900 line-clamp-1">
+              {title}
+            </div>
+            <Tooltip
+              title={record.Project_Description}
+              open={hoveredRow === record.ProjectID}
+              placement="topLeft"
+            >
+              <div className="text-[11px] text-slate-500 line-clamp-1">
+                {record.Project_Description}
+              </div>
+            </Tooltip>
           </div>
-        ) : (
-          <span>No Images</span>
-        ),
+        </div>
+      ),
     },
     {
       title: "Location",
       dataIndex: "Location",
       key: "Location",
-      width: 150,
+      render: (loc: string) => (
+        <span className="text-xs text-slate-700">{loc}</span>
+      ),
     },
     {
-      title: "Client Name",
+      title: "Client",
       dataIndex: "Client_Name",
       key: "Client_Name",
-      width: 150,
-    },
-    {
-      title: "Email",
-      dataIndex: "Client_Email",
-      key: "Client_Email",
-      width: 180,
+      render: (name: string, record: Project) => (
+        <div>
+          <div className="text-xs font-medium text-slate-900">{name}</div>
+          <div className="text-[11px] text-slate-400">{record.Client_Email}</div>
+        </div>
+      ),
     },
     {
       title: "Budget",
       dataIndex: "Budget",
       key: "Budget",
-      width: 120,
-      render: (value: number) => `RS.  ${value}`,
+      align: "right" as const,
+      render: (value: number) => (
+        <span className="text-xs font-semibold text-slate-900 tabular-nums whitespace-nowrap">
+          {formatCurrencyLkr(value)}
+        </span>
+      ),
     },
     {
-      title: "Actions",
+      title: "Action",
       key: "actions",
-      width: 120,
+      align: "right" as const,
       render: (_: unknown, record: Project) => (
         <Popconfirm
-          title="Delete Project?"
-          description="Are you sure you want to delete this project?"
+          title="Delete this project?"
           onConfirm={() => deleteProject(record.ProjectID)}
-          okText="Yes"
-          cancelText="No"
+          okText="Delete"
+          cancelText="Cancel"
         >
-          <Button danger>Delete</Button>
+          <Button size="small" danger>
+            Delete
+          </Button>
         </Popconfirm>
       ),
     },
   ];
 
   return (
-    <div style={{ padding: 40, textAlign: "center", fontSize: "18px" }}>
-      <h2
-        style={{
-          textAlign: "center",
-          marginTop: "30px",
-          marginBottom: "25px",
-          fontSize: "28px",
-          fontWeight: "600",
-          letterSpacing: "0.5px",
-          fontFamily: "revert-layer",
-        }}
-      >
-        All Projects
-      </h2>
-
-      <Table
-        columns={columns}
-        dataSource={allProjects}
-        loading={loading}
-        rowKey="ProjectID"
-        bordered
-        onRow={(record) => ({
-          onMouseEnter: () => setHoveredRow(record.ProjectID),
-          onMouseLeave: () => setHoveredRow(null),
-        })}
-        pagination={{
-          current: currentPage,
-          pageSize: pageSize,
-          total: total,
-          showSizeChanger: true,
-          pageSizeOptions: ["5", "10", "20", "50"],
-          onChange: (page, limit) => {
-            fetchProjects(page, limit);
-          },
-        }}
-      />
-    </div>
+    <Table
+      columns={columns}
+      dataSource={allProjects}
+      loading={loading}
+      rowKey="ProjectID"
+      size="middle"
+      scroll={{ x: 680 }}
+      onRow={(record) => ({
+        onMouseEnter: () => setHoveredRow(record.ProjectID),
+        onMouseLeave: () => setHoveredRow(null),
+      })}
+      pagination={{
+        current: currentPage,
+        pageSize: pageSize,
+        total: total,
+        showSizeChanger: true,
+        pageSizeOptions: ["5", "10", "20", "50"],
+        onChange: (page, limit) => {
+          fetchProjects(page, limit);
+        },
+      }}
+    />
   );
 }
 

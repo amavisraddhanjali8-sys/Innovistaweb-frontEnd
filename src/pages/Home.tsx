@@ -2,6 +2,7 @@ import BlogSection from "../components/BlogSection";
 import CustomerFeedback from "../components/CustomerFeedback";
 import FeaturedProducts from "../components/FeaturedProducts";
 import ImageSlider from "../components/ImageSlider";
+import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
 import ServicesCarousel from "../components/ServiceCarousel";
 
 function Home() {
@@ -17,6 +18,7 @@ function Home() {
       >
         <ImageSlider />
       </div>
+      <PageAdBannerSlideshow pageKey="home" />
       <ServicesCarousel />
       <FeaturedProducts />
       <CustomerFeedback/>

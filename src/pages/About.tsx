@@ -1,34 +1,94 @@
+import { useState, useEffect } from "react";
+import AxiosConfig from "../Context/AxiosConfig";
 import AboutHead from "../components/AboutHead";
 import VisionSection from "../components/VisionSection";
-import PathSection from "../components/PathSection";
-import ValuesSection from "../components/ValuesSection";
-import visionImg1 from "../assets/Images/AboutUsPage/vision/vision1.jpg";
-import visionImg2 from "../assets/Images/AboutUsPage/vision/vision2.jpg";
-import PartnersSection from "../components/PartnersSection";
-import ClientsSection from "../components/ClientsSection";
+import {
+  ClientFeedbackSection,
+  DirectorMessageSection,
+  MeetTheTeamSection,
+  OurClientsSection,
+  OurJourneySection,
+  OurPartnersSection,
+} from "../components/AboutSections";
+import {
+  DEFAULT_ABOUT_SECTIONS,
+  DEFAULT_CLIENTS,
+  DEFAULT_CLIENTS_RIBBON_SPEED,
+  DEFAULT_CLIENT_FEEDBACKS,
+  DEFAULT_DIRECTOR_MESSAGE,
+  DEFAULT_FEEDBACK_SPEED_MS,
+  DEFAULT_HERO_SLIDES,
+  DEFAULT_JOURNEY_MILESTONES,
+  DEFAULT_JOURNEY_SPEED_MS,
+  DEFAULT_PARTNERS,
+  DEFAULT_PARTNERS_RIBBON_SPEED,
+  DEFAULT_SLIDESHOW_SPEED_MS,
+  DEFAULT_TEAM_MEMBERS,
+  normalizeAboutCmsPayload,
+  type AboutCmsPayload,
+} from "../utils/aboutContentHelpers";
+
+const INITIAL_CMS_STATE: AboutCmsPayload = {
+  slideshowSpeedMs: DEFAULT_SLIDESHOW_SPEED_MS,
+  journeySpeedMs: DEFAULT_JOURNEY_SPEED_MS,
+  feedbackSpeedMs: DEFAULT_FEEDBACK_SPEED_MS,
+  partnersRibbonSpeed: DEFAULT_PARTNERS_RIBBON_SPEED,
+  clientsRibbonSpeed: DEFAULT_CLIENTS_RIBBON_SPEED,
+  heroSlides: DEFAULT_HERO_SLIDES,
+  vision: DEFAULT_ABOUT_SECTIONS.vision,
+  mission: DEFAULT_ABOUT_SECTIONS.mission,
+  directorMessage: DEFAULT_DIRECTOR_MESSAGE,
+  teamMembers: DEFAULT_TEAM_MEMBERS,
+  journeyMilestones: DEFAULT_JOURNEY_MILESTONES,
+  partners: DEFAULT_PARTNERS,
+  clients: DEFAULT_CLIENTS,
+  clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
+};
 
 function About() {
+  const [cmsData, setCmsData] = useState<AboutCmsPayload>(INITIAL_CMS_STATE);
+
+  useEffect(() => {
+    let active = true;
+    const loadAboutContent = async () => {
+      try {
+        const res = await AxiosConfig.get("/about/vision-mission");
+        if (!active || !res.data) return;
+        const normalized = normalizeAboutCmsPayload(res.data, INITIAL_CMS_STATE);
+        setCmsData(normalized);
+      } catch {
+        // Fallback to verified local defaults
+      }
+    };
+
+    loadAboutContent();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   return (
-    <div className="about-page-stack">
-      <AboutHead />
-      <VisionSection
-        title="OUR VISION"
-        description="Lorem ipsum dolor sit amet consectetur adipisicing elit. Eligendi, incidunt maiores totam praesentium tempore consequuntur nam quod cupiditate mollitia perspiciatis officiis est optio suscipit eveniet! Beatae laboriosam fugiat incidunt molestiae?"
-        image1={visionImg1}
-        image2={visionImg2}
-        imagePosition="left"
+    <div className="w-full bg-white flex flex-col">
+      <AboutHead slides={cmsData.heroSlides} slideshowSpeedMs={cmsData.slideshowSpeedMs} />
+      <VisionSection content={cmsData} />
+      <DirectorMessageSection data={cmsData.directorMessage} />
+      <MeetTheTeamSection members={cmsData.teamMembers} />
+      <OurJourneySection
+        milestones={cmsData.journeyMilestones}
+        journeySpeedMs={cmsData.journeySpeedMs}
       />
-      <VisionSection
-        title="OUR MISSION"
-        description="Lorem ipsum dolor sit amet consectetur adipisicing elit. Eligendi, incidunt maiores totam praesentium tempore consequuntur nam quod cupiditate mollitia perspiciatis officiis est optio suscipit eveniet! Beatae laboriosam fugiat incidunt molestiae?"
-        image1={visionImg1}
-        image2={visionImg2}
-        imagePosition="right"
+      <OurPartnersSection
+        partners={cmsData.partners}
+        ribbonSpeed={cmsData.partnersRibbonSpeed}
       />
-      <PathSection />
-      <ValuesSection />
-      <PartnersSection />
-      <ClientsSection />
+      <OurClientsSection
+        clients={cmsData.clients}
+        ribbonSpeed={cmsData.clientsRibbonSpeed}
+      />
+      <ClientFeedbackSection
+        feedbacks={cmsData.clientFeedbacks}
+        feedbackSpeedMs={cmsData.feedbackSpeedMs}
+      />
     </div>
   );
 }

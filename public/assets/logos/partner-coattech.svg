@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 60" fill="none">
+  <rect x="8" y="12" width="10" height="36" rx="3" fill="#22577A"/>
+  <rect x="21" y="18" width="10" height="30" rx="3" fill="#3393B8"/>
+  <rect x="34" y="25" width="10" height="23" rx="3" fill="#E60000"/>
+  <text x="54" y="32" font-family="Plus Jakarta Sans, Arial, sans-serif" font-weight="800" font-size="19" fill="#1E293B">Coat<tspan fill="#22577A">Tech</tspan></text>
+  <text x="54" y="46" font-family="Inter, Arial, sans-serif" font-weight="600" font-size="9" letter-spacing="2.2" fill="#64748B">ANODIZING LABS</text>
+</svg>
