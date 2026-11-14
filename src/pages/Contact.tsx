@@ -44,7 +44,12 @@ export default function Contact() {
         title="Contact Innovista Fabriconix – Colombo & Kandy Desks"
         description="Reach Innovista Fabriconix sales, CAD engineering, and fabrication desks. Call, WhatsApp, or visit our Nawala, Kelaniya, and Kandy showrooms."
         canonicalPath="/contact"
+        ogImage="/assets/products/showroom.jpg"
         structuredData={buildOrganizationJsonLd({
+          url:
+            typeof window !== "undefined"
+              ? `${window.location.origin}/contact`
+              : undefined,
           phone: contactSettings.phone,
           email: contactSettings.email,
           address: contactSettings.address,

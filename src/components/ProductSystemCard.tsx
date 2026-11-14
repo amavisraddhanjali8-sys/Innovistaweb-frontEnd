@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import AccessoryCardShuffleDeck from "./AccessoryCardShuffleDeck";
 import RequestQuoteModal from "./RequestQuoteModal";
 import { sanitizeDesignImages, type DesignItem } from "../utils/productCatalogHelpers";
 
@@ -11,7 +10,6 @@ interface ProductSystemCardProps {
 export default function ProductSystemCard({ design }: ProductSystemCardProps) {
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const images = sanitizeDesignImages(design.Design_Image);
-  const accessories = design.accessories || [];
   const detailPath = `/products/${encodeURIComponent(String(design.DesignID))}`;
 
   return (
@@ -31,7 +29,7 @@ export default function ProductSystemCard({ design }: ProductSystemCardProps) {
           />
         </Link>
 
-        {/* Clean Centered Title, Accessory Card Shuffle Deck (if configured) & Full-Width Quote Action */}
+        {/* Clean Centered Title & Full-Width Quote Action */}
         <div className="px-4 pt-4 pb-4 flex-1 flex flex-col justify-between gap-3 bg-white">
           <div className="w-full flex flex-col items-center gap-3">
             <Link
@@ -50,14 +48,6 @@ export default function ProductSystemCard({ design }: ProductSystemCardProps) {
                 {design.Design_Name}
               </span>
             </Link>
-
-            {accessories.length > 0 && (
-              <AccessoryCardShuffleDeck
-                accessories={accessories}
-                mode="compact"
-                shuffleIntervalMs={design.accessoriesSlideshowSpeedMs || 2800}
-              />
-            )}
           </div>
 
           <button

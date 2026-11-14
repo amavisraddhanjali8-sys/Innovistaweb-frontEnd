@@ -161,6 +161,7 @@ function Milestones() {
         title="Our Milestones & Engineering Timeline"
         description="Explore Innovista Fabriconix's growth since 2015 across landmark commercial curtain wall projects, CNC fabrication, and ISO certification."
         canonicalPath="/milestones"
+        ogImage="/assets/about/terrace.jpg"
       />
       <MainHeading
         heading="Our Milestones"

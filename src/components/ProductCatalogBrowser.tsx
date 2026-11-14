@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Select, Slider } from "antd";
 import {
   FiRotateCcw,
@@ -47,10 +47,13 @@ export default function ProductCatalogBrowser({
   onSelectCategorySlug,
 }: ProductCatalogBrowserProps) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
 
-  const [filter, setFilter] = useState<ProductFilterState>(() =>
-    createInitialFilterState(lockedCategorySlug || "all")
-  );
+  const [filter, setFilter] = useState<ProductFilterState>(() => ({
+    ...createInitialFilterState(lockedCategorySlug || "all"),
+    searchQuery: initialQuery,
+  }));
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [cartIds, setCartIds] = useState<string[]>(() => {
     try {
@@ -82,6 +85,13 @@ export default function ProductCatalogBrowser({
       }));
     }
   }, [lockedCategorySlug]);
+
+  useEffect(() => {
+    const q = searchParams.get("q") || "";
+    setFilter((prev) =>
+      prev.searchQuery === q ? prev : { ...prev, searchQuery: q }
+    );
+  }, [searchParams]);
 
   const maxCatalogPrice = useMemo(() => {
     const prices = designs

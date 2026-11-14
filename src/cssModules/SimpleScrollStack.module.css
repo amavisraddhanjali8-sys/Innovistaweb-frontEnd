@@ -63,6 +63,13 @@
   top: calc(10% + 60px);
 }
 
+.card:nth-child(n + 6) {
+  z-index: 6;
+  width: 100%;
+  max-width: 1180px;
+  top: calc(10% + 70px);
+}
+
 .spacer {
   height: 30vh;
   width: 100%;

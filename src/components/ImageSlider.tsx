@@ -36,6 +36,7 @@ export default function ImageSlider() {
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
 
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
+  const lastActiveSlideIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -107,13 +108,28 @@ export default function ImageSlider() {
 
   // Sync HTML5 video play/pause cleanly to the active slide
   useEffect(() => {
+    const activeId = visibleSlides[safeIndex]?.id ?? null;
+    const slideChanged = lastActiveSlideIdRef.current !== activeId;
+    lastActiveSlideIdRef.current = activeId;
+
     visibleSlides.forEach((slide, idx) => {
       const vid = videoRefs.current[slide.id];
       if (!vid) return;
-      if (idx === safeIndex && !isVideoPaused) {
-        vid.play().catch(() => {
-          // Autoplay policy safe fallback
-        });
+      if (idx === safeIndex) {
+        if (slideChanged) {
+          try {
+            vid.currentTime = 0;
+          } catch {
+            // Ignore if metadata not loaded yet
+          }
+        }
+        if (!isVideoPaused) {
+          vid.play().catch(() => {
+            // Autoplay policy safe fallback
+          });
+        } else {
+          vid.pause();
+        }
       } else {
         vid.pause();
       }
@@ -255,6 +271,7 @@ export default function ImageSlider() {
                 number={stat.number}
                 suffix={stat.suffix}
                 title={stat.label}
+                enableScrollTrigger={false}
               />
             ))}
           </div>

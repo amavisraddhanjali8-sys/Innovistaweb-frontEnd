@@ -1,37 +1,49 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FiArrowRight, FiSliders } from "react-icons/fi";
+import { FiArrowRight, FiSliders, FiX } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
+import ProductCatalogBrowser from "../components/ProductCatalogBrowser";
 import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
 import WhyChooseUsInfographic from "../components/WhyChooseUsInfographic";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
 import PageMetadata from "../components/PageMetadata";
 import {
+  DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
   DEFAULT_PRODUCT_LANDING_CMS,
+  normalizeDesignItem,
   normalizeProductCategory,
   normalizeProductLandingCms,
+  type DesignItem,
   type ProductCategory,
   type ProductLandingCms,
 } from "../utils/productCatalogHelpers";
 
 export default function Products() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeSearchQuery = (searchParams.get("q") || "").trim();
   const [landingCms, setLandingCms] = useState<ProductLandingCms>(
     DEFAULT_PRODUCT_LANDING_CMS
   );
   const [categories, setCategories] = useState<ProductCategory[]>(
     DEFAULT_PRODUCT_CATEGORIES
   );
+  const [designs, setDesigns] = useState<DesignItem[]>(DEFAULT_DESIGNS_CATALOG);
 
   useEffect(() => {
     let active = true;
     const loadCms = async () => {
       try {
-        const cmsRes = await AxiosConfig.get("/products/cms");
+        const [cmsRes, designsRes] = await Promise.all([
+          AxiosConfig.get("/products/cms"),
+          AxiosConfig.get<{ data?: DesignItem[] }>("/designs/all", {
+            params: { page: 1, limit: 100 },
+          }),
+        ]);
         if (!active) return;
 
         if (cmsRes.data?.landing) {
@@ -46,6 +58,9 @@ export default function Products() {
               normalizeProductCategory(cat, idx)
             )
           );
+        }
+        if (Array.isArray(designsRes.data?.data)) {
+          setDesigns(designsRes.data.data.map((d) => normalizeDesignItem(d)));
         }
       } catch {
         // Keep verified local defaults cleanly
@@ -66,6 +81,38 @@ export default function Products() {
         canonicalPath="/products"
         ogImage="/assets/products/hero-showroom.jpg"
       />
+      {activeSearchQuery && (
+        <section
+          aria-label="Product Search Results"
+          className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-4 pb-8"
+        >
+          <div className="rounded-2xl border border-slate-200/85 bg-slate-50/70 p-4 sm:p-6">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+              <div>
+                <h1 className="text-lg sm:text-xl font-bold text-slate-900 m-0">
+                  Search Results for &ldquo;{activeSearchQuery}&rdquo;
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5 mb-0">
+                  Filter by category, finish color, or sizing below.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSearchParams({})}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 text-xs font-semibold text-slate-700 cursor-pointer"
+              >
+                <FiX className="text-xs" />
+                <span>Clear Search</span>
+              </button>
+            </div>
+            <ProductCatalogBrowser
+              designs={designs}
+              categories={categories}
+            />
+          </div>
+        </section>
+      )}
+
       {/* 1. Simple Architectural Product Hero Slideshow */}
       <ShowcaseHeroSlideshow
         slides={landingCms.heroSlides}

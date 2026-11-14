@@ -74,6 +74,24 @@ export default function Navbar() {
             label: "Admin Management Portal",
             onClick: () => navigate("/admin-home"),
           },
+          {
+            key: "admin-slideshow",
+            icon: <SettingOutlined />,
+            label: "Home Hero Slideshow",
+            onClick: () => navigate("/admin-home?tab=slideshow"),
+          },
+          {
+            key: "admin-services",
+            icon: <SettingOutlined />,
+            label: "What We Build Services",
+            onClick: () => navigate("/admin-home?tab=services"),
+          },
+          {
+            key: "admin-top-picks",
+            icon: <SettingOutlined />,
+            label: "Home Top Picks & Accessories",
+            onClick: () => navigate("/admin-home?tab=top-picks"),
+          },
         ]
       : []),
     {

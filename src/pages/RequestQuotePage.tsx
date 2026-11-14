@@ -273,6 +273,7 @@ export default function RequestQuotePage() {
         title="Request a Project Quotation (RFQ)"
         description="Submit project drawings, opening dimensions, glazing specifications, and site visit dates for a custom aluminium fabrication quote."
         canonicalPath="/request-quote"
+        ogImage="/assets/products/window.jpg"
       />
       <header className={styles.banner}>
         <img src={bannerImage} alt="Request quote banner" />

@@ -73,7 +73,8 @@
   align-items: center;
 }
 
-.logoloop__item img {
+.logoloop__item > img,
+.logoloop__link > img {
   height: var(--logoloop-logoHeight);
   width: auto;
   display: block;
@@ -88,7 +89,8 @@
   overflow: visible;
 }
 
-.logoloop--scale-hover .logoloop__item:hover img,
+.logoloop--scale-hover .logoloop__item:hover > img,
+.logoloop--scale-hover .logoloop__link:hover > img,
 .logoloop--scale-hover .logoloop__item:hover .logoloop__node {
   transform: scale(1.2);
   transform-origin: center center;

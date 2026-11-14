@@ -97,6 +97,7 @@ export default function Resources() {
         title="Technical Resources, CAD Schedules & Hardware Portals"
         description="Download architectural aluminium profile catalogues, CAD installation schedules, finish care guides, and European hardware compatibility matrices."
         canonicalPath="/resources"
+        ogImage="/assets/products/facade-detail.jpg"
       />
       <ShowcaseHeroSlideshow
         slides={RESOURCES_HERO_SLIDES}

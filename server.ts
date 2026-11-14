@@ -1,4 +1,4 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
@@ -107,6 +107,31 @@ import {
   upsertHomeSlide,
   type HomeSlideshowCmsPayload,
 } from "./src/utils/homeSlideshowHelpers";
+import {
+  DEFAULT_HOME_SERVICES_CMS,
+  deleteHomeService,
+  normalizeHomeServicesCms,
+  upsertHomeService,
+  type HomeServicesCmsPayload,
+} from "./src/utils/homeServicesHelpers";
+import {
+  DEFAULT_HOME_FEATURED_PRODUCTS_CMS,
+  deleteHomeAccessoryRibbonItem,
+  normalizeHomeFeaturedProductsCms,
+  upsertHomeAccessoryRibbonItem,
+  type HomeFeaturedProductsCmsPayload,
+} from "./src/utils/homeTopPicksHelpers";
+import {
+  injectSeoIntoHtml,
+  resolveDynamicRouteSeo,
+  resolveRequestOrigin,
+} from "./src/utils/seoMetadataHelpers";
+import {
+  DEFAULT_CUSTOMER_FEEDBACKS,
+  normalizeCustomerFeedbackList,
+  normalizeCustomerFeedbackRecord,
+  type CustomerFeedbackRecord,
+} from "./src/utils/customerFeedbackHelpers";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -372,52 +397,41 @@ const orders: Order[] = [
   },
 ];
 
-interface Feedback {
-  Feed_backId: number;
-  Customer: {
-    Cus_Name: string;
-    Cus_CompanyName: string;
-  };
-  Rating: number;
-  Feed_back_comment: string;
-  Feed_Back_Images: string[];
-  Design: {
-    Design_Name: string;
-  };
+const customerFeedbackStoreDir = path.resolve(__dirname, ".data");
+const customerFeedbackStoreFile = path.resolve(
+  customerFeedbackStoreDir,
+  "customer-feedbacks.json"
+);
+
+function loadCustomerFeedbacksStore(): CustomerFeedbackRecord[] {
+  try {
+    if (fs.existsSync(customerFeedbackStoreFile)) {
+      const raw = fs.readFileSync(customerFeedbackStoreFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      return normalizeCustomerFeedbackList(parsed, DEFAULT_CUSTOMER_FEEDBACKS);
+    }
+  } catch (err) {
+    console.warn("Failed to read customer-feedbacks.json, using defaults:", err);
+  }
+  return normalizeCustomerFeedbackList(DEFAULT_CUSTOMER_FEEDBACKS);
 }
 
-let feedbacks: Feedback[] = [
-  {
-    Feed_backId: 1,
-    Customer: {
-      Cus_Name: "Duminda Perera",
-      Cus_CompanyName: "Zenith Capital",
-    },
-    Rating: 5,
-    Feed_back_comment: "The floor-to-ceiling slimline glass doors transformed our luxury villa project. The structural finish and weather resistance are world class.",
-    Feed_Back_Images: [
-      "/assets/about/terrace.jpg",
-    ],
-    Design: {
-      Design_Name: "Minimalist Slimline Sliding Door System",
-    },
-  },
-  {
-    Feed_backId: 2,
-    Customer: {
-      Cus_Name: "Kavinda Jayasuriya",
-      Cus_CompanyName: "NovaTech HQ",
-    },
-    Rating: 5,
-    Feed_back_comment: "Acoustic insulation is top notch. Precision installation completed ahead of schedule with spotless attention to detailing.",
-    Feed_Back_Images: [
-      "/assets/products/partition.jpg",
-    ],
-    Design: {
-      Design_Name: "Acoustic Frameless Glass Office Partition",
-    },
-  },
-];
+function saveCustomerFeedbacksStore(list: CustomerFeedbackRecord[]): void {
+  try {
+    if (!fs.existsSync(customerFeedbackStoreDir)) {
+      fs.mkdirSync(customerFeedbackStoreDir, { recursive: true });
+    }
+    fs.writeFileSync(
+      customerFeedbackStoreFile,
+      JSON.stringify(list, null, 2),
+      "utf-8"
+    );
+  } catch (err) {
+    console.warn("Failed to persist customer-feedbacks.json:", err);
+  }
+}
+
+let feedbacks: CustomerFeedbackRecord[] = loadCustomerFeedbacksStore();
 
 interface NotificationItem {
   id: string;
@@ -511,9 +525,105 @@ const siteVisitBookings: SiteVisitBooking[] = [
 ];
 
 // Home Hero Slideshow CMS Store (supports images, MP4/WebM/embed videos, stats & content)
-let homeSlideshowCms: HomeSlideshowCmsPayload = normalizeHomeSlideshowCms(
-  DEFAULT_HOME_SLIDESHOW_CMS
+const homeSlideshowStoreDir = path.resolve(__dirname, ".data");
+const homeSlideshowStoreFile = path.resolve(homeSlideshowStoreDir, "home-slideshow.json");
+
+function loadHomeSlideshowStore(): HomeSlideshowCmsPayload {
+  try {
+    if (fs.existsSync(homeSlideshowStoreFile)) {
+      const raw = fs.readFileSync(homeSlideshowStoreFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      return normalizeHomeSlideshowCms(parsed);
+    }
+  } catch (err) {
+    console.warn("Failed to read persisted home-slideshow.json, using defaults:", err);
+  }
+  return normalizeHomeSlideshowCms(DEFAULT_HOME_SLIDESHOW_CMS);
+}
+
+function saveHomeSlideshowStore(payload: HomeSlideshowCmsPayload): void {
+  try {
+    if (!fs.existsSync(homeSlideshowStoreDir)) {
+      fs.mkdirSync(homeSlideshowStoreDir, { recursive: true });
+    }
+    fs.writeFileSync(homeSlideshowStoreFile, JSON.stringify(payload, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to persist home-slideshow.json:", err);
+  }
+}
+
+let homeSlideshowCms: HomeSlideshowCmsPayload = loadHomeSlideshowStore();
+
+// What We Build For You (Home Services Carousel) CMS Store
+const homeServicesStoreFile = path.resolve(homeSlideshowStoreDir, "home-services.json");
+
+function loadHomeServicesStore(): HomeServicesCmsPayload {
+  try {
+    if (fs.existsSync(homeServicesStoreFile)) {
+      const raw = fs.readFileSync(homeServicesStoreFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      return normalizeHomeServicesCms(parsed);
+    }
+  } catch (err) {
+    console.warn("Failed to read persisted home-services.json, using defaults:", err);
+  }
+  return normalizeHomeServicesCms(DEFAULT_HOME_SERVICES_CMS);
+}
+
+function saveHomeServicesStore(payload: HomeServicesCmsPayload): void {
+  try {
+    if (!fs.existsSync(homeSlideshowStoreDir)) {
+      fs.mkdirSync(homeSlideshowStoreDir, { recursive: true });
+    }
+    fs.writeFileSync(homeServicesStoreFile, JSON.stringify(payload, null, 2), "utf-8");
+  } catch (err) {
+    console.warn("Failed to persist home-services.json:", err);
+  }
+}
+
+let homeServicesCms: HomeServicesCmsPayload = loadHomeServicesStore();
+
+// Home Top Picks & Accessories Ribbon CMS Store
+const homeFeaturedProductsStoreFile = path.resolve(
+  homeSlideshowStoreDir,
+  "home-featured-products.json"
 );
+
+function loadHomeFeaturedProductsStore(): HomeFeaturedProductsCmsPayload {
+  try {
+    if (fs.existsSync(homeFeaturedProductsStoreFile)) {
+      const raw = fs.readFileSync(homeFeaturedProductsStoreFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      return normalizeHomeFeaturedProductsCms(parsed);
+    }
+  } catch (err) {
+    console.warn(
+      "Failed to read persisted home-featured-products.json, using defaults:",
+      err
+    );
+  }
+  return normalizeHomeFeaturedProductsCms(DEFAULT_HOME_FEATURED_PRODUCTS_CMS);
+}
+
+function saveHomeFeaturedProductsStore(
+  payload: HomeFeaturedProductsCmsPayload
+): void {
+  try {
+    if (!fs.existsSync(homeSlideshowStoreDir)) {
+      fs.mkdirSync(homeSlideshowStoreDir, { recursive: true });
+    }
+    fs.writeFileSync(
+      homeFeaturedProductsStoreFile,
+      JSON.stringify(payload, null, 2),
+      "utf-8"
+    );
+  } catch (err) {
+    console.warn("Failed to persist home-featured-products.json:", err);
+  }
+}
+
+let homeFeaturedProductsCms: HomeFeaturedProductsCmsPayload =
+  loadHomeFeaturedProductsStore();
 
 function getServerGeminiClient(): GoogleGenAI | null {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
@@ -1171,13 +1281,25 @@ app.put("/order/ChangeStates", (req: Request, res: Response) => {
 app.get("/feedback/allFeedbacks", (req: Request, res: Response) => {
   const page = parseInt(req.query.page as string, 10) || 1;
   const limit = parseInt(req.query.limit as string, 10) || 10;
+  const homeOnly =
+    req.query.homeOnly === "true" || req.query.homeOnly === "1";
+
+  const ordered = [...feedbacks]
+    .filter((f) => (homeOnly ? f.showOnHome !== false : true))
+    .sort((a, b) => {
+      if (a.displayOrder !== b.displayOrder) {
+        return a.displayOrder - b.displayOrder;
+      }
+      return b.Feed_backId - a.Feed_backId;
+    });
+
   const startIndex = (page - 1) * limit;
   const endIndex = startIndex + limit;
+  const data = ordered.slice(startIndex, endIndex);
 
-  const data = feedbacks.slice(startIndex, endIndex);
   return res.json({
     data,
-    total: feedbacks.length,
+    total: ordered.length,
     page,
     limit,
   });
@@ -1185,17 +1307,119 @@ app.get("/feedback/allFeedbacks", (req: Request, res: Response) => {
 
 app.delete("/feedback/deleteFeedback", (req: Request, res: Response) => {
   const id = parseInt(req.query.feedbackId as string, 10);
-  feedbacks = feedbacks.filter((f) => f.Feed_backId !== id);
+  feedbacks = feedbacks
+    .filter((f) => f.Feed_backId !== id)
+    .map((f, idx) => ({ ...f, displayOrder: idx }));
+  saveCustomerFeedbacksStore(feedbacks);
   return res.json({ message: "Feedback deleted successfully!" });
 });
 
 app.post("/feedback/createFeedback", (req: Request, res: Response) => {
-  const newFeedback: Feedback = {
-    ...req.body,
-    Feed_backId: Date.now(),
+  const newFeedback = normalizeCustomerFeedbackRecord(
+    {
+      ...req.body,
+      Feed_backId: Date.now(),
+      displayOrder: 0,
+      createdAt: new Date().toISOString(),
+    },
+    0
+  );
+  feedbacks = [
+    newFeedback,
+    ...feedbacks.map((f, idx) => ({ ...f, displayOrder: idx + 1 })),
+  ];
+  saveCustomerFeedbacksStore(feedbacks);
+  return res.json({
+    message: "Feedback submitted successfully!",
+    data: newFeedback,
+  });
+});
+
+app.put("/feedback/updateFeedback/:id", (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id || ""), 10);
+  const idx = feedbacks.findIndex((f) => f.Feed_backId === id);
+  if (idx === -1) {
+    return res.status(404).json({ message: "Feedback not found." });
+  }
+  const existing = feedbacks[idx];
+  const updated = normalizeCustomerFeedbackRecord(
+    {
+      ...existing,
+      ...req.body,
+      Feed_backId: existing.Feed_backId,
+      Customer: {
+        ...existing.Customer,
+        ...(req.body?.Customer || {}),
+      },
+      Design: {
+        ...existing.Design,
+        ...(req.body?.Design || {}),
+      },
+      displayOrder:
+        typeof req.body?.displayOrder === "number"
+          ? req.body.displayOrder
+          : existing.displayOrder,
+    },
+    idx
+  );
+  feedbacks[idx] = updated;
+  saveCustomerFeedbacksStore(feedbacks);
+  return res.json({
+    message: "Feedback updated successfully!",
+    data: updated,
+  });
+});
+
+app.patch("/feedback/toggleHome/:id", (req: Request, res: Response) => {
+  const id = parseInt(String(req.params.id || ""), 10);
+  const idx = feedbacks.findIndex((f) => f.Feed_backId === id);
+  if (idx === -1) {
+    return res.status(404).json({ message: "Feedback not found." });
+  }
+  const nextShow =
+    typeof req.body?.showOnHome === "boolean"
+      ? req.body.showOnHome
+      : !feedbacks[idx].showOnHome;
+  feedbacks[idx] = {
+    ...feedbacks[idx],
+    showOnHome: nextShow,
   };
-  feedbacks.unshift(newFeedback);
-  return res.json({ message: "Feedback submitted successfully!", data: newFeedback });
+  saveCustomerFeedbacksStore(feedbacks);
+  return res.json({
+    message: nextShow
+      ? "Feedback shown on Home page."
+      : "Feedback hidden from Home page.",
+    data: feedbacks[idx],
+  });
+});
+
+app.put("/feedback/reorder", (req: Request, res: Response) => {
+  const orderedIds = Array.isArray(req.body?.orderedIds)
+    ? req.body.orderedIds.map((id: unknown) => Number(id))
+    : [];
+  if (orderedIds.length === 0) {
+    return res.status(400).json({ message: "orderedIds array is required." });
+  }
+  const orderMap = new Map<number, number>();
+  orderedIds.forEach((id: number, idx: number) => {
+    if (Number.isFinite(id)) orderMap.set(id, idx);
+  });
+  feedbacks = [...feedbacks]
+    .sort((a, b) => {
+      const oa = orderMap.has(a.Feed_backId)
+        ? orderMap.get(a.Feed_backId)!
+        : Number.MAX_SAFE_INTEGER;
+      const ob = orderMap.has(b.Feed_backId)
+        ? orderMap.get(b.Feed_backId)!
+        : Number.MAX_SAFE_INTEGER;
+      return oa - ob;
+    })
+    .map((item, idx) => ({ ...item, displayOrder: idx }));
+  saveCustomerFeedbacksStore(feedbacks);
+  return res.json({
+    message: "Customer feedback order updated.",
+    data: feedbacks,
+  });
 });
 
 // Notifications endpoints
@@ -2431,6 +2655,7 @@ app.put("/api/home-slideshow", (req: Request, res: Response) => {
     ...req.body,
   });
   homeSlideshowCms = payload;
+  saveHomeSlideshowStore(homeSlideshowCms);
   return res.json({
     message: "Home slideshow settings & slides published!",
     data: homeSlideshowCms,
@@ -2451,6 +2676,7 @@ app.post("/api/home-slideshow/slides", (req: Request, res: Response) => {
     active: req.body?.active,
   });
   homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
+  saveHomeSlideshowStore(homeSlideshowCms);
   return res.json({
     message: "Home slide added!",
     data: homeSlideshowCms,
@@ -2479,6 +2705,7 @@ app.put("/api/home-slideshow/slides/:id", (req: Request, res: Response) => {
     id
   );
   homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
+  saveHomeSlideshowStore(homeSlideshowCms);
   return res.json({
     message: "Home slide updated!",
     data: homeSlideshowCms,
@@ -2492,24 +2719,331 @@ app.delete("/api/home-slideshow/slides/:id", (req: Request, res: Response) => {
   }
   const nextSlides = deleteHomeSlide(homeSlideshowCms.slides, id);
   homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
+  saveHomeSlideshowStore(homeSlideshowCms);
   return res.json({
     message: "Home slide deleted.",
     data: homeSlideshowCms,
   });
 });
 
+// What We Build For You (Home Services Carousel) CMS Endpoints
+app.get("/api/home-services", (_req: Request, res: Response) => {
+  return res.json({ data: homeServicesCms });
+});
+
+app.put("/api/home-services", (req: Request, res: Response) => {
+  const payload = normalizeHomeServicesCms({
+    ...homeServicesCms,
+    ...req.body,
+  });
+  homeServicesCms = payload;
+  saveHomeServicesStore(homeServicesCms);
+  return res.json({
+    message: "What We Build section updated & published!",
+    data: homeServicesCms,
+  });
+});
+
+app.post("/api/home-services/items", (req: Request, res: Response) => {
+  const title = String(req.body?.title || "").trim();
+  const image = String(req.body?.image || "").trim();
+  if (!title || !image) {
+    return res.status(400).json({ message: "Service title and image are required." });
+  }
+  const nextItems = upsertHomeService(homeServicesCms.items, {
+    title,
+    image,
+    description1: req.body?.description1,
+    description2: req.body?.description2,
+    active: req.body?.active,
+  });
+  homeServicesCms = { ...homeServicesCms, items: nextItems };
+  saveHomeServicesStore(homeServicesCms);
+  return res.json({
+    message: "Service item added!",
+    data: homeServicesCms,
+  });
+});
+
+app.put("/api/home-services/items/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!homeServicesCms.items.some((s) => s.id === id)) {
+    return res.status(404).json({ message: "Service item not found." });
+  }
+  const title = String(req.body?.title || "").trim();
+  const image = String(req.body?.image || "").trim();
+  if (!title || !image) {
+    return res.status(400).json({ message: "Service title and image are required." });
+  }
+  const nextItems = upsertHomeService(
+    homeServicesCms.items,
+    {
+      title,
+      image,
+      description1: req.body?.description1,
+      description2: req.body?.description2,
+      active: req.body?.active,
+    },
+    id
+  );
+  homeServicesCms = { ...homeServicesCms, items: nextItems };
+  saveHomeServicesStore(homeServicesCms);
+  return res.json({
+    message: "Service item updated!",
+    data: homeServicesCms,
+  });
+});
+
+app.delete("/api/home-services/items/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (homeServicesCms.items.length <= 1) {
+    return res.status(400).json({ message: "At least one service item must remain." });
+  }
+  const nextItems = deleteHomeService(homeServicesCms.items, id);
+  homeServicesCms = { ...homeServicesCms, items: nextItems };
+  saveHomeServicesStore(homeServicesCms);
+  return res.json({
+    message: "Service item removed.",
+    data: homeServicesCms,
+  });
+});
+
+// Home Top Picks & Accessories Ribbon endpoints
+app.get("/api/home-featured-products", (_req: Request, res: Response) => {
+  res.json({
+    data: homeFeaturedProductsCms,
+    designs,
+  });
+});
+
+app.put("/api/home-featured-products", (req: Request, res: Response) => {
+  const body = (req.body || {}) as Partial<HomeFeaturedProductsCmsPayload>;
+  const normalized = normalizeHomeFeaturedProductsCms({
+    ...homeFeaturedProductsCms,
+    ...body,
+    selectedProductIds: Array.isArray(body.selectedProductIds)
+      ? body.selectedProductIds
+      : homeFeaturedProductsCms.selectedProductIds,
+    productImageOverrides:
+      body.productImageOverrides !== undefined
+        ? body.productImageOverrides
+        : homeFeaturedProductsCms.productImageOverrides,
+    accessoriesRibbonItems: Array.isArray(body.accessoriesRibbonItems)
+      ? body.accessoriesRibbonItems
+      : homeFeaturedProductsCms.accessoriesRibbonItems,
+  });
+
+  if (normalized.selectedProductIds.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "Select at least one product for Our Top Picks." });
+  }
+  if (normalized.accessoriesRibbonItems.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "At least one accessory image must remain." });
+  }
+
+  homeFeaturedProductsCms = normalized;
+  saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
+  return res.json({
+    message: "Home Top Picks & Accessories saved successfully!",
+    data: homeFeaturedProductsCms,
+  });
+});
+
+app.post(
+  "/api/home-featured-products/accessories",
+  (req: Request, res: Response) => {
+    const title = String(req.body?.title || "").trim();
+    const image = String(req.body?.image || "").trim();
+    if (!title || !image) {
+      return res
+        .status(400)
+        .json({ message: "Accessory title and image are required." });
+    }
+    const nextItems = upsertHomeAccessoryRibbonItem(
+      homeFeaturedProductsCms.accessoriesRibbonItems,
+      {
+        title,
+        subtitle: req.body?.subtitle,
+        image,
+        linkTo: req.body?.linkTo,
+        active: req.body?.active,
+      }
+    );
+    homeFeaturedProductsCms = {
+      ...homeFeaturedProductsCms,
+      accessoriesRibbonItems: nextItems,
+    };
+    saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
+    return res.json({
+      message: "Accessory ribbon image added!",
+      data: homeFeaturedProductsCms,
+    });
+  }
+);
+
+app.put(
+  "/api/home-featured-products/accessories/:id",
+  (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (
+      !homeFeaturedProductsCms.accessoriesRibbonItems.some((a) => a.id === id)
+    ) {
+      return res.status(404).json({ message: "Accessory item not found." });
+    }
+    const title = String(req.body?.title || "").trim();
+    const image = String(req.body?.image || "").trim();
+    if (!title || !image) {
+      return res
+        .status(400)
+        .json({ message: "Accessory title and image are required." });
+    }
+    const nextItems = upsertHomeAccessoryRibbonItem(
+      homeFeaturedProductsCms.accessoriesRibbonItems,
+      {
+        title,
+        subtitle: req.body?.subtitle,
+        image,
+        linkTo: req.body?.linkTo,
+        active: req.body?.active,
+      },
+      id
+    );
+    homeFeaturedProductsCms = {
+      ...homeFeaturedProductsCms,
+      accessoriesRibbonItems: nextItems,
+    };
+    saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
+    return res.json({
+      message: "Accessory ribbon image updated!",
+      data: homeFeaturedProductsCms,
+    });
+  }
+);
+
+app.delete(
+  "/api/home-featured-products/accessories/:id",
+  (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (homeFeaturedProductsCms.accessoriesRibbonItems.length <= 1) {
+      return res
+        .status(400)
+        .json({ message: "At least one accessory image must remain." });
+    }
+    const nextItems = deleteHomeAccessoryRibbonItem(
+      homeFeaturedProductsCms.accessoriesRibbonItems,
+      id
+    );
+    homeFeaturedProductsCms = {
+      ...homeFeaturedProductsCms,
+      accessoriesRibbonItems: nextItems,
+    };
+    saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
+    return res.json({
+      message: "Accessory ribbon image removed.",
+      data: homeFeaturedProductsCms,
+    });
+  }
+);
+
+function buildSeoHtml(rawHtml: string, req: Request): string {
+  const origin = resolveRequestOrigin({
+    appUrl: process.env.APP_URL,
+    protocol: (req.headers["x-forwarded-proto"] as string) || req.protocol,
+    host: (req.headers["x-forwarded-host"] as string) || req.get("host"),
+  });
+
+  let pathname = "/";
+  let search = "";
+  try {
+    const parsedUrl = new URL(req.originalUrl || "/", "http://localhost");
+    pathname = parsedUrl.pathname || "/";
+    search = parsedUrl.search || "";
+  } catch {
+    pathname = req.path || "/";
+  }
+
+  const activeHomeSlide =
+    homeSlideshowCms.slides.find((slide) => slide.active) ||
+    homeSlideshowCms.slides[0];
+  const homeSlideImage = activeHomeSlide
+    ? activeHomeSlide.mediaType === "video"
+      ? activeHomeSlide.posterUrl || ""
+      : activeHomeSlide.mediaUrl
+    : "";
+  const productLandingImage = productLandingCms.heroSlides?.[0]?.image || "";
+
+  const seo = resolveDynamicRouteSeo({
+    pathname,
+    search,
+    origin,
+    homeSlideImage,
+    productLandingImage,
+    designs,
+    categories: productCategories,
+    projects,
+    blogs: blogPosts,
+    contact: siteContactSettings,
+  });
+
+  return injectSeoIntoHtml(rawHtml, seo);
+}
+
 // Start server with Vite middleware in dev or static files in prod
 async function startServer() {
   if (process.env.NODE_ENV === "production") {
     const distPath = path.resolve(__dirname, "dist");
-    app.use(express.static(distPath));
-    app.get("*", (_req, res) => {
-      res.sendFile(path.resolve(distPath, "index.html"));
+    app.use(express.static(distPath, { index: false }));
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (req.method !== "GET") return next();
+      if (
+        req.path.startsWith("/api") ||
+        req.path.startsWith("/uploads") ||
+        path.extname(req.path) !== ""
+      ) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(distPath, "index.html");
+        const template = fs.readFileSync(indexPath, "utf-8");
+        const html = buildSeoHtml(template, req);
+        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+      } catch (err) {
+        next(err);
+      }
     });
   } else {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
+    });
+    app.use(async (req: Request, res: Response, next: NextFunction) => {
+      if (req.method !== "GET") return next();
+      const accept = (req.headers.accept || "*/*").toLowerCase();
+      const wantsHtml = accept.includes("text/html") || accept === "*/*";
+      if (!wantsHtml) return next();
+      if (
+        req.path.startsWith("/api") ||
+        req.path.startsWith("/uploads") ||
+        req.path.startsWith("/assets") ||
+        req.path.startsWith("/@") ||
+        req.path.startsWith("/src") ||
+        req.path.startsWith("/node_modules") ||
+        path.extname(req.path) !== ""
+      ) {
+        return next();
+      }
+      try {
+        const indexPath = path.resolve(__dirname, "index.html");
+        const template = fs.readFileSync(indexPath, "utf-8");
+        const transformed = await vite.transformIndexHtml(req.originalUrl, template);
+        const html = buildSeoHtml(transformed, req);
+        res.status(200).set({ "Content-Type": "text/html" }).end(html);
+      } catch (err) {
+        next(err);
+      }
     });
     app.use(vite.middlewares);
   }

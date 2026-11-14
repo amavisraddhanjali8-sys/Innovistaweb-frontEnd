@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { message, Popconfirm, Switch } from "antd";
 import {
@@ -27,6 +27,7 @@ import {
   moveHomeSlide,
   normalizeHomeSlideshowCms,
   parseVideoEmbedUrl,
+  toggleHomeSlideActive,
   upsertHomeSlide,
   type HomeHeroSlide,
   type HomeSlideMediaType,
@@ -48,6 +49,12 @@ export default function HomeSlideshowEditor({
   const [saving, setSaving] = useState(false);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [uploadingPoster, setUploadingPoster] = useState(false);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const onCountChangeRef = useRef(onCountChange);
+  onCountChangeRef.current = onCountChange;
+  const msgApiRef = useRef(msgApi);
+  msgApiRef.current = msgApi;
 
   // Add / Edit slide form state
   const [editingSlideId, setEditingSlideId] = useState<string | null>(null);
@@ -72,14 +79,14 @@ export default function HomeSlideshowEditor({
       if (res.data?.data) {
         const normalized = normalizeHomeSlideshowCms(res.data.data);
         setCms(normalized);
-        onCountChange?.(normalized.slides.length);
+        onCountChangeRef.current?.(normalized.slides.length);
       }
     } catch {
-      msgApi.error("Could not load Home slideshow configuration.");
+      msgApiRef.current.error("Could not load Home slideshow configuration.");
     } finally {
       setLoading(false);
     }
-  }, [msgApi, onCountChange]);
+  }, []);
 
   useEffect(() => {
     loadSlideshowCms();
@@ -161,10 +168,10 @@ export default function HomeSlideshowEditor({
       );
       const saved = normalizeHomeSlideshowCms(res.data?.data || nextPayload);
       setCms(saved);
-      onCountChange?.(saved.slides.length);
-      msgApi.success(toastText);
+      onCountChangeRef.current?.(saved.slides.length);
+      msgApiRef.current.success(toastText);
     } catch {
-      msgApi.error("Could not save Home slideshow changes.");
+      msgApiRef.current.error("Could not save Home slideshow changes.");
     } finally {
       setSaving(false);
     }
@@ -188,6 +195,7 @@ export default function HomeSlideshowEditor({
     setDraftHeadline(slide.headline);
     setDraftDescription(slide.description);
     setDraftActive(slide.active !== false);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   };
 
   const handleSubmitSlide = async (e: FormEvent) => {
@@ -229,18 +237,18 @@ export default function HomeSlideshowEditor({
     await persistCms(nextCms, `Removed slide "${slide.headline}".`);
   };
 
-  const handleMoveSlide = (index: number, direction: -1 | 1) => {
+  const handleMoveSlide = async (index: number, direction: -1 | 1) => {
     const moved = moveHomeSlide(cms.slides, index, direction);
-    setCms((prev) => ({ ...prev, slides: moved }));
+    const nextCms = normalizeHomeSlideshowCms({ ...cms, slides: moved });
+    setCms(nextCms);
+    await persistCms(nextCms, "Slide order updated & published!");
   };
 
-  const handleToggleSlideActive = (slideId: string) => {
-    setCms((prev) => ({
-      ...prev,
-      slides: prev.slides.map((s) =>
-        s.id === slideId ? { ...s, active: s.active === false } : s
-      ),
-    }));
+  const handleToggleSlideActive = async (slideId: string) => {
+    const toggled = toggleHomeSlideActive(cms.slides, slideId);
+    const nextCms = normalizeHomeSlideshowCms({ ...cms, slides: toggled });
+    setCms(nextCms);
+    await persistCms(nextCms, "Slide visibility updated!");
   };
 
   const handleSaveAllSettings = async () => {
@@ -258,6 +266,10 @@ export default function HomeSlideshowEditor({
   const speedSeconds = Number((cms.slideshowSpeedMs / 1000).toFixed(1));
   const draftEmbedUrl =
     draftMediaType === "video" ? parseVideoEmbedUrl(draftMediaUrl) : null;
+
+  const editingSlideIndex = editingSlideId
+    ? cms.slides.findIndex((s) => s.id === editingSlideId)
+    : -1;
 
   return (
     <div className="space-y-6">
@@ -302,14 +314,19 @@ export default function HomeSlideshowEditor({
 
       {/* Add / Edit Slide (Videos, Images & Content) */}
       <form
+        ref={formRef}
         onSubmit={handleSubmitSlide}
         data-testid="home-slide-editor-form"
-        className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4 shadow-xs"
+        className={`rounded-2xl border bg-white p-4 sm:p-5 space-y-4 shadow-xs transition-colors ${
+          editingSlideId ? "border-[#3393B8] ring-2 ring-[#3393B8]/15" : "border-slate-200"
+        }`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-slate-900">
-              {editingSlideId ? "Edit Hero Slide" : "Add New Image or Video Slide"}
+              {editingSlideId
+                ? `Editing Slide #${editingSlideIndex >= 0 ? editingSlideIndex + 1 : ""}`
+                : "Add New Image or Video Slide"}
             </span>
           </div>
 
@@ -604,10 +621,14 @@ export default function HomeSlideshowEditor({
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div className="col-span-2">
-                  <label className="block text-[11px] text-slate-500 mb-0.5">
+                  <label
+                    htmlFor={`stat-${stat.id}-number`}
+                    className="block text-[11px] text-slate-500 mb-0.5"
+                  >
                     Number
                   </label>
                   <input
+                    id={`stat-${stat.id}-number`}
                     type="number"
                     min={0}
                     value={stat.number}
@@ -624,10 +645,14 @@ export default function HomeSlideshowEditor({
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-500 mb-0.5">
+                  <label
+                    htmlFor={`stat-${stat.id}-suffix`}
+                    className="block text-[11px] text-slate-500 mb-0.5"
+                  >
                     Suffix
                   </label>
                   <input
+                    id={`stat-${stat.id}-suffix`}
                     type="text"
                     maxLength={4}
                     value={stat.suffix}
@@ -645,10 +670,14 @@ export default function HomeSlideshowEditor({
                 </div>
               </div>
               <div>
-                <label className="block text-[11px] text-slate-500 mb-0.5">
+                <label
+                  htmlFor={`stat-${stat.id}-label`}
+                  className="block text-[11px] text-slate-500 mb-0.5"
+                >
                   Label
                 </label>
                 <input
+                  id={`stat-${stat.id}-label`}
                   type="text"
                   value={stat.label}
                   onChange={(e) => {

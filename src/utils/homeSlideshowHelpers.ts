@@ -102,13 +102,23 @@ export const DEFAULT_HOME_HERO_SLIDES: HomeHeroSlide[] = [
     active: true,
   },
   {
-    id: "home-slide-2",
-    mediaType: "image",
-    mediaUrl: "/assets/homeslider/image2.png",
+    id: "home-slide-video-1",
+    mediaType: "video",
+    mediaUrl: "/assets/homeslider/showcase-architectural.mp4",
     posterUrl: "/assets/homeslider/image2.png",
     headline: "Engineered Sliding & Curtain Wall Systems",
     description:
       "Ultra-slim anodized aluminium profiles, storm-rated corner glass, and acoustic seals fabricated to exact architectural drawings.",
+    active: true,
+  },
+  {
+    id: "home-slide-2",
+    mediaType: "image",
+    mediaUrl: "/assets/homeslider/image2.png",
+    posterUrl: "/assets/homeslider/image2.png",
+    headline: "Bespoke Doors & Panoramic Glazing",
+    description:
+      "Precision thermally broken sliding and bi-fold assemblies crafted for seamless indoor-outdoor residential and commercial living.",
     active: true,
   },
   {
@@ -365,4 +375,13 @@ export function moveHomeSlide(
   const [picked] = copy.splice(index, 1);
   copy.splice(target, 0, picked);
   return copy;
+}
+
+export function toggleHomeSlideActive(
+  slides: HomeHeroSlide[],
+  slideId: string
+): HomeHeroSlide[] {
+  return slides.map((s) =>
+    s.id === slideId ? { ...s, active: s.active === false } : s
+  );
 }

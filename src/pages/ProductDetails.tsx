@@ -296,19 +296,26 @@ export default function ProductDetails() {
 
   const perf = design.performance!;
 
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const canonicalProductPath = `/products/${design.DesignID}`;
+
   return (
     <div className="w-full bg-white text-[#14171A]">
       <PageMetadata
         title={`${design.Design_Name} — ${primaryCategory}`}
         description={design.Design_Description}
-        canonicalPath={`/product-details/${design.DesignID}`}
+        canonicalPath={canonicalProductPath}
         ogType="product"
         ogImage={photos[0]}
+        ogImageAlt={`${design.Design_Name} — ${primaryCategory}`}
         structuredData={buildProductJsonLd({
           name: design.Design_Name,
           description: design.Design_Description,
-          image: photos[0],
+          image: photos[0]?.startsWith("http")
+            ? photos[0]
+            : `${origin}${photos[0]?.startsWith("/") ? photos[0] : `/${photos[0] || ""}`}`,
           category: primaryCategory,
+          url: origin ? `${origin}${canonicalProductPath}` : canonicalProductPath,
         })}
       />
       {/* Product Hero Gallery & Overview */}

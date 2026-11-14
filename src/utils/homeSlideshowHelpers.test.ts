@@ -8,6 +8,7 @@ import {
   moveHomeSlide,
   normalizeHomeSlideshowCms,
   parseVideoEmbedUrl,
+  toggleHomeSlideActive,
   upsertHomeSlide,
 } from "./homeSlideshowHelpers";
 
@@ -39,7 +40,10 @@ test("parseVideoEmbedUrl converts YouTube and Vimeo URLs into autoplay muted emb
   assert.equal(parseVideoEmbedUrl("/uploads/factory.mp4"), null);
 });
 
-test("normalizeHomeSlideshowCms preserves default stats, CTA buttons, and safe bounds", () => {
+test("normalizeHomeSlideshowCms preserves default stats, CTA buttons, mixed video+image slides, and safe bounds", () => {
+  assert.ok(DEFAULT_HOME_SLIDESHOW_CMS.slides.some((s) => s.mediaType === "video"));
+  assert.ok(DEFAULT_HOME_SLIDESHOW_CMS.slides.some((s) => s.mediaType === "image"));
+
   const cms = normalizeHomeSlideshowCms({
     slideshowSpeedMs: 500,
     slides: [
@@ -62,7 +66,7 @@ test("normalizeHomeSlideshowCms preserves default stats, CTA buttons, and safe b
   assert.ok(clampHomeSlideshowSpeedMs(999999) <= 25000);
 });
 
-test("upsertHomeSlide, moveHomeSlide, and deleteHomeSlide handle video CRUD safely", () => {
+test("upsertHomeSlide, moveHomeSlide, toggleHomeSlideActive, and deleteHomeSlide handle video CRUD safely", () => {
   const initial = [...DEFAULT_HOME_SLIDESHOW_CMS.slides];
 
   // Add video slide
@@ -91,8 +95,14 @@ test("upsertHomeSlide, moveHomeSlide, and deleteHomeSlide handle video CRUD safe
   assert.equal(edited[edited.length - 1].headline, "Updated Showroom Video");
   assert.equal(edited[edited.length - 1].mediaUrl, "/uploads/showroom-loop-v2.webm");
 
+  // Toggle visibility
+  const hidden = toggleHomeSlideActive(edited, added.id);
+  assert.equal(hidden[hidden.length - 1].active, false);
+  const shown = toggleHomeSlideActive(hidden, added.id);
+  assert.equal(shown[shown.length - 1].active, true);
+
   // Reorder slide up
-  const moved = moveHomeSlide(edited, edited.length - 1, -1);
+  const moved = moveHomeSlide(shown, shown.length - 1, -1);
   assert.equal(moved[moved.length - 2].id, added.id);
 
   // Delete slide, never allowing 0 slides

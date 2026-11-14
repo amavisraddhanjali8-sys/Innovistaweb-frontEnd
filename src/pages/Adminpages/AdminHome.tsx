@@ -6,11 +6,13 @@ import {
   FiFilm,
   FiKey,
   FiLayers,
+  FiMessageSquare,
   FiPhone,
   FiPlus,
   FiSave,
   FiShoppingBag,
   FiSliders,
+  FiStar,
   FiUsers,
 } from "react-icons/fi";
 import AxiosConfig from "../../Context/AxiosConfig";
@@ -20,6 +22,8 @@ import AdminRegisterForm from "../AdminRegisterForm";
 import ManageAllAdmins from "./ManageAllAdmins";
 import PasswordReset from "../../components/PasswordReset";
 import HomeSlideshowEditor from "../../components/HomeSlideshowEditor";
+import HomeServicesEditor from "../../components/HomeServicesEditor";
+import HomeTopPicksEditor from "../../components/HomeTopPicksEditor";
 import {
   validateSiteContactSettings,
   type SiteContactSettings,
@@ -29,10 +33,23 @@ function AdminHome() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { contactSettings, updateContactSettings } = useSiteSettings();
-  const [activeMode, setActiveMode] = useState<"team" | "register" | "contact" | "slideshow">(
-    () => (searchParams.get("tab") === "slideshow" ? "slideshow" : "team")
-  );
-  const [heroSlidesCount, setHeroSlidesCount] = useState(5);
+  const [activeMode, setActiveMode] = useState<
+    "team" | "register" | "contact" | "slideshow" | "services" | "top-picks"
+  >(() => {
+    const t = searchParams.get("tab");
+    if (
+      t === "slideshow" ||
+      t === "services" ||
+      t === "top-picks" ||
+      t === "contact"
+    ) {
+      return t;
+    }
+    return "team";
+  });
+  const [heroSlidesCount, setHeroSlidesCount] = useState(6);
+  const [servicesCount, setServicesCount] = useState(12);
+  const [topPicksCount, setTopPicksCount] = useState(6);
   const [contactDraft, setContactDraft] = useState<SiteContactSettings>(contactSettings);
   const [savingContact, setSavingContact] = useState(false);
   const [adminRefresh, setAdminRefresh] = useState(0);
@@ -53,16 +70,26 @@ function AdminHome() {
 
   useEffect(() => {
     const requested = searchParams.get("tab");
-    if (requested === "slideshow") {
-      setActiveMode("slideshow");
-    } else if (requested === "contact") {
-      setActiveMode("contact");
+    if (
+      requested === "slideshow" ||
+      requested === "services" ||
+      requested === "top-picks" ||
+      requested === "contact"
+    ) {
+      setActiveMode(requested);
     }
   }, [searchParams]);
 
-  const handleSelectMode = (mode: "team" | "register" | "contact" | "slideshow") => {
+  const handleSelectMode = (
+    mode: "team" | "register" | "contact" | "slideshow" | "services" | "top-picks"
+  ) => {
     setActiveMode(mode);
-    if (mode === "slideshow" || mode === "contact") {
+    if (
+      mode === "slideshow" ||
+      mode === "services" ||
+      mode === "top-picks" ||
+      mode === "contact"
+    ) {
       setSearchParams({ tab: mode });
     } else {
       setSearchParams({});
@@ -76,6 +103,38 @@ function AdminHome() {
       })
       .catch(() => {
         // Ignore transient failure
+      });
+    AxiosConfig.get<{ data?: { slides?: unknown[] } }>("/api/home-slideshow")
+      .then((res) => {
+        const slides = res.data?.data?.slides;
+        if (Array.isArray(slides)) {
+          setHeroSlidesCount(slides.length);
+        }
+      })
+      .catch(() => {
+        // Keep fallback count
+      });
+    AxiosConfig.get<{ data?: { items?: unknown[] } }>("/api/home-services")
+      .then((res) => {
+        const items = res.data?.data?.items;
+        if (Array.isArray(items)) {
+          setServicesCount(items.length);
+        }
+      })
+      .catch(() => {
+        // Keep fallback count
+      });
+    AxiosConfig.get<{ data?: { selectedProductIds?: unknown[] } }>(
+      "/api/home-featured-products"
+    )
+      .then((res) => {
+        const selected = res.data?.data?.selectedProductIds;
+        if (Array.isArray(selected)) {
+          setTopPicksCount(selected.length);
+        }
+      })
+      .catch(() => {
+        // Keep fallback count
       });
   };
 
@@ -205,6 +264,10 @@ function AdminHome() {
               ? "Create New Admin"
               : activeMode === "slideshow"
               ? "Home Hero Slideshow (Videos, Images & Content)"
+              : activeMode === "services"
+              ? "What We Build For You (Services Carousel)"
+              : activeMode === "top-picks"
+              ? "Home Top Picks & Accessories Ribbon"
               : "Phone Number & Contact Setup"}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -214,6 +277,10 @@ function AdminHome() {
               ? "Invite a new operator to the Innovista admin portal."
               : activeMode === "slideshow"
               ? "Add, edit, upload, or delete videos, photos, stats, and slide copy on the Home hero."
+              : activeMode === "services"
+              ? "Add, edit, upload, reorder, or delete the service cards and text in What We Build For You."
+              : activeMode === "top-picks"
+              ? "Select featured products shown on Home, customize product photos, and configure the Accessories Ribbon slideshow below."
               : "Configure the public phone number, WhatsApp, email, and social URLs shown in Footer & Contact."}
           </p>
         </div>
@@ -255,6 +322,38 @@ function AdminHome() {
           </button>
           <button
             type="button"
+            onClick={() => handleSelectMode("services")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+              activeMode === "services"
+                ? "bg-white text-[#22577A] shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <FiLayers className="text-xs" />
+            <span>What We Build ({servicesCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleSelectMode("top-picks")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+              activeMode === "top-picks"
+                ? "bg-white text-[#22577A] shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <FiStar className="text-xs" />
+            <span>Top Picks &amp; Accessories ({topPicksCount})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/AdminFeedback")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap text-slate-600 hover:text-[#22577A] hover:bg-white"
+          >
+            <FiMessageSquare className="text-xs" />
+            <span>Customer Feedbacks ({stats.feedbacks})</span>
+          </button>
+          <button
+            type="button"
             onClick={() => handleSelectMode("contact")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
               activeMode === "contact"
@@ -285,6 +384,14 @@ function AdminHome() {
       ) : activeMode === "slideshow" ? (
         <HomeSlideshowEditor
           onCountChange={(count) => setHeroSlidesCount(count)}
+        />
+      ) : activeMode === "services" ? (
+        <HomeServicesEditor
+          onCountChange={(count) => setServicesCount(count)}
+        />
+      ) : activeMode === "top-picks" ? (
+        <HomeTopPicksEditor
+          onCountChange={(count) => setTopPicksCount(count)}
         />
       ) : (
         <form onSubmit={handleSaveContactSettings} className="space-y-4 max-w-2xl">

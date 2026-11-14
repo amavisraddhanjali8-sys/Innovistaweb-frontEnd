@@ -61,9 +61,15 @@ export default function News() {
             ? activeArticle.summary
             : "Latest product launches, commercial curtain wall handovers, and ISO laboratory quality audits from Innovista Fabriconix."
         }
-        canonicalPath="/news"
+        canonicalPath={
+          activeArticle ? `/news?article=${activeArticle.id}` : "/news"
+        }
         ogType={activeArticle ? "article" : "website"}
-        ogImage={activeArticle?.image}
+        ogImage={
+          activeArticle?.image ||
+          visibleArticles[0]?.image ||
+          "/assets/about/terrace.jpg"
+        }
       />
       {/* Newsroom Corporate Wire Masthead (Crisp Slate Dispatch Band — Distinct from Blogs) */}
       <header className="w-full bg-[#F8FAFC] border-b border-slate-200">

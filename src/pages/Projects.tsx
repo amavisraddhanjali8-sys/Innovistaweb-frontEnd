@@ -114,6 +114,7 @@ function Projects() {
         title="Architectural Projects Portfolio | Innovista Fabriconix"
         description="Browse completed and ongoing luxury residential villas, commercial curtain walls, and corporate acoustic glazing commissions by Innovista Fabriconix."
         canonicalPath="/projects"
+        ogImage={heroSlides[0]?.image || "/assets/about/pavilion.jpg"}
       />
       <SafeImageGalleryModal
         title={previewTitle}

@@ -1,12 +1,12 @@
 import styles from "../cssModules/ServiceComponet.module.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { Button } from "antd";
 
-type Service = {
+export type Service = {
+  id?: string;
   image: string;
   title: string;
   description1: string;
@@ -24,41 +24,42 @@ function ServiceComponent({
 }) {
   const [index, setIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
-  const [displayItems, setDisplayItems] = useState<Service[]>([]);
 
   const textRefs = useRef<(HTMLDivElement | HTMLSpanElement)[]>([]);
   const imageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const textContainerRef = useRef<HTMLDivElement>(null);
 
+  const safeIndex = items.length > 0 ? index % items.length : 0;
+
   useEffect(() => {
-    if (!isAnimating || items.length === 0) return;
+    if (items.length > 0 && index >= items.length) {
+      setIndex(0);
+    }
+  }, [items.length, index]);
 
-    const updateItems = () => {
-      const endIndex = index + 4;
-      let currentItems;
-      if (endIndex <= items.length) {
-        currentItems = items.slice(index, endIndex);
-      } else {
-        currentItems = [
-          ...items.slice(index, items.length),
-          ...items.slice(0, endIndex - items.length),
-        ];
-      }
-      setDisplayItems(currentItems);
-    };
+  const displayItems = useMemo(() => {
+    if (items.length === 0) return [];
+    const stackSize = Math.min(4, items.length);
+    const currentItems: Service[] = [];
+    for (let offset = 0; offset < stackSize; offset++) {
+      currentItems.push(items[(safeIndex + offset) % items.length]);
+    }
+    return currentItems;
+  }, [items, safeIndex]);
 
-    updateItems();
+  useEffect(() => {
+    if (!isAnimating || items.length <= 1) return;
 
     const timeout = setTimeout(() => {
       setIndex((prevIndex) => (prevIndex + 1) % items.length);
     }, duration);
 
     return () => clearTimeout(timeout);
-  }, [index, isAnimating, items, duration]);
+  }, [safeIndex, isAnimating, items.length, duration]);
 
   useEffect(() => {
-    if (textRefs.current.length > 0) {
+    if (textRefs.current.length > 0 && displayItems.length > 0) {
       const tl = gsap.timeline();
 
       tl.fromTo(
@@ -79,7 +80,7 @@ function ServiceComponent({
           "+=0.1"
         );
     }
-  }, [index]);
+  }, [safeIndex, displayItems.length]);
 
   useGSAP(() => {
     const mm = gsap.matchMedia();
@@ -118,8 +119,13 @@ function ServiceComponent({
   }, []);
 
   const goToService = (serviceIndex: number) => {
-    setIndex(serviceIndex);
+    if (items.length === 0) return;
+    setIndex(serviceIndex % items.length);
   };
+
+  if (items.length === 0) {
+    return null;
+  }
 
   return (
     <div className={styles.container} ref={contentRef}>
@@ -128,7 +134,8 @@ function ServiceComponent({
           <img
             src={item.image}
             alt={item.title}
-            key={`${index}-${i}`}
+            referrerPolicy="no-referrer"
+            key={`${item.id || item.title}-${safeIndex}-${i}`}
             className={styles[`image${i + 1}`]}
           />
         ))}
@@ -163,7 +170,9 @@ function ServiceComponent({
         </div>
 
         <div className={styles.buttonContainer}>
-          <Button
+          <button
+            type="button"
+            aria-label="Previous service"
             className={`${styles.prevButton} cursor-target`}
             onClick={() =>
               setIndex(
@@ -172,23 +181,26 @@ function ServiceComponent({
             }
           >
             <FaArrowLeft />
-          </Button>
-          <Button
+          </button>
+          <button
+            type="button"
+            aria-label="Next service"
             className={`${styles.nextButton} cursor-target`}
             onClick={() =>
               setIndex((prevIndex) => (prevIndex + 1) % items.length)
             }
           >
             <FaArrowRight />
-          </Button>
+          </button>
         </div>
 
         <div className={styles.mobileIndicators}>
           {items.map((_, i) => (
-            <Button
+            <button
+              type="button"
               key={i}
               className={`${styles.indicator} ${
-                i === index ? styles.indicatorActive : ""
+                i === safeIndex ? styles.indicatorActive : ""
               }`}
               onClick={() => goToService(i)}
               aria-label={`Go to service ${i + 1}`}

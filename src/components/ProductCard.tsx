@@ -131,6 +131,7 @@ function ProductCard({ id, image, title, description }: Props) {
         ref={imageRef}
         src={image}
         alt={title}
+        referrerPolicy="no-referrer"
         className={styles.image}
       />
       <div className={styles.content}>
@@ -157,7 +158,7 @@ function ProductCard({ id, image, title, description }: Props) {
           className={`${styles.viewMoreBtn} cursor-target`}
           onClick={(e) => {
             handleButtonClick(e);
-            navigate("/products");
+            navigate(id ? `/products/${encodeURIComponent(id)}` : "/products");
           }}
         >
           View More
@@ -166,6 +167,7 @@ function ProductCard({ id, image, title, description }: Props) {
       <RequestQuoteModal
         open={quoteModalOpen}
         onClose={() => setQuoteModalOpen(false)}
+        productId={id}
         productName={title}
       />
     </div>

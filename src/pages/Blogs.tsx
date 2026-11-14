@@ -215,7 +215,11 @@ export default function Blogs() {
           activeArticle ? `/blogs?post=${activeArticle.id}` : "/blogs"
         }
         ogType={activeArticle ? "article" : "website"}
-        ogImage={activeArticle?.coverImage}
+        ogImage={
+          activeArticle?.coverImage ||
+          visiblePosts[0]?.coverImage ||
+          "/assets/about/pavilion.jpg"
+        }
       />
       {/* Editorial Monograph Masthead & Blogger.com Integration Strip */}
       <header className="w-full border-b border-[#E4DDD0] bg-[#FCFAF6]">

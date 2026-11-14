@@ -1,10 +1,13 @@
 import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import {
   DEFAULT_OG_IMAGE,
+  DEFAULT_OG_IMAGE_ALT,
   SITE_BRAND_NAME,
   buildCanonicalUrl,
   formatSeoTitle,
   normalizeMetaDescription,
+  resolveOgImageUrl,
   type PageMetadataInput,
 } from "../utils/seoMetadataHelpers";
 
@@ -42,13 +45,16 @@ export default function PageMetadata({
   canonicalPath,
   ogType = "website",
   ogImage = DEFAULT_OG_IMAGE,
+  ogImageAlt,
   keywords,
   noIndex = false,
   structuredData,
 }: PageMetadataInput) {
+  const location = useLocation();
   const formattedTitle = formatSeoTitle(title);
   const normalizedDescription = normalizeMetaDescription(description);
   const serializedSchema = structuredData ? JSON.stringify(structuredData) : "";
+  const resolvedAlt = (ogImageAlt || formattedTitle || DEFAULT_OG_IMAGE_ALT).trim();
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -58,13 +64,9 @@ export default function PageMetadata({
     const origin =
       typeof window !== "undefined" ? window.location.origin : "";
     const currentPath =
-      typeof window !== "undefined"
-        ? window.location.hash.replace(/^#/, "") || window.location.pathname
-        : "/";
+      `${location.pathname || "/"}${location.search || ""}` || "/";
     const canonicalUrl = buildCanonicalUrl(origin, canonicalPath, currentPath);
-    const resolvedImage = ogImage.startsWith("http")
-      ? ogImage
-      : `${origin}${ogImage.startsWith("/") ? ogImage : `/${ogImage}`}`;
+    const resolvedImage = resolveOgImageUrl(origin, ogImage, DEFAULT_OG_IMAGE);
 
     upsertMetaTag("name", "description", normalizedDescription);
     upsertMetaTag(
@@ -84,12 +86,14 @@ export default function PageMetadata({
     upsertMetaTag("property", "og:description", normalizedDescription);
     upsertMetaTag("property", "og:url", canonicalUrl);
     upsertMetaTag("property", "og:image", resolvedImage);
+    upsertMetaTag("property", "og:image:alt", resolvedAlt);
 
     // Twitter / X card tags
     upsertMetaTag("name", "twitter:card", "summary_large_image");
     upsertMetaTag("name", "twitter:title", formattedTitle);
     upsertMetaTag("name", "twitter:description", normalizedDescription);
     upsertMetaTag("name", "twitter:image", resolvedImage);
+    upsertMetaTag("name", "twitter:image:alt", resolvedAlt);
 
     upsertLinkTag("canonical", canonicalUrl);
 
@@ -112,8 +116,11 @@ export default function PageMetadata({
     formattedTitle,
     normalizedDescription,
     canonicalPath,
+    location.pathname,
+    location.search,
     ogType,
     ogImage,
+    resolvedAlt,
     keywords,
     noIndex,
     serializedSchema,
