@@ -14,7 +14,7 @@ import {
 } from "@ant-design/icons";
 import AxiosConfig from "../../Context/AxiosConfig";
 import AdminPortalShell from "../../components/AdminPortalShell";
-import { moveArrayItem } from "../../utils/pageAdsHelpers";
+import { moveArrayItemToIndex } from "../../utils/pageAdsHelpers";
 import {
   PORTAL_IMAGE_PRESETS,
   RELATED_PORTALS,
@@ -201,7 +201,7 @@ export default function PortalsAdmin() {
   };
 
   const handleMoveTile = (fromIdx: number, toIdx: number) => {
-    setPortals((prev) => moveArrayItem(prev, fromIdx, toIdx));
+    setPortals((prev) => moveArrayItemToIndex(prev, fromIdx, toIdx));
   };
 
   const handleSaveOrder = async () => {

@@ -223,30 +223,47 @@ export function searchHomeCatalog(params: {
   const scoredSolutions = (params.services || [])
     .filter((svc) => svc.active !== false)
     .map((svc) => {
+      const targetRoute = inferSolutionTargetRoute(
+        svc.title,
+        params.categories,
+        params.designs
+      );
+      if (selectedCategory) {
+        const matchesCatRoute =
+          targetRoute.toLowerCase() ===
+          `/products/category/${selectedCategory.slug.toLowerCase()}`;
+        const matchesCatKeywords =
+          scoreMatch(
+            `${svc.title} ${svc.description1 || ""} ${svc.description2 || ""}`,
+            selectedCategory.name
+          ) > 0;
+        if (!matchesCatRoute && !matchesCatKeywords) {
+          return { item: svc, targetRoute, score: 0 };
+        }
+      }
       if (!cleanQuery) {
-        return { item: svc, score: 0 };
+        return { item: svc, targetRoute, score: 10 };
       }
       const titleScore = scoreMatch(svc.title, cleanQuery) * 2;
       const bodyScore = scoreMatch(
-        `${svc.description} ${svc.subDescription || ""}`,
+        `${svc.description1 || ""} ${svc.description2 || ""}`,
         cleanQuery
       );
-      return { item: svc, score: Math.max(titleScore, bodyScore) };
+      return { item: svc, targetRoute, score: Math.max(titleScore, bodyScore) };
     })
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, maxSols)
-    .map(({ item }) => ({
+    .map(({ item, targetRoute }) => ({
       id: `sol-${item.id}`,
       kind: "solution" as const,
       title: item.title,
-      subtitle: item.description,
+      subtitle:
+        item.description1 ||
+        item.description2 ||
+        "Custom architectural fabrication solution",
       image: item.image || "/assets/products/showroom.jpg",
-      to: inferSolutionTargetRoute(
-        item.title,
-        params.categories,
-        params.designs
-      ),
+      to: targetRoute,
       meta: "Solution",
     }));
 

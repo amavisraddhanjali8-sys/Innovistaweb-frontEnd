@@ -552,7 +552,7 @@ export default function HomeTopPicksEditor({
                         {design.Design_Name}
                       </span>
                       <span className="text-[11px] text-slate-500 capitalize">
-                        ({design.Design_Category || "product"})
+                        ({design.Categories?.[0] || "product"})
                       </span>
                     </div>
 
@@ -689,7 +689,7 @@ export default function HomeTopPicksEditor({
                       {design.Design_Name}
                     </div>
                     <div className="text-[11px] text-slate-500 capitalize truncate">
-                      {design.Design_Category || "Architectural System"}
+                      {design.Categories?.[0] || "Architectural System"}
                     </div>
                   </div>
                   <button

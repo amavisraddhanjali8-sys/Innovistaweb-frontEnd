@@ -96,6 +96,20 @@ describe("productCatalogHelpers", () => {
     );
     assert.equal(byName.length, 1);
     assert.equal(byName[0].DesignID, 8);
+
+    const byPluralMultiWord = filterAndSortDesigns(
+      DEFAULT_DESIGNS_CATALOG,
+      DEFAULT_PRODUCT_CATEGORIES,
+      { ...createInitialFilterState("all"), searchQuery: "sliding doors" }
+    );
+    assert.ok(byPluralMultiWord.some((d) => d.DesignID === 1));
+
+    const byPluralWindows = filterAndSortDesigns(
+      DEFAULT_DESIGNS_CATALOG,
+      DEFAULT_PRODUCT_CATEGORIES,
+      { ...createInitialFilterState("all"), searchQuery: "casement windows" }
+    );
+    assert.ok(byPluralWindows.some((d) => d.DesignID === 2));
   });
 
   it("normalizes categories, product landing CMS, and sanitizes blocked external URLs", () => {

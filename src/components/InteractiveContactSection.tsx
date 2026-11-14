@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { MotionConfig, motion } from "framer-motion";
+import { MotionConfig } from "framer-motion";
 import { FiArrowRight, FiCheckCircle, FiSend } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
@@ -21,6 +21,7 @@ import Contact3DCharacterStage from "./Contact3DCharacterStage";
 import InteractiveContactShuffleCards from "./InteractiveContactShuffleCards";
 import RequestQuoteButton from "./RequestQuoteButton";
 import SiteVisitBookingCard from "./SiteVisitBookingCard";
+import TactileActionButton from "./TactileActionButton";
 
 export interface InteractiveContactSectionProps {
   variant?: "footer" | "page";
@@ -201,23 +202,12 @@ export default function InteractiveContactSection({
                         role="tab"
                         aria-selected={active}
                         onClick={() => handleIntentToggle(option.id)}
-                        className={`relative py-2 px-2 sm:px-3 rounded-xl text-xs font-bold cursor-pointer transition-colors border-0 ${
+                        className={`relative py-2 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer transition-all border-0 ${
                           active
-                            ? "text-white"
+                            ? "bg-gradient-to-r from-[#22577A] to-[#3393B8] text-white shadow-xs"
                             : "text-[#5F6672] hover:text-[#14171A] bg-transparent"
                         }`}
                       >
-                        {active && (
-                          <motion.span
-                            layoutId={`${idPrefix}-intent-pill`}
-                            transition={{
-                              type: "spring",
-                              stiffness: 380,
-                              damping: 30,
-                            }}
-                            className="absolute inset-0 rounded-xl bg-gradient-to-r from-[#22577A] to-[#3393B8] shadow-xs"
-                          />
-                        )}
                         <span className="relative z-10">{option.label}</span>
                       </button>
                     );
@@ -247,13 +237,13 @@ export default function InteractiveContactSection({
                     .
                   </p>
                   <div className="pt-2">
-                    <button
-                      type="button"
+                    <TactileActionButton
+                      tone="amber"
+                      size="sm"
                       onClick={() => setSubmittedRef(null)}
-                      className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#F59E0B] via-[#EA580C] to-[#F97316] text-white text-xs font-bold cursor-pointer shadow-sm"
                     >
                       Send Another Inquiry
-                    </button>
+                    </TactileActionButton>
                   </div>
                 </div>
               ) : (
@@ -458,15 +448,17 @@ export default function InteractiveContactSection({
                     </p>
                   )}
 
-                  {/* Full-width Primary CTA Button Matching Screenshot 1 */}
-                  <button
+                  {/* Full-width Tactile State-Driven Primary CTA Button */}
+                  <TactileActionButton
                     type="submit"
-                    disabled={submitting}
-                    className="w-full inline-flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-gradient-to-r from-[#F59E0B] via-[#EA580C] to-[#F97316] hover:brightness-105 text-white text-sm font-bold shadow-[0_12px_26px_-10px_rgba(234,88,12,0.58)] transition-all cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed"
+                    size="lg"
+                    fullWidth
+                    loading={submitting}
+                    loadingText="Sending..."
+                    icon={<FiSend className="text-sm" />}
                   >
-                    <FiSend className="text-sm" />
-                    <span>{submitting ? "Sending..." : "Send Message"}</span>
-                  </button>
+                    Send Message
+                  </TactileActionButton>
 
                   {/* Secondary Full RFQ Trigger */}
                   <div className="pt-2 flex items-center justify-end border-t border-slate-100">

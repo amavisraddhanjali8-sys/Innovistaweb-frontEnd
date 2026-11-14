@@ -1333,7 +1333,8 @@ export default function AdminProductDetailFields({
                                         label: p.brandName,
                                         value: p.url,
                                       }))}
-                                      onSelect={(selectedUrl: string) => {
+                                      onSelect={(selectedUrl: string | undefined) => {
+                                        if (!selectedUrl) return;
                                         const preset = ACCESSORY_BRAND_LOGO_PRESETS.find(
                                           (p) => p.url === selectedUrl
                                         );

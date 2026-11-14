@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  FiArrowRight,
   FiChevronLeft,
   FiChevronRight,
   FiPause,
+  FiPhoneCall,
   FiPlay,
   FiSliders,
   FiVolume2,
@@ -11,8 +13,8 @@ import {
 } from "react-icons/fi";
 import styles from "../cssModules/ImageSlider.module.css";
 import CountUpComp from "./CountUpComp";
-import ContactButton from "./ContactButton";
 import ContactModal from "./ContactModal";
+import TactileActionButton from "./TactileActionButton";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import {
@@ -281,17 +283,26 @@ export default function ImageSlider() {
         <p className={styles.description}>{currentSlide.description}</p>
 
         <div className={styles.buttonGroup}>
-          <ContactButton
-            label={cms.primaryButtonLabel}
+          <TactileActionButton
+            tone="crimson"
+            size="lg"
+            surface="dark"
+            icon={<FiPhoneCall className="text-sm" />}
             onClick={() => setIsContactModalOpen(true)}
-          />
-          <button
-            type="button"
-            className={`${styles.exploreBtn} cursor-target`}
+            className="cursor-target"
+          >
+            {cms.primaryButtonLabel}
+          </TactileActionButton>
+          <TactileActionButton
+            tone="azure"
+            size="lg"
+            surface="dark"
+            trailingIcon={<FiArrowRight className="text-sm" />}
             onClick={() => navigate(cms.secondaryButtonPath || "/products")}
+            className="cursor-target"
           >
             {cms.secondaryButtonLabel}
-          </button>
+          </TactileActionButton>
         </div>
       </div>
 

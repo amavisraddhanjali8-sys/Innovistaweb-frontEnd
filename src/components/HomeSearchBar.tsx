@@ -16,6 +16,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
+import TactileActionButton from "./TactileActionButton";
 import {
   DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
@@ -119,7 +120,7 @@ export default function HomeSearchBar() {
         services,
         maxCategories: query.trim() ? 4 : 4,
         maxProducts: query.trim() ? 6 : 4,
-        maxSolutions: query.trim() ? 3 : 0,
+        maxSolutions: query.trim() ? 3 : 2,
       }),
     [query, categorySlug, designs, categories, services]
   );
@@ -191,6 +192,7 @@ export default function HomeSearchBar() {
           return (
             <button
               key={item.id}
+              id={`home-search-opt-${globalIdx}`}
               type="button"
               role="option"
               aria-selected={isHighlighted}
@@ -203,6 +205,14 @@ export default function HomeSearchBar() {
               <img
                 src={item.image}
                 alt={item.title}
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  if (!target.dataset.fallbackApplied) {
+                    target.dataset.fallbackApplied = "1";
+                    target.src = "/assets/products/door.jpg";
+                  }
+                }}
                 className="w-10 h-10 rounded-lg object-cover border border-slate-200/80 shrink-0 bg-slate-100"
               />
               <div className="min-w-0 flex-1">
@@ -231,7 +241,7 @@ export default function HomeSearchBar() {
   return (
     <section
       aria-label="Quick Product and Architectural Solution Search"
-      className="w-full flex justify-center pt-1 pb-3.5 px-3 sm:px-4 relative z-40"
+      className="w-full flex justify-center pt-2 pb-6 sm:pb-8 px-3 sm:px-4 relative z-40"
     >
       <div
         ref={containerRef}
@@ -251,8 +261,9 @@ export default function HomeSearchBar() {
               onChange={(e) => {
                 setCategorySlug(e.target.value);
                 setHighlightedIdx(-1);
+                setDropdownOpen(true);
               }}
-              className="w-full sm:w-[175px] h-10 px-3 rounded-xl bg-slate-50 sm:bg-transparent text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/70 sm:border-0 focus:outline-none cursor-pointer"
+              className="w-full sm:w-[175px] h-10 px-3 rounded-xl bg-slate-50 sm:bg-transparent text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/70 sm:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22577A]/40 cursor-pointer"
             >
               <option value="all">All Categories</option>
               {categories.map((cat) => (
@@ -269,6 +280,7 @@ export default function HomeSearchBar() {
             <input
               ref={inputRef}
               type="text"
+              role="combobox"
               value={query}
               onFocus={() => setDropdownOpen(true)}
               onChange={(e) => {
@@ -279,6 +291,12 @@ export default function HomeSearchBar() {
               onKeyDown={handleKeyDown}
               aria-label="Search products or architectural solutions"
               aria-expanded={dropdownOpen}
+              aria-controls="home-search-listbox"
+              aria-activedescendant={
+                dropdownOpen && highlightedIdx >= 0
+                  ? `home-search-opt-${highlightedIdx}`
+                  : undefined
+              }
               aria-autocomplete="list"
               placeholder="Search products or architectural solutions (e.g. sliding doors, windows, louvers)..."
               className="w-full h-10 pl-2.5 pr-8 bg-transparent text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 border-0 focus:outline-none"
@@ -300,18 +318,21 @@ export default function HomeSearchBar() {
           </div>
 
           {/* Submit Button */}
-          <button
+          <TactileActionButton
             type="submit"
-            className="h-10 px-5 rounded-xl bg-[#22577A] hover:bg-[#194360] text-white text-xs sm:text-sm font-semibold inline-flex items-center justify-center gap-2 transition-colors cursor-pointer shrink-0"
+            tone="azure"
+            size="sm"
+            icon={<FiSearch className="text-sm" />}
+            className="h-10 px-5"
           >
-            <FiSearch className="text-sm" />
-            <span>Search</span>
-          </button>
+            Search
+          </TactileActionButton>
         </form>
 
         {/* Instant Search Suggestions Dropdown */}
         {dropdownOpen && (
           <div
+            id="home-search-listbox"
             role="listbox"
             aria-label="Search suggestions"
             className="absolute left-0 right-0 top-[calc(100%+8px)] rounded-2xl border border-slate-200 bg-white shadow-[0_22px_50px_-14px_rgba(15,23,42,0.22)] overflow-hidden max-h-[420px] overflow-y-auto z-50 divide-y divide-slate-100"

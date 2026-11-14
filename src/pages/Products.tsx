@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { FiArrowRight, FiSliders, FiX } from "react-icons/fi";
+import { FiArrowRight, FiGrid, FiSliders, FiTool, FiX } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
@@ -21,6 +21,12 @@ import {
   type ProductCategory,
   type ProductLandingCms,
 } from "../utils/productCatalogHelpers";
+import {
+  DEFAULT_HOME_SERVICES_CMS,
+  normalizeHomeServicesCms,
+  type HomeServiceItem,
+} from "../utils/homeServicesHelpers";
+import { searchHomeCatalog } from "../utils/homeSearchHelpers";
 
 export default function Products() {
   const { user } = useAuth();
@@ -33,16 +39,20 @@ export default function Products() {
     DEFAULT_PRODUCT_CATEGORIES
   );
   const [designs, setDesigns] = useState<DesignItem[]>(DEFAULT_DESIGNS_CATALOG);
+  const [services, setServices] = useState<HomeServiceItem[]>(
+    DEFAULT_HOME_SERVICES_CMS.items
+  );
 
   useEffect(() => {
     let active = true;
     const loadCms = async () => {
       try {
-        const [cmsRes, designsRes] = await Promise.all([
+        const [cmsRes, designsRes, svcRes] = await Promise.all([
           AxiosConfig.get("/products/cms"),
           AxiosConfig.get<{ data?: DesignItem[] }>("/designs/all", {
             params: { page: 1, limit: 100 },
           }),
+          AxiosConfig.get("/api/home-services"),
         ]);
         if (!active) return;
 
@@ -62,6 +72,9 @@ export default function Products() {
         if (Array.isArray(designsRes.data?.data)) {
           setDesigns(designsRes.data.data.map((d) => normalizeDesignItem(d)));
         }
+        if (svcRes.data?.data) {
+          setServices(normalizeHomeServicesCms(svcRes.data.data).items);
+        }
       } catch {
         // Keep verified local defaults cleanly
       }
@@ -72,6 +85,22 @@ export default function Products() {
       active = false;
     };
   }, []);
+
+  const searchQuickMatches = useMemo(() => {
+    if (!activeSearchQuery) {
+      return { categories: [], solutions: [] };
+    }
+    const res = searchHomeCatalog({
+      query: activeSearchQuery,
+      designs,
+      categories,
+      services,
+      maxCategories: 4,
+      maxProducts: 0,
+      maxSolutions: 4,
+    });
+    return { categories: res.categories, solutions: res.solutions };
+  }, [activeSearchQuery, designs, categories, services]);
 
   return (
     <div className="w-full bg-white flex flex-col">
@@ -105,6 +134,65 @@ export default function Products() {
                 <span>Clear Search</span>
               </button>
             </div>
+            {(searchQuickMatches.categories.length > 0 ||
+              searchQuickMatches.solutions.length > 0) && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+                {searchQuickMatches.categories.map((catMatch) => (
+                  <Link
+                    key={catMatch.id}
+                    to={catMatch.to}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-200/90 hover:border-[#3393B8] no-underline transition-colors"
+                  >
+                    <img
+                      src={catMatch.image}
+                      alt={catMatch.title}
+                      referrerPolicy="no-referrer"
+                      className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#22577A]">
+                        <FiGrid className="text-[11px]" />
+                        <span>Matching Category</span>
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 truncate">
+                        {catMatch.title}
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {catMatch.subtitle}
+                      </div>
+                    </div>
+                    <FiArrowRight className="text-[#22577A] shrink-0" />
+                  </Link>
+                ))}
+                {searchQuickMatches.solutions.map((solMatch) => (
+                  <Link
+                    key={solMatch.id}
+                    to={solMatch.to}
+                    className="flex items-center gap-3 p-3 rounded-xl bg-white border border-slate-200/90 hover:border-[#3393B8] no-underline transition-colors"
+                  >
+                    <img
+                      src={solMatch.image}
+                      alt={solMatch.title}
+                      referrerPolicy="no-referrer"
+                      className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-[#22577A]">
+                        <FiTool className="text-[11px]" />
+                        <span>Architectural Solution</span>
+                      </div>
+                      <div className="text-sm font-bold text-slate-900 truncate">
+                        {solMatch.title}
+                      </div>
+                      <div className="text-xs text-slate-500 truncate">
+                        {solMatch.subtitle}
+                      </div>
+                    </div>
+                    <FiArrowRight className="text-[#22577A] shrink-0" />
+                  </Link>
+                ))}
+              </div>
+            )}
             <ProductCatalogBrowser
               designs={designs}
               categories={categories}

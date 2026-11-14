@@ -108,18 +108,11 @@
 }
 
 .buttonContainer button {
-  background-color: var(--color-primary);
-  border: none;
-  color: var(--color-white);
-  padding: clamp(15px, 3vw, 20px);
-  font-size: clamp(16px, 2.5vw, 20px);
+  padding: clamp(14px, 2.5vw, 18px) clamp(18px, 3vw, 24px);
+  font-size: clamp(15px, 2vw, 18px);
   display: flex;
   justify-content: center;
   align-items: center;
-  border-radius: 10px;
-}
-.buttonContainer button:hover {
-  background-color: #1b3b4d;
   cursor: pointer;
 }
 

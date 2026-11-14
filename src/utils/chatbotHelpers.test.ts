@@ -5,7 +5,9 @@ import {
   DEFAULT_CHATBOT_FAQS,
   buildSmsHref,
   buildWhatsAppChatUrl,
+  computeChatbotCursorTargets,
   detectChatIntent,
+  formatChatTimestamp,
   matchTrainedFaq,
   normalizeChatbotConfig,
   normalizeChatbotFaq,
@@ -14,6 +16,7 @@ import {
 test("matchTrainedFaq finds top relevant FAQ answer from trained keywords and question", () => {
   const match = matchTrainedFaq("What is your coastal sea breeze warranty?", DEFAULT_CHATBOT_FAQS);
   assert.ok(match);
+  if (!match) return;
   assert.equal(match.item.id, "faq-3");
   assert.match(match.item.answer, /15-year/i);
 });
@@ -58,4 +61,22 @@ test("normalizeChatbotConfig and normalizeChatbotFaq apply clean defaults", () =
   });
   assert.equal(faq.question, "Lead time?");
   assert.equal(faq.priority, 20);
+});
+
+test("computeChatbotCursorTargets tracks cursor offsets with clamped symmetric bounds", () => {
+  const center = computeChatbotCursorTargets(1300, 800, 1300, 800, 1440, 900);
+  assert.equal(center.nx, 0);
+  assert.equal(center.ny, 0);
+  assert.equal(center.eyeX, 0);
+  assert.equal(center.headYaw, 0);
+
+  const topLeft = computeChatbotCursorTargets(100, 100, 1350, 820, 1440, 900);
+  assert.equal(topLeft.nx, -1);
+  assert.equal(topLeft.ny, -1);
+  assert.ok(topLeft.eyeX < 0);
+  assert.ok(topLeft.eyeY > 0);
+  assert.ok(topLeft.headYaw < 0);
+
+  const stamp = formatChatTimestamp("2026-11-14T09:14:00");
+  assert.match(stamp, /\d{1,2}:\d{2}/);
 });

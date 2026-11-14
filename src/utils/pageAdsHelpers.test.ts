@@ -8,7 +8,7 @@ import {
   getPrevSlideIndex,
   getVisibleAdsForPage,
   isValidAdPageKey,
-  moveArrayItem,
+  moveArrayItemToIndex,
   normalizePageAdButtons,
   normalizePageAdSlide,
   normalizePageAdsCms,
@@ -144,6 +144,7 @@ describe("pageAdsHelpers", () => {
       0
     );
     assert.ok(uploaded);
+    if (!uploaded) return;
     assert.equal(uploaded.image, "/uploads/promo-banner.png");
     assert.equal(uploaded.title, "Monsoon Promo");
     assert.equal(uploaded.linkUrl, "#/request-quote");
@@ -176,7 +177,7 @@ describe("pageAdsHelpers", () => {
     assert.equal(getNextSlideIndex(2, 3), 0);
     assert.equal(getPrevSlideIndex(0, 3), 2);
 
-    const reordered = moveArrayItem(["ad1", "ad2", "ad3"], 0, 2);
+    const reordered = moveArrayItemToIndex(["ad1", "ad2", "ad3"], 0, 2);
     assert.deepEqual(reordered, ["ad2", "ad3", "ad1"]);
   });
 });

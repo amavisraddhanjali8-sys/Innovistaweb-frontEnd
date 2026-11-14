@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import gsap from "gsap";
 import styles from "../cssModules/ProductCard.module.css";
 import RequestQuoteModal from "./RequestQuoteModal";
+import TactileActionButton from "./TactileActionButton";
 
 type Props = {
   id: string;
@@ -143,26 +144,32 @@ function ProductCard({ id, image, title, description }: Props) {
         </p>
       </div>
       <div ref={buttonsRef} className={styles.buttonContainer}>
-        <button
-          type="button"
-          className={`${styles.quoteBtn} request-quote-fx cursor-target`}
+        <TactileActionButton
+          tone="azure"
+          size="sm"
+          fullWidth
+          frameClassName="flex-1"
+          className="cursor-target"
           onClick={(e) => {
             handleButtonClick(e);
             setQuoteModalOpen(true);
           }}
         >
-          <span className="relative z-10">Request Quote</span>
-        </button>
-        <button
-          type="button"
-          className={`${styles.viewMoreBtn} cursor-target`}
+          Request Quote
+        </TactileActionButton>
+        <TactileActionButton
+          tone="pearl"
+          size="sm"
+          fullWidth
+          frameClassName="flex-1"
+          className="cursor-target"
           onClick={(e) => {
             handleButtonClick(e);
             navigate(id ? `/products/${encodeURIComponent(id)}` : "/products");
           }}
         >
           View More
-        </button>
+        </TactileActionButton>
       </div>
       <RequestQuoteModal
         open={quoteModalOpen}

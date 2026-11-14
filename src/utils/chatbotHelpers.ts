@@ -158,7 +158,7 @@ export function normalizeChatbotFaq(
   const keywords = Array.isArray(raw.keywords)
     ? raw.keywords.map((k) => String(k || "").trim().toLowerCase()).filter(Boolean)
     : typeof (raw as { keywords?: unknown }).keywords === "string"
-      ? String((raw as { keywords?: string }).keywords)
+      ? String((raw as { keywords?: unknown }).keywords)
           .split(",")
           .map((k) => k.trim().toLowerCase())
           .filter(Boolean)
@@ -276,4 +276,48 @@ export function buildSmsHref(phone: string, message: string): string {
   return body
     ? `sms:${cleanPhone}?body=${encodeURIComponent(body)}`
     : `sms:${cleanPhone}`;
+}
+
+export interface ChatbotCursorTargets {
+  nx: number;
+  ny: number;
+  eyeX: number;
+  eyeY: number;
+  headYaw: number;
+  headPitch: number;
+}
+
+export function computeChatbotCursorTargets(
+  pointerX: number,
+  pointerY: number,
+  centerX: number,
+  centerY: number,
+  viewportWidth = 1440,
+  viewportHeight = 900
+): ChatbotCursorTargets {
+  const safeW = Math.max(240, viewportWidth || 1440);
+  const safeH = Math.max(240, viewportHeight || 900);
+  const spanX = safeW * 0.48;
+  const spanY = safeH * 0.48;
+
+  const rawX = (pointerX - centerX) / spanX;
+  const rawY = (pointerY - centerY) / spanY;
+
+  const nx = Math.max(-1, Math.min(1, rawX));
+  const ny = Math.max(-1, Math.min(1, rawY));
+
+  return {
+    nx,
+    ny,
+    eyeX: Number((nx * 0.145).toFixed(4)),
+    eyeY: Number((-ny * 0.075).toFixed(4)),
+    headYaw: Number((nx * 0.58).toFixed(4)),
+    headPitch: Number((ny * 0.34).toFixed(4)),
+  };
+}
+
+export function formatChatTimestamp(dateInput: Date | string = new Date()): string {
+  const d = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return "Now";
+  return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }

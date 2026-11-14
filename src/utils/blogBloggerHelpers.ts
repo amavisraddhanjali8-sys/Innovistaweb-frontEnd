@@ -617,7 +617,7 @@ export function parseBloggerAtomFeed(xml: string): {
       labels: labelMatches.length > 0 ? labelMatches : [category],
       author: decodeXmlEntities(authorMatch?.[1]?.trim() || "Innovista Editorial"),
       coverImage,
-      source: "blogger",
+      source: "blogger" as const,
       bloggerUrl: altLinkMatch?.[1] || "",
       featured: idx === 0,
       showOnHome: false,

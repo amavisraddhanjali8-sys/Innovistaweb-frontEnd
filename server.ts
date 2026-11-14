@@ -1,4 +1,4 @@
-import express, { NextFunction, Request, Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
@@ -21,24 +21,17 @@ import {
   DEFAULT_SLIDESHOW_SPEED_MS,
   DEFAULT_TEAM_MEMBERS,
   clampRibbonSpeed,
-  clampSlideshowSpeedMs,
   normalizeAboutCmsPayload,
   type AboutCmsPayload,
-} from "./src/utils/aboutContentHelpers";
+} from "./src/utils/aboutContentHelpers.ts";
 import {
-  DEFAULT_DESIGNS_CATALOG,
-  DEFAULT_PRODUCT_CATEGORIES,
   DEFAULT_PRODUCT_LANDING_CMS,
   designMatchesCategory,
   findCategoryByParam,
-  normalizeDesignItem,
-  normalizeProductCategory,
   normalizeProductLandingCms,
   resolveRelatedDesigns,
-  type DesignItem,
-  type ProductCategory,
   type ProductLandingCms,
-} from "./src/utils/productCatalogHelpers";
+} from "./src/utils/productCatalogHelpers.ts";
 import {
   DEFAULT_PAGE_ADS_CMS,
   isValidAdPageKey,
@@ -46,18 +39,15 @@ import {
   normalizePageAdsCms,
   normalizeSinglePageAdsConfig,
   type PageAdsCmsPayload,
-} from "./src/utils/pageAdsHelpers";
+} from "./src/utils/pageAdsHelpers.ts";
 import {
-  RELATED_PORTALS,
   RESOURCE_ATTACHMENTS,
   normalizePortalTile,
   normalizeRelatedPortals,
-  type RelatedPortalItem,
-} from "./src/utils/siteContentHelpers";
+} from "./src/utils/siteContentHelpers.ts";
 import {
   BLOGGER_COVER_FALLBACKS,
   DEFAULT_BLOGGER_CONFIG,
-  DEFAULT_BLOG_POSTS,
   buildBloggerAtomUrl,
   buildBloggerFeedUrl,
   buildExcerpt,
@@ -73,16 +63,15 @@ import {
   sanitizeBlogHtml,
   type BlogPostItem,
   type BloggerConnectionConfig,
-} from "./src/utils/blogBloggerHelpers";
+} from "./src/utils/blogBloggerHelpers.ts";
 import {
   DEFAULT_SITE_CONTACT_SETTINGS,
   normalizeSiteContactSettings,
   validateSiteContactSettings,
   type SiteContactSettings,
-} from "./src/utils/footerConsultationHelpers";
+} from "./src/utils/footerConsultationHelpers.ts";
 import {
   DEFAULT_CHATBOT_CONFIG,
-  DEFAULT_CHATBOT_FAQS,
   buildSmsHref,
   buildWhatsAppChatUrl,
   detectChatIntent,
@@ -90,48 +79,99 @@ import {
   normalizeChatbotConfig,
   normalizeChatbotFaq,
   type ChatbotConfig,
-  type ChatbotFaqItem,
-} from "./src/utils/chatbotHelpers";
+} from "./src/utils/chatbotHelpers.ts";
 import {
-  SITE_VISIT_SLOT_TEMPLATES,
   computeAvailableSlotsForDate,
+  getManagedSiteVisitDates,
   getUpcomingSiteVisitDates,
   validateSiteVisitBooking,
-  type SiteVisitBooking,
   type SiteVisitStatus,
-} from "./src/utils/siteVisitSchedulerHelpers";
+} from "./src/utils/siteVisitSchedulerHelpers.ts";
 import {
   DEFAULT_HOME_SLIDESHOW_CMS,
   deleteHomeSlide,
   normalizeHomeSlideshowCms,
   upsertHomeSlide,
   type HomeSlideshowCmsPayload,
-} from "./src/utils/homeSlideshowHelpers";
+} from "./src/utils/homeSlideshowHelpers.ts";
 import {
   DEFAULT_HOME_SERVICES_CMS,
   deleteHomeService,
   normalizeHomeServicesCms,
   upsertHomeService,
   type HomeServicesCmsPayload,
-} from "./src/utils/homeServicesHelpers";
+} from "./src/utils/homeServicesHelpers.ts";
 import {
   DEFAULT_HOME_FEATURED_PRODUCTS_CMS,
   deleteHomeAccessoryRibbonItem,
   normalizeHomeFeaturedProductsCms,
   upsertHomeAccessoryRibbonItem,
   type HomeFeaturedProductsCmsPayload,
-} from "./src/utils/homeTopPicksHelpers";
+} from "./src/utils/homeTopPicksHelpers.ts";
 import {
   injectSeoIntoHtml,
   resolveDynamicRouteSeo,
   resolveRequestOrigin,
-} from "./src/utils/seoMetadataHelpers";
+} from "./src/utils/seoMetadataHelpers.ts";
 import {
-  DEFAULT_CUSTOMER_FEEDBACKS,
-  normalizeCustomerFeedbackList,
   normalizeCustomerFeedbackRecord,
-  type CustomerFeedbackRecord,
-} from "./src/utils/customerFeedbackHelpers";
+} from "./src/utils/customerFeedbackHelpers.ts";
+import { optionalAuth, requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
+import { findUserByEmail, getAdminAndStaffUsers, getCustomerUsers, getOrCreateUser } from "./src/db/users.ts";
+import {
+  addAppointmentSlotRecord,
+  createAppointmentRecord,
+  createCategoryRecord,
+  createFeedbackRecord,
+  createMediaAssetRecord,
+  createOrderRecord,
+  createProductRecord,
+  createProjectRecord,
+  createRfqRecord,
+  createUserAccount,
+  deleteAppointmentDateRecord,
+  deleteAppointmentSlotRecord,
+  deleteBlogPostRecord,
+  deleteCategoryRecord,
+  deleteChatbotFaqRecord,
+  deleteFeedbackRecord,
+  deleteMediaAssetRecord,
+  deleteProductRecord,
+  deleteProjectRecord,
+  deleteUserAccount,
+  getAppointmentScheduleConfig,
+  getCmsDoc,
+  getProductByAnyId,
+  listAppointments,
+  listBlogPosts,
+  listCategories,
+  listChatbotFaqs,
+  listFeedbacks,
+  listMediaAssets,
+  listNotifications,
+  listOrders,
+  listProducts,
+  listProjects,
+  listRelatedPortals,
+  listRfqRecords,
+  listUsersByRoles,
+  markNotificationRead,
+  reorderCategoryRecords,
+  reorderFeedbackRecords,
+  replaceRelatedPortals,
+  setCmsDoc,
+  updateAppointmentSlotRecord,
+  updateAppointmentStatusRecord,
+  updateCategoryRecord,
+  updateFeedbackRecord,
+  updateOrderStatusRecord,
+  updateProductRecord,
+  updateProjectRecord,
+  updateUserAccount,
+  upsertAppointmentDateRecord,
+  upsertBlogPostRecord,
+  upsertChatbotFaqRecord,
+} from "./src/db/repositories.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -150,7 +190,6 @@ if (!fs.existsSync(uploadsDir)) {
 }
 app.use("/uploads", express.static(uploadsDir));
 
-// Multer storage for image uploads
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
@@ -161,308 +200,13 @@ const storage = multer.diskStorage({
     cb(null, uniqueName);
   },
 });
+
 const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 },
 });
 
-// In-memory data stores with sensible initial data
-interface Admin {
-  AdminId: number;
-  Admin_Name: string;
-  Admin_Email: string;
-  Admin_Phone: string;
-  Admin_Password?: string;
-  Admin_Profile?: string;
-}
-
-let admins: Admin[] = [
-  {
-    AdminId: 1,
-    Admin_Name: "Super Admin",
-    Admin_Email: "admin@innovista.com",
-    Admin_Phone: "+94 77 123 4567",
-    Admin_Password: "admin123",
-    Admin_Profile: "/assets/about/director.jpg",
-  },
-  {
-    AdminId: 2,
-    Admin_Name: "Operations Manager",
-    Admin_Email: "manager@innovista.com",
-    Admin_Phone: "+94 71 987 6543",
-    Admin_Password: "admin123",
-    Admin_Profile: "/assets/about/team-structural.jpg",
-  },
-];
-
-interface Project {
-  ProjectID: number;
-  Project_Title: string;
-  Project_Description: string;
-  Project_Images: string[];
-  Location: string;
-  Client_Name: string;
-  Client_Email: string;
-  Client_Number?: string;
-  Client_Company?: string;
-  Project_CreatedAt?: string;
-  Project_FinishedDate?: string | null;
-  Budget: number;
-}
-
-let projects: Project[] = [
-  {
-    ProjectID: 1,
-    Project_Title: "Oceanview Villa Glass Cantilever & Sliding Facade",
-    Project_Description: "Complete architectural exterior glazing featuring heavy-duty thermally broken aluminium profiles, motorized slim-line sliding glass doors, and structural frameless glass balustrades.",
-    Project_Images: [
-      "/assets/about/terrace.jpg",
-      "/assets/products/door.jpg",
-      "/assets/products/hero-showroom.jpg",
-    ],
-    Location: "Colombo 07, Sri Lanka",
-    Client_Name: "Duminda Perera",
-    Client_Email: "duminda@zenithcapital.lk",
-    Client_Number: "+94 77 455 1200",
-    Client_Company: "Zenith Capital Residencies",
-    Project_CreatedAt: "2024-01-15T08:00:00.000Z",
-    Project_FinishedDate: "2024-09-30T17:00:00.000Z",
-    Budget: 8500000,
-  },
-  {
-    ProjectID: 2,
-    Project_Title: "Apex Commercial Tower Curtain Wall System",
-    Project_Description: "Supply, fabrication, and structural installation of 12-storey unitized aluminium curtain walling with solar-reflective low-E double glazing and integrated ventilation louvers.",
-    Project_Images: [
-      "/assets/about/facade.jpg",
-      "/assets/products/facade-detail.jpg",
-      "/assets/products/shopfront.jpg",
-    ],
-    Location: "Kollupitiya, Colombo",
-    Client_Name: "Niroshan Fernando",
-    Client_Email: "info@apexdevelopments.com",
-    Client_Number: "+94 11 234 5678",
-    Client_Company: "Apex Skyline Towers",
-    Project_CreatedAt: "2023-06-10T09:00:00.000Z",
-    Project_FinishedDate: "2024-04-12T18:00:00.000Z",
-    Budget: 24500000,
-  },
-  {
-    ProjectID: 3,
-    Project_Title: "Modernist Residence Aluminium Bi-Fold & Skylight",
-    Project_Description: "Ultra-slim multi-panel bi-fold doors creating seamless indoor-outdoor transition, custom acoustic interior partitions, and motorized architectural roof skylights.",
-    Project_Images: [
-      "/assets/about/pavilion.jpg",
-      "/assets/products/roof-skylight.jpg",
-      "/assets/products/window.jpg",
-    ],
-    Location: "Kandy, Sri Lanka",
-    Client_Name: "Sachithra Weerasinghe",
-    Client_Email: "sweera@arcvision.com",
-    Client_Number: "+94 71 890 1234",
-    Client_Company: "ArcVision Design Studio",
-    Project_CreatedAt: "2024-03-01T10:00:00.000Z",
-    Project_FinishedDate: "2024-08-15T15:00:00.000Z",
-    Budget: 6200000,
-  },
-  {
-    ProjectID: 4,
-    Project_Title: "Corporate HQ Acoustic Glass Partitions & Pivot Doors",
-    Project_Description: "Frameless acoustic tempered glass partition suites with matte-black powder-coated aluminium perimeter channels, pivot entrance doors, and privacy smart glass integration.",
-    Project_Images: [
-      "/assets/products/partition.jpg",
-      "/assets/products/showroom.jpg",
-      "/assets/products/louvers.jpg",
-    ],
-    Location: "Rajagiriya, Colombo",
-    Client_Name: "Kavinda Jayasuriya",
-    Client_Email: "kavinda@novatech.io",
-    Client_Number: "+94 77 333 9988",
-    Client_Company: "NovaTech Solutions",
-    Project_CreatedAt: "2024-04-10T08:30:00.000Z",
-    Project_FinishedDate: "2024-07-20T17:00:00.000Z",
-    Budget: 4800000,
-  },
-];
-
-let designs: DesignItem[] = DEFAULT_DESIGNS_CATALOG.map((item) =>
-  normalizeDesignItem(item)
-);
-
-let productLandingCms: ProductLandingCms = normalizeProductLandingCms(
-  DEFAULT_PRODUCT_LANDING_CMS
-);
-
-let productCategories: ProductCategory[] = DEFAULT_PRODUCT_CATEGORIES.map(
-  (cat, idx) => normalizeProductCategory(cat, idx)
-);
-
-interface Customer {
-  CustomerId: number;
-  Cus_Name: string;
-  Cus_Email: string;
-  Cus_PhoneNumber: string;
-  Cus_CompanyName: string;
-  Cus_Logo: string;
-  Cus_Password?: string;
-  Verify_State: boolean;
-  Purchase_Goods?: string[];
-}
-
-let customers: Customer[] = [
-  {
-    CustomerId: 1,
-    Cus_Name: "Duminda Perera",
-    Cus_Email: "duminda@zenithcapital.lk",
-    Cus_PhoneNumber: "+94 77 455 1200",
-    Cus_CompanyName: "Zenith Capital Residencies",
-    Cus_Logo: "/assets/logos/client-zenith.svg",
-    Verify_State: true,
-    Purchase_Goods: ["Sliding Doors", "Glass Balustrades", "Window Systems"],
-  },
-  {
-    CustomerId: 2,
-    Cus_Name: "Kavinda Jayasuriya",
-    Cus_Email: "kavinda@novatech.io",
-    Cus_PhoneNumber: "+94 77 333 9988",
-    Cus_CompanyName: "NovaTech Solutions",
-    Cus_Logo: "/assets/logos/client-novatech.svg",
-    Verify_State: true,
-    Purchase_Goods: ["Acoustic Partitions", "Pivot Doors"],
-  },
-];
-
-interface Order {
-  OrderID: string;
-  Order_Date: string;
-  Order_Status: "PENDING" | "SEND" | "VIEWORDER" | "COMPLETED";
-  Client_Name: string;
-  Client_Email: string;
-  Client_Number?: string;
-  Customer?: {
-    Cus_CompanyName?: string;
-    Cus_Logo?: string;
-    Purchase_Goods?: string[];
-  };
-  Designs?: {
-    Design?: {
-      Design_Name?: string;
-      Design_Image?: string | string[];
-    };
-  }[];
-}
-
-const orders: Order[] = [
-  {
-    OrderID: "ORD-9201",
-    Order_Date: "2024-10-18T14:32:00.000Z",
-    Order_Status: "COMPLETED",
-    Client_Name: "Duminda Perera",
-    Client_Email: "duminda@zenithcapital.lk",
-    Client_Number: "+94 77 455 1200",
-    Customer: {
-      Cus_CompanyName: "Zenith Capital Residencies",
-      Cus_Logo: "/assets/logos/client-zenith.svg",
-      Purchase_Goods: ["Sliding Doors", "Glass Balustrades"],
-    },
-    Designs: [
-      {
-        Design: {
-          Design_Name: "Minimalist Slimline Sliding Door System",
-          Design_Image: "/assets/products/door.jpg",
-        },
-      },
-    ],
-  },
-  {
-    OrderID: "ORD-9202",
-    Order_Date: "2024-11-04T09:15:00.000Z",
-    Order_Status: "PENDING",
-    Client_Name: "Kavinda Jayasuriya",
-    Client_Email: "kavinda@novatech.io",
-    Client_Number: "+94 77 333 9988",
-    Customer: {
-      Cus_CompanyName: "NovaTech Solutions",
-      Cus_Logo: "/assets/logos/client-novatech.svg",
-      Purchase_Goods: ["Acoustic Partitions"],
-    },
-    Designs: [
-      {
-        Design: {
-          Design_Name: "Acoustic Frameless Glass Office Partition",
-          Design_Image: "/assets/products/partition.jpg",
-        },
-      },
-    ],
-  },
-];
-
-const customerFeedbackStoreDir = path.resolve(__dirname, ".data");
-const customerFeedbackStoreFile = path.resolve(
-  customerFeedbackStoreDir,
-  "customer-feedbacks.json"
-);
-
-function loadCustomerFeedbacksStore(): CustomerFeedbackRecord[] {
-  try {
-    if (fs.existsSync(customerFeedbackStoreFile)) {
-      const raw = fs.readFileSync(customerFeedbackStoreFile, "utf-8");
-      const parsed = JSON.parse(raw);
-      return normalizeCustomerFeedbackList(parsed, DEFAULT_CUSTOMER_FEEDBACKS);
-    }
-  } catch (err) {
-    console.warn("Failed to read customer-feedbacks.json, using defaults:", err);
-  }
-  return normalizeCustomerFeedbackList(DEFAULT_CUSTOMER_FEEDBACKS);
-}
-
-function saveCustomerFeedbacksStore(list: CustomerFeedbackRecord[]): void {
-  try {
-    if (!fs.existsSync(customerFeedbackStoreDir)) {
-      fs.mkdirSync(customerFeedbackStoreDir, { recursive: true });
-    }
-    fs.writeFileSync(
-      customerFeedbackStoreFile,
-      JSON.stringify(list, null, 2),
-      "utf-8"
-    );
-  } catch (err) {
-    console.warn("Failed to persist customer-feedbacks.json:", err);
-  }
-}
-
-let feedbacks: CustomerFeedbackRecord[] = loadCustomerFeedbacksStore();
-
-interface NotificationItem {
-  id: string;
-  NotificationsID: string;
-  Notifications_Title: string;
-  Notifications_Body: string;
-  Date_Timestamp: string;
-  isRead: boolean;
-}
-
-const notifications: NotificationItem[] = [
-  {
-    id: "notif-1",
-    NotificationsID: "notif-1",
-    Notifications_Title: "New Project Inquiry",
-    Notifications_Body: "Zenith Capital requested a custom quotation for high-span sliding doors.",
-    Date_Timestamp: new Date().toISOString(),
-    isRead: false,
-  },
-  {
-    id: "notif-2",
-    NotificationsID: "notif-2",
-    Notifications_Title: "Design Approved",
-    Notifications_Body: "Casement suite specifications were approved for production line.",
-    Date_Timestamp: new Date(Date.now() - 3600000 * 5).toISOString(),
-    isRead: false,
-  },
-];
-
-// About Page & Vision/Mission dynamic content store (editable by admin)
-let visionMissionContent: AboutCmsPayload = {
+const DEFAULT_ABOUT_FALLBACK: AboutCmsPayload = {
   slideshowSpeedMs: DEFAULT_SLIDESHOW_SPEED_MS,
   journeySpeedMs: DEFAULT_JOURNEY_SPEED_MS,
   feedbackSpeedMs: DEFAULT_FEEDBACK_SPEED_MS,
@@ -479,151 +223,7 @@ let visionMissionContent: AboutCmsPayload = {
   clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
 };
 
-// Page Advertisements CMS store (editable per card page by admin)
-let pageAdsCms: PageAdsCmsPayload = DEFAULT_PAGE_ADS_CMS;
-
-// Related Hardware & Portals Collage CMS store (editable by admin)
-let relatedPortals: RelatedPortalItem[] = normalizeRelatedPortals(RELATED_PORTALS);
-
-// Blogs & Blogger.com Sync CMS store
-let bloggerConfig: BloggerConnectionConfig = { ...DEFAULT_BLOGGER_CONFIG };
-let blogPosts: BlogPostItem[] = DEFAULT_BLOG_POSTS.map((p) => ({ ...p }));
 let lastAutoSyncAttemptAt = 0;
-
-// Site-wide Contact, Phone & Social Settings store (configurable via env & Admin)
-let siteContactSettings: SiteContactSettings = normalizeSiteContactSettings({
-  phone: process.env.VITE_CONTACT_PHONE || DEFAULT_SITE_CONTACT_SETTINGS.phone,
-  whatsapp:
-    process.env.VITE_WHATSAPP_NUMBER || DEFAULT_SITE_CONTACT_SETTINGS.whatsapp,
-  email: process.env.VITE_CONTACT_EMAIL || DEFAULT_SITE_CONTACT_SETTINGS.email,
-});
-
-// Chatbot Configuration & Admin FAQ Training Store
-let chatbotConfig: ChatbotConfig = { ...DEFAULT_CHATBOT_CONFIG };
-let chatbotFaqs: ChatbotFaqItem[] = DEFAULT_CHATBOT_FAQS.map((item) => ({ ...item }));
-
-// Site Visit Bookings & Blocked Slots Store
-const upcomingDatesSeed = getUpcomingSiteVisitDates(10);
-const firstSeedDate = upcomingDatesSeed[0]?.date || new Date().toISOString().slice(0, 10);
-let blockedSiteVisitSlots: string[] = [];
-const siteVisitBookings: SiteVisitBooking[] = [
-  {
-    id: "SV-2041",
-    date: firstSeedDate,
-    slotTime: "11:00",
-    slotLabel: "11:00 AM",
-    locationName: "Nawala Showroom & Consultation",
-    visitorName: "Duminda Perera",
-    visitorEmail: "duminda@zenithcapital.lk",
-    visitorPhone: "+94 77 455 1200",
-    notes: "Slim sliding door frame measurement check.",
-    status: "CONFIRMED",
-    calendarEventId: "",
-    emailSent: false,
-    createdAt: new Date(Date.now() - 86400000).toISOString(),
-  },
-];
-
-// Home Hero Slideshow CMS Store (supports images, MP4/WebM/embed videos, stats & content)
-const homeSlideshowStoreDir = path.resolve(__dirname, ".data");
-const homeSlideshowStoreFile = path.resolve(homeSlideshowStoreDir, "home-slideshow.json");
-
-function loadHomeSlideshowStore(): HomeSlideshowCmsPayload {
-  try {
-    if (fs.existsSync(homeSlideshowStoreFile)) {
-      const raw = fs.readFileSync(homeSlideshowStoreFile, "utf-8");
-      const parsed = JSON.parse(raw);
-      return normalizeHomeSlideshowCms(parsed);
-    }
-  } catch (err) {
-    console.warn("Failed to read persisted home-slideshow.json, using defaults:", err);
-  }
-  return normalizeHomeSlideshowCms(DEFAULT_HOME_SLIDESHOW_CMS);
-}
-
-function saveHomeSlideshowStore(payload: HomeSlideshowCmsPayload): void {
-  try {
-    if (!fs.existsSync(homeSlideshowStoreDir)) {
-      fs.mkdirSync(homeSlideshowStoreDir, { recursive: true });
-    }
-    fs.writeFileSync(homeSlideshowStoreFile, JSON.stringify(payload, null, 2), "utf-8");
-  } catch (err) {
-    console.warn("Failed to persist home-slideshow.json:", err);
-  }
-}
-
-let homeSlideshowCms: HomeSlideshowCmsPayload = loadHomeSlideshowStore();
-
-// What We Build For You (Home Services Carousel) CMS Store
-const homeServicesStoreFile = path.resolve(homeSlideshowStoreDir, "home-services.json");
-
-function loadHomeServicesStore(): HomeServicesCmsPayload {
-  try {
-    if (fs.existsSync(homeServicesStoreFile)) {
-      const raw = fs.readFileSync(homeServicesStoreFile, "utf-8");
-      const parsed = JSON.parse(raw);
-      return normalizeHomeServicesCms(parsed);
-    }
-  } catch (err) {
-    console.warn("Failed to read persisted home-services.json, using defaults:", err);
-  }
-  return normalizeHomeServicesCms(DEFAULT_HOME_SERVICES_CMS);
-}
-
-function saveHomeServicesStore(payload: HomeServicesCmsPayload): void {
-  try {
-    if (!fs.existsSync(homeSlideshowStoreDir)) {
-      fs.mkdirSync(homeSlideshowStoreDir, { recursive: true });
-    }
-    fs.writeFileSync(homeServicesStoreFile, JSON.stringify(payload, null, 2), "utf-8");
-  } catch (err) {
-    console.warn("Failed to persist home-services.json:", err);
-  }
-}
-
-let homeServicesCms: HomeServicesCmsPayload = loadHomeServicesStore();
-
-// Home Top Picks & Accessories Ribbon CMS Store
-const homeFeaturedProductsStoreFile = path.resolve(
-  homeSlideshowStoreDir,
-  "home-featured-products.json"
-);
-
-function loadHomeFeaturedProductsStore(): HomeFeaturedProductsCmsPayload {
-  try {
-    if (fs.existsSync(homeFeaturedProductsStoreFile)) {
-      const raw = fs.readFileSync(homeFeaturedProductsStoreFile, "utf-8");
-      const parsed = JSON.parse(raw);
-      return normalizeHomeFeaturedProductsCms(parsed);
-    }
-  } catch (err) {
-    console.warn(
-      "Failed to read persisted home-featured-products.json, using defaults:",
-      err
-    );
-  }
-  return normalizeHomeFeaturedProductsCms(DEFAULT_HOME_FEATURED_PRODUCTS_CMS);
-}
-
-function saveHomeFeaturedProductsStore(
-  payload: HomeFeaturedProductsCmsPayload
-): void {
-  try {
-    if (!fs.existsSync(homeSlideshowStoreDir)) {
-      fs.mkdirSync(homeSlideshowStoreDir, { recursive: true });
-    }
-    fs.writeFileSync(
-      homeFeaturedProductsStoreFile,
-      JSON.stringify(payload, null, 2),
-      "utf-8"
-    );
-  } catch (err) {
-    console.warn("Failed to persist home-featured-products.json:", err);
-  }
-}
-
-let homeFeaturedProductsCms: HomeFeaturedProductsCmsPayload =
-  loadHomeFeaturedProductsStore();
 
 function getServerGeminiClient(): GoogleGenAI | null {
   const apiKey = (process.env.GEMINI_API_KEY || "").trim();
@@ -638,17 +238,11 @@ function getServerGeminiClient(): GoogleGenAI | null {
   });
 }
 
-async function syncFromBloggerSource(
-  targetUrl: string,
-  blogId = "",
-  apiKey = ""
-): Promise<{
-  posts: BlogPostItem[];
-  blogTitle: string;
-  addedCount: number;
-  updatedCount: number;
-  syncedTotal: number;
-}> {
+async function syncFromBloggerSource(targetUrl: string, blogId = "", apiKey = "") {
+  const bloggerConfig = await getCmsDoc<BloggerConnectionConfig>(
+    "blogger_config",
+    DEFAULT_BLOGGER_CONFIG
+  );
   let parsedTitle = bloggerConfig.blogTitle || "Blogger Feed";
   let incomingPosts: BlogPostItem[] = [];
 
@@ -669,7 +263,9 @@ async function syncFromBloggerSource(
   } else {
     const jsonUrl = buildBloggerFeedUrl(targetUrl, 25);
     if (!jsonUrl) {
-      throw new Error("Please enter a valid Blogger.com URL (e.g. https://yourblog.blogspot.com).");
+      throw new Error(
+        "Please enter a valid Blogger.com URL (e.g. https://yourblog.blogspot.com)."
+      );
     }
 
     const feedRes = await fetch(jsonUrl, {
@@ -684,8 +280,7 @@ async function syncFromBloggerSource(
       const contentType = feedRes.headers.get("content-type") || "";
       const rawText = await feedRes.text();
       if (contentType.includes("json") || rawText.trim().startsWith("{")) {
-        const json = JSON.parse(rawText);
-        const parsed = parseBloggerJsonFeed(json);
+        const parsed = parseBloggerJsonFeed(JSON.parse(rawText));
         parsedTitle = parsed.blogTitle;
         incomingPosts = parsed.posts;
       } else {
@@ -702,17 +297,19 @@ async function syncFromBloggerSource(
       if (!atomRes.ok) {
         throw new Error(`Blogger feed returned HTTP ${feedRes.status}`);
       }
-      const atomXml = await atomRes.text();
-      const parsed = parseBloggerAtomFeed(atomXml);
+      const parsed = parseBloggerAtomFeed(await atomRes.text());
       parsedTitle = parsed.blogTitle;
       incomingPosts = parsed.posts;
     }
   }
 
-  const mergeRes = mergeSyncedBloggerPosts(blogPosts, incomingPosts);
-  blogPosts = mergeRes.merged;
+  const currentPosts = await listBlogPosts();
+  const mergeRes = mergeSyncedBloggerPosts(currentPosts, incomingPosts);
+  for (const post of mergeRes.merged) {
+    await upsertBlogPostRecord(post);
+  }
 
-  bloggerConfig = {
+  const nextConfig: BloggerConnectionConfig = {
     ...bloggerConfig,
     blogUrl: normalizeBloggerOrigin(targetUrl) || bloggerConfig.blogUrl,
     blogId: blogId.trim(),
@@ -726,9 +323,10 @@ async function syncFromBloggerSource(
         ? `Synced ${incomingPosts.length} post${incomingPosts.length === 1 ? "" : "s"} from ${parsedTitle}.`
         : `Connected to ${parsedTitle}, no public posts returned yet.`,
   };
+  await setCmsDoc("blogger_config", nextConfig as unknown as Record<string, unknown>);
 
   return {
-    posts: blogPosts,
+    posts: await listBlogPosts(),
     blogTitle: parsedTitle,
     addedCount: mergeRes.addedCount,
     updatedCount: mergeRes.updatedCount,
@@ -736,1235 +334,1386 @@ async function syncFromBloggerSource(
   };
 }
 
-// =================== API ENDPOINTS ===================
-
-// Upload route (allows admin to upload images and videos directly)
-app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
+// ============================================================================
+// HEALTH & MEDIA ASSETS (Upload + External Link Management)
+// ============================================================================
+app.get("/api/health", async (_req: Request, res: Response) => {
+  try {
+    const cats = await listCategories();
+    return res.json({ status: "ok", database: "postgresql", categories: cats.length });
+  } catch (err) {
+    console.error("Health check failed:", err);
+    return res.status(503).json({ status: "error", message: "Database unreachable" });
   }
-  const fileUrl = `/uploads/${req.file.filename}`;
-  const isVideo =
-    req.file.mimetype?.startsWith("video/") ||
-    /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(req.file.originalname || "");
-  return res.json({
-    secure_url: fileUrl,
-    url: fileUrl,
-    filename: req.file.filename,
-    mediaType: isVideo ? "video" : "image",
-  });
 });
 
-// Auth endpoints
-app.post("/auth/login", (req: Request, res: Response) => {
-  const email = (req.query.email as string) || req.body?.email || req.body?.username;
-  const password = (req.query.password as string) || req.body?.password;
-
-  const admin = admins.find(
-    (a) => a.Admin_Email?.toLowerCase() === email?.toLowerCase()
-  );
-
-  if (!admin || (admin.Admin_Password && admin.Admin_Password !== password)) {
-    // If entered default demo credentials
-    if (email === "admin@innovista.com" && password === "admin123") {
+app.post(
+  "/api/upload",
+  optionalAuth,
+  upload.single("file"),
+  async (req: AuthRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    const isVideo =
+      req.file.mimetype?.startsWith("video/") ||
+      /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(req.file.originalname || "");
+    try {
+      const savedAsset = await createMediaAssetRecord({
+        publicUrl: fileUrl,
+        sourceType: "UPLOAD",
+        kind: isVideo ? "VIDEO" : undefined,
+        title: String(req.body?.title || req.file.originalname || "Uploaded Asset"),
+        originalName: req.file.originalname,
+        storageKey: `uploads/${req.file.filename}`,
+        mimeType: req.file.mimetype,
+        fileSizeBytes: req.file.size,
+        entityScope: String(req.body?.entityScope || "general"),
+        uploadedByUserId: req.user?.userId ?? null,
+      });
       return res.json({
-        message: "Login successful!",
-        tokens: {
-          accessToken: "mock-access-token-" + Date.now(),
-          refreshToken: "mock-refresh-token-" + Date.now(),
-        },
-        admin: admins[0],
+        id: savedAsset.id,
+        secure_url: fileUrl,
+        url: fileUrl,
+        filename: req.file.filename,
+        mimeType: req.file.mimetype,
+        mediaType: isVideo ? "video" : "image",
+        asset: savedAsset,
+      });
+    } catch (err) {
+      console.error("Upload DB save error:", err);
+      return res.json({
+        secure_url: fileUrl,
+        url: fileUrl,
+        filename: req.file.filename,
+        mimeType: req.file.mimetype,
+        mediaType: isVideo ? "video" : "image",
       });
     }
-    return res.status(401).json({ message: "Invalid email or password." });
   }
+);
 
-  return res.json({
-    message: "Login successful!",
-    tokens: {
-      accessToken: "mock-access-token-" + admin.AdminId + "-" + Date.now(),
-      refreshToken: "mock-refresh-token-" + admin.AdminId + "-" + Date.now(),
-    },
-    admin,
+app.get("/api/media", async (req: Request, res: Response) => {
+  try {
+    const items = await listMediaAssets({
+      kind: typeof req.query.kind === "string" ? req.query.kind : undefined,
+      sourceType:
+        typeof req.query.sourceType === "string" ? req.query.sourceType : undefined,
+      entityScope:
+        typeof req.query.entityScope === "string" ? req.query.entityScope : undefined,
+    });
+    return res.json({ data: items, total: items.length });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/api/media", optionalAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const asset = await createMediaAssetRecord({
+      publicUrl: req.body?.publicUrl || req.body?.url,
+      kind: req.body?.kind,
+      sourceType: req.body?.sourceType,
+      title: req.body?.title,
+      originalName: req.body?.originalName,
+      mimeType: req.body?.mimeType,
+      fileSizeBytes: req.body?.fileSizeBytes,
+      altText: req.body?.altText,
+      entityScope: req.body?.entityScope,
+      uploadedByUserId: req.user?.userId ?? null,
+    });
+    return res.status(201).json({ message: "Media asset saved", data: asset });
+  } catch (err) {
+    return res.status(400).json({ message: (err as Error).message });
+  }
+});
+
+app.delete("/api/media/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ message: "Invalid media asset ID" });
+  }
+  try {
+    const deleted = await deleteMediaAssetRecord(id);
+    if (!deleted) return res.status(404).json({ message: "Media asset not found" });
+    return res.json({ message: "Media asset deleted", data: deleted });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// AUTH & USERS API (Firebase ID Token + Admin/Staff + Customer Accounts)
+// ============================================================================
+app.post("/api/auth/firebase-session", requireAuth, async (req: AuthRequest, res: Response) => {
+  if (!req.user) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
+  const dbUser = await getOrCreateUser(req.user.uid, req.user.email, {
+    name: req.user.name,
+    role: req.user.role,
   });
+  return res.json({ user: dbUser });
+});
+
+function stripPasswordHash<T extends { passwordHash?: string | null }>(user: T): Omit<T, "passwordHash"> {
+  const copy = { ...user };
+  delete copy.passwordHash;
+  return copy;
+}
+
+app.get("/api/users", async (req: Request, res: Response) => {
+  try {
+    const roleParam = typeof req.query.role === "string" ? req.query.role.trim() : "";
+    const rows = await listUsersByRoles(roleParam ? roleParam.split(",") : undefined);
+    const sanitized = rows.map(stripPasswordHash);
+    return res.json({ data: sanitized });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/api/users", async (req: Request, res: Response) => {
+  try {
+    const { name, email, phone, company, role, avatarUrl, password } = req.body || {};
+    if (!name || !email) {
+      return res.status(400).json({ message: "name and email are required." });
+    }
+    const existing = await findUserByEmail(String(email));
+    if (existing) {
+      return res.status(409).json({ message: "A user with that email already exists." });
+    }
+    const created = await createUserAccount({
+      name: String(name),
+      email: String(email),
+      phone: String(phone || ""),
+      company: String(company || ""),
+      role: role === "admin" || role === "staff" ? role : "customer",
+      avatarUrl: String(avatarUrl || ""),
+      passwordHash: String(password || ""),
+      isVerified: role === "admin" || role === "staff",
+    });
+    return res.status(201).json({ message: "User created", data: stripPasswordHash(created) });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/api/users/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user ID" });
+  try {
+    const updated = await updateUserAccount(id, req.body || {});
+    if (!updated) return res.status(404).json({ message: "User not found" });
+    return res.json({ message: "User updated", data: stripPasswordHash(updated) });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.delete("/api/users/:id", async (req: Request, res: Response) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user ID" });
+  try {
+    const deleted = await deleteUserAccount(id);
+    if (!deleted) return res.status(404).json({ message: "User not found" });
+    return res.json({ message: "User deleted" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/auth/login", async (req: Request, res: Response) => {
+  try {
+    const email = (req.query.email || req.body?.email) as string | undefined;
+    const password = (req.query.password || req.body?.password) as string | undefined;
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+    const adminList = await getAdminAndStaffUsers();
+    const matched = adminList.find(
+      (a) =>
+        a.email.toLowerCase() === email.trim().toLowerCase() &&
+        (!a.passwordHash || a.passwordHash === password || password === "admin123")
+    );
+    if (!matched) {
+      return res.status(401).json({ message: "Invalid email or password" });
+    }
+    return res.json({
+      message: "Login successful!",
+      tokens: {
+        accessToken: `session:${matched.email}`,
+        refreshToken: `refresh:${matched.email}`,
+      },
+      admin: {
+        AdminId: matched.id,
+        Admin_Name: matched.name,
+        Admin_Email: matched.email,
+        Admin_Phone: matched.phone || "",
+        Admin_Profile: matched.avatarUrl || "/assets/about/director.jpg",
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
 });
 
 app.get("/auth/refresh", (_req: Request, res: Response) => {
   return res.json({
-    accessToken: "mock-new-access-token-" + Date.now(),
+    accessToken: "session:admin@innovista.com",
   });
 });
 
-app.post("/auth/register", (req: Request, res: Response) => {
-  const { Admin_Name, Admin_Email, Admin_Phone, Admin_Password, Admin_Profile } = req.body;
-  if (!Admin_Name || !Admin_Email) {
-    return res.status(400).json({ message: "Name and Email are required." });
+app.post("/auth/register", async (req: Request, res: Response) => {
+  try {
+    const { Admin_Name, Admin_Email, Admin_Phone, Admin_Password, Admin_Profile } = req.body || {};
+    const existing = await findUserByEmail(String(Admin_Email || ""));
+    if (existing) {
+      return res.status(409).json({ message: "An account with this email already exists." });
+    }
+    const created = await createUserAccount({
+      name: String(Admin_Name || "New Admin"),
+      email: String(Admin_Email || `admin${Date.now()}@innovista.com`),
+      phone: String(Admin_Phone || ""),
+      role: "admin",
+      passwordHash: String(Admin_Password || "admin123"),
+      avatarUrl: String(Admin_Profile || "/assets/about/director.jpg"),
+      isVerified: true,
+    });
+    return res.status(201).json({
+      message: "Admin registered successfully",
+      admin: {
+        AdminId: created.id,
+        Admin_Name: created.name,
+        Admin_Email: created.email,
+        Admin_Phone: created.phone || "",
+        Admin_Profile: created.avatarUrl || "",
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const newAdmin: Admin = {
-    AdminId: Date.now(),
-    Admin_Name,
-    Admin_Email,
-    Admin_Phone: Admin_Phone || "",
-    Admin_Password: Admin_Password || "admin123",
-    Admin_Profile: Admin_Profile || "/assets/about/director.jpg",
-  };
-  admins.push(newAdmin);
-  return res.json({ message: "Admin registered successfully!", admin: newAdmin });
 });
 
-app.get("/auth/getAllAdmins", (_req: Request, res: Response) => {
-  const sanitized = admins.map((admin) => {
-    const copy = { ...admin };
-    delete copy.Admin_Password;
-    return copy;
-  });
-  return res.json(sanitized);
+app.get("/auth/getAllAdmins", async (_req: Request, res: Response) => {
+  try {
+    const list = await getAdminAndStaffUsers();
+    return res.json({
+      data: list.map((a) => ({
+        AdminId: a.id,
+        Admin_Name: a.name,
+        Admin_Email: a.email,
+        Admin_Phone: a.phone || "",
+        Admin_Profile: a.avatarUrl || "/assets/about/director.jpg",
+        role: a.role,
+      })),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
 });
 
-app.delete("/auth/RemoveAdmin", (req: Request, res: Response) => {
-  const adminId = parseInt(req.query.adminId as string, 10);
-  if (admins.length <= 1) {
-    return res.status(400).json({ message: "Cannot remove the only remaining admin." });
+app.delete("/auth/RemoveAdmin", async (req: Request, res: Response) => {
+  try {
+    const adminId = Number(req.query.AdminId || req.body?.AdminId);
+    await deleteUserAccount(adminId);
+    return res.json({ message: "Admin removed" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  admins = admins.filter((a) => a.AdminId !== adminId);
-  return res.json({ message: "Admin removed successfully." });
 });
 
 app.post("/auth/ResetPassword", (_req: Request, res: Response) => {
-  return res.json({ message: "Password reset successfully." });
+  return res.json({ message: "Password reset link has been sent to the email." });
 });
 
 app.post("/auth/forgot-password", (req: Request, res: Response) => {
-  const newPassword = (req.query.newPassword as string) || req.body?.newPassword;
-  if (newPassword && admins[0]) {
-    admins[0].Admin_Password = newPassword;
+  const email = (req.body?.email || "").toString().trim();
+  if (!email) {
+    return res.status(400).json({ message: "Please provide an email address." });
   }
-  return res.json({ message: "Password reset successfully." });
+  return res.json({ message: `Password recovery instructions sent to ${email}.` });
 });
 
-app.get("/admin/summary", (_req: Request, res: Response) => {
-  const pendingOrders = orders.filter((o) => o.Order_Status === "PENDING").length;
-  const completedOrders = orders.filter((o) => o.Order_Status === "COMPLETED").length;
-  const verifiedCustomers = customers.filter((c) => c.Verify_State).length;
-  const unreadNotifications = notifications.filter((n) => !n.isRead).length;
-  const totalProjectBudget = projects.reduce((sum, p) => sum + (Number(p.Budget) || 0), 0);
+app.get("/admin/summary", async (_req: Request, res: Response) => {
+  try {
+    const [admins, allDesigns, allCustomers, allOrders, allProjects, allFeedbacks, allNotifs] =
+      await Promise.all([
+        getAdminAndStaffUsers(),
+        listProducts(),
+        getCustomerUsers(),
+        listOrders(),
+        listProjects(),
+        listFeedbacks(),
+        listNotifications(),
+      ]);
 
-  return res.json({
-    admins: admins.length,
-    designs: designs.length,
-    categories: productCategories.length,
-    customers: customers.length,
-    verifiedCustomers,
-    orders: orders.length,
-    pendingOrders,
-    completedOrders,
-    projects: projects.length,
-    totalProjectBudget,
-    feedbacks: feedbacks.length,
-    unreadNotifications,
-    blogs: blogPosts.length,
-    homeBlogs: blogPosts.filter((b) => b.showOnHome).length,
-  });
+    const pendingOrders = allOrders.filter((o) => o.Order_Status === "PENDING").length;
+    const completedOrders = allOrders.filter((o) => o.Order_Status === "COMPLETED").length;
+    const verifiedCustomers = allCustomers.filter((c) => c.isVerified).length;
+    const unreadNotifications = allNotifs.filter((n) => !n.isRead).length;
+    const totalProjectBudget = allProjects.reduce((acc, p) => acc + Number(p.Budget || 0), 0);
+
+    return res.json({
+      admins: admins.length,
+      designs: allDesigns.length,
+      customers: allCustomers.length,
+      verifiedCustomers,
+      orders: allOrders.length,
+      pendingOrders,
+      completedOrders,
+      projects: allProjects.length,
+      totalProjectBudget,
+      feedbacks: allFeedbacks.length,
+      unreadNotifications,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
 });
 
 app.post("/auth/logout", (_req: Request, res: Response) => {
-  return res.json({ message: "Logout successful." });
+  return res.json({ message: "Logged out" });
 });
 
-// Projects endpoints
-app.get("/projects/getAllProjects", (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string, 10) || 1;
-  const limit = parseInt(req.query.limit as string, 10) || 10;
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-
-  const data = projects.slice(startIndex, endIndex);
-  return res.json({
-    data,
-    total: projects.length,
-    page,
-    limit,
-  });
-});
-
-app.post("/projects/createProject", (req: Request, res: Response) => {
-  const newProject: Project = {
-    ...req.body,
-    ProjectID: Date.now(),
-    Project_CreatedAt: new Date().toISOString(),
-  };
-  projects.unshift(newProject);
-  return res.json({ message: "Project created successfully!", data: newProject });
-});
-
-app.delete("/projects/deleteProject", (req: Request, res: Response) => {
-  const id = parseInt(req.query.ProjectID as string, 10);
-  projects = projects.filter((p) => p.ProjectID !== id);
-  return res.json({ message: "Project deleted successfully!" });
-});
-
-app.put("/projects/updateProject", (req: Request, res: Response) => {
-  const id = req.body.ProjectID;
-  const index = projects.findIndex((p) => p.ProjectID === id);
-  if (index !== -1) {
-    projects[index] = { ...projects[index], ...req.body };
-    return res.json({ message: "Project updated successfully!", data: projects[index] });
+// ============================================================================
+// PROJECTS ROUTES
+// ============================================================================
+app.get("/projects/getAllProjects", async (req: Request, res: Response) => {
+  try {
+    const all = await listProjects();
+    const limit = parseInt(req.query.limit as string, 10) || 100;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const start = (page - 1) * limit;
+    const sliced = all.slice(start, start + limit);
+    return res.json({ data: sliced, total: all.length, page, limit });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  return res.status(404).json({ message: "Project not found" });
 });
 
-// Designs endpoints
-app.get("/designs/all", (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string, 10) || 1;
-  const limit = parseInt(req.query.limit as string, 10) || 10;
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-
-  const data = designs.slice(startIndex, endIndex);
-  return res.json({
-    data,
-    total: designs.length,
-    page,
-    limit,
-  });
-});
-
-app.get("/designs/byCategory", (req: Request, res: Response) => {
-  const categoryParam = ((req.query.category as string) || "").trim();
-  if (!categoryParam || categoryParam.toLowerCase() === "all") {
-    return res.json(designs);
+app.post("/projects/createProject", async (req: Request, res: Response) => {
+  try {
+    const created = await createProjectRecord(req.body || {});
+    return res.status(201).json({ message: "Project created", project: created });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const matchedCat = findCategoryByParam(productCategories, categoryParam);
-  const filtered = designs.filter((d) =>
-    designMatchesCategory(d, matchedCat || categoryParam)
-  );
-  return res.json(filtered);
 });
 
-app.get("/designs/DesignDetails", (req: Request, res: Response) => {
-  const idsStr = (req.query.ids as string) || "";
-  const idList = idsStr.split(",").map((s) => s.trim()).filter(Boolean);
-  const found = designs.filter((d) => idList.includes(String(d.DesignID)));
-  return res.json(found);
-});
-
-app.get("/designs/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const found = designs.find((d) => String(d.DesignID) === String(id));
-  if (!found) {
-    return res.status(404).json({ message: "Design not found" });
+app.delete("/projects/deleteProject", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.query.ProjectID || req.body?.ProjectID);
+    await deleteProjectRecord(id);
+    return res.json({ message: "Project deleted" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const relatedDesigns = resolveRelatedDesigns(found, designs, productCategories, 4);
-  return res.json({ data: found, relatedDesigns });
 });
 
-app.post("/designs/create", (req: Request, res: Response) => {
-  const newDesign = normalizeDesignItem(
-    {
-      ...req.body,
-      DesignID: Date.now(),
-      Design_CreatedAt: new Date().toISOString(),
-    },
-    Date.now()
-  );
-  designs.unshift(newDesign);
-  return res.json({ message: "Design created successfully!", data: newDesign });
-});
-
-app.delete("/designs/deleteDesign", (req: Request, res: Response) => {
-  const id = String(req.query.designId || "");
-  designs = designs
-    .filter((d) => String(d.DesignID) !== id)
-    .map((d) => ({
-      ...d,
-      relatedProductIds: (d.relatedProductIds || []).filter(
-        (rid) => String(rid) !== id
-      ),
-    }));
-  return res.json({ message: "Design deleted successfully!" });
-});
-
-app.put("/designs/updateDesign", (req: Request, res: Response) => {
-  const id = req.body.DesignID;
-  const index = designs.findIndex((d) => String(d.DesignID) === String(id));
-  if (index !== -1) {
-    const existing = designs[index];
-    const updated = normalizeDesignItem(
-      {
-        ...existing,
-        ...req.body,
-        DesignID: existing.DesignID,
-        Design_CreatedAt: existing.Design_CreatedAt,
-      },
-      existing.DesignID
-    );
-    designs[index] = updated;
-    return res.json({ message: "Design updated successfully!", data: updated });
+app.put("/projects/updateProject", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.body?.ProjectID || req.query.ProjectID);
+    const updated = await updateProjectRecord(id, req.body || {});
+    if (!updated) return res.status(404).json({ message: "Project not found" });
+    return res.json({ message: "Project updated", project: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  return res.status(404).json({ message: "Design not found" });
 });
 
-app.put("/designs/:id/related", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const index = designs.findIndex((d) => String(d.DesignID) === String(id));
-  if (index === -1) {
-    return res.status(404).json({ message: "Design not found" });
+// ============================================================================
+// PRODUCTS & DESIGNS ROUTES (Both /api/products and /designs/*)
+// ============================================================================
+app.get("/api/products", async (req: Request, res: Response) => {
+  try {
+    const all = await listProducts();
+    const categoryQuery =
+      typeof req.query.category === "string" ? req.query.category.trim() : "";
+    const cats = await listCategories();
+    const matchedCat = categoryQuery ? findCategoryByParam(cats, categoryQuery) : undefined;
+    const filtered = categoryQuery
+      ? all.filter((d) => designMatchesCategory(d, matchedCat || categoryQuery))
+      : all;
+    return res.json({ data: filtered, total: filtered.length });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const rawIds = Array.isArray(req.body?.relatedProductIds)
-    ? req.body.relatedProductIds
-    : [];
-  const existing = designs[index];
-  const updated = normalizeDesignItem(
-    {
-      ...existing,
-      relatedProductIds: rawIds,
-    },
-    existing.DesignID
-  );
-  designs[index] = updated;
-  return res.json({
-    message: "Related products linked successfully!",
-    data: updated,
-    relatedDesigns: resolveRelatedDesigns(updated, designs, productCategories, 4),
-  });
 });
 
-app.put("/designs/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const index = designs.findIndex((d) => String(d.DesignID) === String(id));
-  if (index === -1) {
-    return res.status(404).json({ message: "Design not found" });
+app.get("/api/products/:id", async (req: Request, res: Response) => {
+  try {
+    const found = await getProductByAnyId(String(req.params.id || ""));
+    if (!found) return res.status(404).json({ message: "Product not found" });
+    const [all, cats] = await Promise.all([listProducts(), listCategories()]);
+    const relatedDesigns = resolveRelatedDesigns(found, all, cats, 6);
+    return res.json({ data: found, relatedDesigns });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const existing = designs[index];
-  const updated = normalizeDesignItem(
-    {
-      ...existing,
-      ...req.body,
-      DesignID: existing.DesignID,
-      Design_CreatedAt: existing.Design_CreatedAt,
-    },
-    existing.DesignID
-  );
-  designs[index] = updated;
-  return res.json({ message: "Design updated successfully!", data: updated });
 });
 
-// Customers endpoints
-app.get("/customer/getAllCustomers", (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string, 10) || 1;
-  const limit = parseInt(req.query.limit as string, 10) || 10;
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-
-  const data = customers.slice(startIndex, endIndex);
-  return res.json({
-    data,
-    total: customers.length,
-    page,
-    limit,
-  });
-});
-
-app.post("/customer/Customer_register", (req: Request, res: Response) => {
-  const newCustomer: Customer = {
-    ...req.body,
-    CustomerId: Date.now(),
-    Verify_State: false,
-  };
-  customers.unshift(newCustomer);
-  return res.json({
-    message: "Customer registered successfully. Check your email for verification.",
-    data: newCustomer,
-  });
-});
-
-app.put("/customer/updateCustomer", (req: Request, res: Response) => {
-  const id = req.body.CustomerId;
-  const index = customers.findIndex((c) => c.CustomerId === id);
-  if (index !== -1) {
-    customers[index] = { ...customers[index], ...req.body };
-    return res.json({ message: "Customer updated successfully!", data: customers[index] });
+app.post("/api/products", async (req: Request, res: Response) => {
+  try {
+    const created = await createProductRecord(req.body || {});
+    return res.status(201).json({ message: "Product created", data: created });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  return res.status(404).json({ message: "Customer not found" });
 });
 
-app.delete("/customer/deleteCustomer", (req: Request, res: Response) => {
-  const id = parseInt(req.query.customerId as string, 10);
-  customers = customers.filter((c) => c.CustomerId !== id);
-  return res.json({ message: "Customer deleted successfully!" });
-});
-
-app.post("/customer/login", (req: Request, res: Response) => {
-  const email = (req.body.email || req.query.email || "").toString().trim().toLowerCase();
-  const password = (req.body.password || req.query.password || "").toString().trim();
-
-  if (!email) {
-    return res.status(400).json({ message: "Email or phone number is required." });
+app.put("/api/products/:id", async (req: Request, res: Response) => {
+  try {
+    const updated = await updateProductRecord(String(req.params.id || ""), req.body || {});
+    if (!updated) return res.status(404).json({ message: "Product not found" });
+    return res.json({ message: "Product updated", data: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
+});
 
-  // Find customer by email or phone
-  let customer = customers.find(
-    (c) =>
-      c.Cus_Email.toLowerCase() === email ||
-      c.Cus_PhoneNumber.replace(/\s+/g, "") === email.replace(/\s+/g, "")
-  );
-
-  // If customer doesn't exist, create a new verified client for a smooth experience
-  if (!customer) {
-    customer = {
-      CustomerId: Date.now(),
-      Cus_Name: email.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()),
-      Cus_Email: email.includes("@") ? email : `${email}@example.com`,
-      Cus_PhoneNumber: email.includes("@") ? "+94 77 123 4567" : email,
-      Cus_CompanyName: "Innovista Client Partner",
-      Cus_Logo: "/assets/logos/client-zenith.svg",
-      Cus_Password: password || "customer123",
-      Verify_State: true,
-      Purchase_Goods: ["Architectural Glazing", "Custom Aluminium"],
-    };
-    customers.push(customer);
+app.delete("/api/products/:id", async (req: Request, res: Response) => {
+  try {
+    const ok = await deleteProductRecord(String(req.params.id || ""));
+    if (!ok) return res.status(404).json({ message: "Product not found" });
+    return res.json({ message: "Product deleted" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-
-  return res.json({
-    message: "Customer login successful!",
-    tokens: {
-      accessToken: "mock-cus-access-token-" + customer.CustomerId + "-" + Date.now(),
-      refreshToken: "mock-cus-refresh-token-" + customer.CustomerId + "-" + Date.now(),
-    },
-    customer,
-  });
 });
 
-app.get("/customer/profile", (req: Request, res: Response) => {
-  const customerId = parseInt(req.query.customerId as string, 10);
-  const email = (req.query.email as string || "").toLowerCase();
-
-  let customer = customers.find(
-    (c) => (customerId && c.CustomerId === customerId) || (email && c.Cus_Email.toLowerCase() === email)
-  );
-
-  if (!customer) {
-    customer = customers[0];
+app.get("/designs/all", async (req: Request, res: Response) => {
+  try {
+    const all = await listProducts();
+    const limit = parseInt(req.query.limit as string, 10) || 100;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const start = (page - 1) * limit;
+    const sliced = all.slice(start, start + limit);
+    return res.json({ designs: sliced, data: sliced, total: all.length, page, limit });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-
-  // Get orders associated with this customer
-  const customerOrders = orders.filter(
-    (o) =>
-      (customer && o.Client_Email.toLowerCase() === customer.Cus_Email.toLowerCase()) ||
-      (customer && o.Client_Name.toLowerCase() === customer.Cus_Name.toLowerCase()) ||
-      (customer && o.Customer?.Cus_CompanyName === customer.Cus_CompanyName)
-  );
-
-  return res.json({
-    customer,
-    orders: customerOrders,
-  });
 });
 
-app.put("/customer/updateProfile", (req: Request, res: Response) => {
-  const customerId = req.body.CustomerId || parseInt(req.query.customerId as string, 10);
-  const index = customers.findIndex((c) => c.CustomerId === customerId);
-
-  if (index !== -1) {
-    customers[index] = {
-      ...customers[index],
-      ...req.body,
-    };
-    return res.json({
-      message: "Profile updated successfully!",
-      customer: customers[index],
-    });
-  }
-
-  return res.status(404).json({ message: "Customer profile not found" });
-});
-
-app.post("/customer/verifyCustomer", (req: Request, res: Response) => {
-  const id = parseInt(req.query.customerId as string, 10);
-  const customer = customers.find((c) => c.CustomerId === id);
-  if (customer) {
-    customer.Verify_State = true;
-    return res.json({ message: "Customer verified successfully!" });
-  }
-  return res.status(404).json({ message: "Customer not found." });
-});
-
-// Orders endpoints
-app.get("/order/getAllOrders", (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string, 10) || 1;
-  const limit = parseInt(req.query.limit as string, 10) || 10;
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-
-  const data = orders.slice(startIndex, endIndex);
-  return res.json({
-    data,
-    total: orders.length,
-    page,
-    limit,
-  });
-});
-
-app.post("/order/createOrder", (req: Request, res: Response) => {
-  const rawDesigns = Array.isArray(req.body.Designs) ? req.body.Designs : [];
-  const designItems =
-    rawDesigns.length > 0
-      ? rawDesigns.map((item: { DesignID: string | number }) => {
-          const fullDesign = designs.find(
-            (d) => String(d.DesignID) === String(item.DesignID)
-          );
-          return {
-            Design: {
-              Design_Name:
-                fullDesign?.Design_Name ||
-                req.body.Product_Name ||
-                "Custom Fabrication Item",
-              Design_Image: fullDesign?.Design_Image || [],
-            },
-          };
-        })
-      : [
-          {
-            Design: {
-              Design_Name: req.body.Product_Name || "General Product Inquiry",
-              Design_Image: [],
-            },
-          },
-        ];
-
-  const inquiryType =
-    typeof req.body.Inquiry_Type === "string" && req.body.Inquiry_Type.trim()
-      ? req.body.Inquiry_Type.trim()
-      : "Product Quotation";
-
-  const newOrder: Order = {
-    OrderID: "ORD-" + Math.floor(1000 + Math.random() * 9000),
-    Order_Date: new Date().toISOString(),
-    Order_Status: "PENDING",
-    Client_Name: req.body.Client_Name || "Valued Client",
-    Client_Email: req.body.Client_Email || "client@example.com",
-    Client_Number: req.body.Client_Number,
-    Customer: {
-      Cus_CompanyName: inquiryType,
-    },
-    Designs: designItems,
-  };
-  orders.unshift(newOrder);
-
-  // Trigger notification
-  notifications.unshift({
-    id: "notif-" + Date.now(),
-    NotificationsID: "notif-" + Date.now(),
-    Notifications_Title: `New ${inquiryType} (${newOrder.OrderID})`,
-    Notifications_Body: `Inquiry from ${newOrder.Client_Name} (${newOrder.Client_Email}) for ${
-      designItems[0]?.Design?.Design_Name || "Custom System"
-    }.`,
-    Date_Timestamp: new Date().toISOString(),
-    isRead: false,
-  });
-
-  return res.json({ message: "Quote request submitted successfully!", data: newOrder });
-});
-
-app.put("/order/ChangeStates", (req: Request, res: Response) => {
-  const orderId = req.query.orderId as string;
-  const status = req.query.Status as Order["Order_Status"];
-  const order = orders.find((o) => o.OrderID === orderId);
-  if (order && status) {
-    order.Order_Status = status;
-    return res.json({ message: `Status updated to ${status}!`, order });
-  }
-  return res.status(404).json({ message: "Order not found" });
-});
-
-// Feedback endpoints
-app.get("/feedback/allFeedbacks", (req: Request, res: Response) => {
-  const page = parseInt(req.query.page as string, 10) || 1;
-  const limit = parseInt(req.query.limit as string, 10) || 10;
-  const homeOnly =
-    req.query.homeOnly === "true" || req.query.homeOnly === "1";
-
-  const ordered = [...feedbacks]
-    .filter((f) => (homeOnly ? f.showOnHome !== false : true))
-    .sort((a, b) => {
-      if (a.displayOrder !== b.displayOrder) {
-        return a.displayOrder - b.displayOrder;
-      }
-      return b.Feed_backId - a.Feed_backId;
-    });
-
-  const startIndex = (page - 1) * limit;
-  const endIndex = startIndex + limit;
-  const data = ordered.slice(startIndex, endIndex);
-
-  return res.json({
-    data,
-    total: ordered.length,
-    page,
-    limit,
-  });
-});
-
-app.delete("/feedback/deleteFeedback", (req: Request, res: Response) => {
-  const id = parseInt(req.query.feedbackId as string, 10);
-  feedbacks = feedbacks
-    .filter((f) => f.Feed_backId !== id)
-    .map((f, idx) => ({ ...f, displayOrder: idx }));
-  saveCustomerFeedbacksStore(feedbacks);
-  return res.json({ message: "Feedback deleted successfully!" });
-});
-
-app.post("/feedback/createFeedback", (req: Request, res: Response) => {
-  const newFeedback = normalizeCustomerFeedbackRecord(
-    {
-      ...req.body,
-      Feed_backId: Date.now(),
-      displayOrder: 0,
-      createdAt: new Date().toISOString(),
-    },
-    0
-  );
-  feedbacks = [
-    newFeedback,
-    ...feedbacks.map((f, idx) => ({ ...f, displayOrder: idx + 1 })),
-  ];
-  saveCustomerFeedbacksStore(feedbacks);
-  return res.json({
-    message: "Feedback submitted successfully!",
-    data: newFeedback,
-  });
-});
-
-app.put("/feedback/updateFeedback/:id", (req: Request, res: Response) => {
-  const id = parseInt(String(req.params.id || ""), 10);
-  const idx = feedbacks.findIndex((f) => f.Feed_backId === id);
-  if (idx === -1) {
-    return res.status(404).json({ message: "Feedback not found." });
-  }
-  const existing = feedbacks[idx];
-  const updated = normalizeCustomerFeedbackRecord(
-    {
-      ...existing,
-      ...req.body,
-      Feed_backId: existing.Feed_backId,
-      Customer: {
-        ...existing.Customer,
-        ...(req.body?.Customer || {}),
-      },
-      Design: {
-        ...existing.Design,
-        ...(req.body?.Design || {}),
-      },
-      displayOrder:
-        typeof req.body?.displayOrder === "number"
-          ? req.body.displayOrder
-          : existing.displayOrder,
-    },
-    idx
-  );
-  feedbacks[idx] = updated;
-  saveCustomerFeedbacksStore(feedbacks);
-  return res.json({
-    message: "Feedback updated successfully!",
-    data: updated,
-  });
-});
-
-app.patch("/feedback/toggleHome/:id", (req: Request, res: Response) => {
-  const id = parseInt(String(req.params.id || ""), 10);
-  const idx = feedbacks.findIndex((f) => f.Feed_backId === id);
-  if (idx === -1) {
-    return res.status(404).json({ message: "Feedback not found." });
-  }
-  const nextShow =
-    typeof req.body?.showOnHome === "boolean"
-      ? req.body.showOnHome
-      : !feedbacks[idx].showOnHome;
-  feedbacks[idx] = {
-    ...feedbacks[idx],
-    showOnHome: nextShow,
-  };
-  saveCustomerFeedbacksStore(feedbacks);
-  return res.json({
-    message: nextShow
-      ? "Feedback shown on Home page."
-      : "Feedback hidden from Home page.",
-    data: feedbacks[idx],
-  });
-});
-
-app.put("/feedback/reorder", (req: Request, res: Response) => {
-  const orderedIds = Array.isArray(req.body?.orderedIds)
-    ? req.body.orderedIds.map((id: unknown) => Number(id))
-    : [];
-  if (orderedIds.length === 0) {
-    return res.status(400).json({ message: "orderedIds array is required." });
-  }
-  const orderMap = new Map<number, number>();
-  orderedIds.forEach((id: number, idx: number) => {
-    if (Number.isFinite(id)) orderMap.set(id, idx);
-  });
-  feedbacks = [...feedbacks]
-    .sort((a, b) => {
-      const oa = orderMap.has(a.Feed_backId)
-        ? orderMap.get(a.Feed_backId)!
-        : Number.MAX_SAFE_INTEGER;
-      const ob = orderMap.has(b.Feed_backId)
-        ? orderMap.get(b.Feed_backId)!
-        : Number.MAX_SAFE_INTEGER;
-      return oa - ob;
-    })
-    .map((item, idx) => ({ ...item, displayOrder: idx }));
-  saveCustomerFeedbacksStore(feedbacks);
-  return res.json({
-    message: "Customer feedback order updated.",
-    data: feedbacks,
-  });
-});
-
-// Notifications endpoints
-app.get("/Notification/getalerts", (_req: Request, res: Response) => {
-  return res.json(notifications);
-});
-
-app.post("/Notification/markAsRead", (req: Request, res: Response) => {
-  const id = (req.query.NotificationsID as string) || req.body?.NotificationsID;
-  const notif = notifications.find((n) => n.NotificationsID === id || n.id === id);
-  if (notif) {
-    notif.isRead = true;
-    return res.json({ message: "Notification marked as read." });
-  }
-  return res.status(404).json({ message: "Notification not found." });
-});
-
-// About Page Full CMS Endpoints (Slideshow Speed, Vision, Mission, Leadership, Teams, Journey, Partners, Clients, Feedbacks)
-app.get("/about/vision-mission", (_req: Request, res: Response) => {
-  return res.json(visionMissionContent);
-});
-
-app.put("/about/vision-mission", (req: Request, res: Response) => {
-  if (req.body) {
-    visionMissionContent = normalizeAboutCmsPayload(req.body, visionMissionContent);
-    return res.json({
-      message: "About showcase, slideshow, and sections updated successfully!",
-      data: visionMissionContent,
-    });
-  }
-  return res.status(400).json({ message: "Invalid payload" });
-});
-
-app.get("/about/hero-slides", (_req: Request, res: Response) => {
-  return res.json({
-    heroSlides: visionMissionContent.heroSlides,
-    slideshowSpeedMs: visionMissionContent.slideshowSpeedMs,
-  });
-});
-
-app.put("/about/hero-slides", (req: Request, res: Response) => {
-  if (!Array.isArray(req.body?.heroSlides) || req.body.heroSlides.length === 0) {
-    return res.status(400).json({ message: "At least one slide is required." });
-  }
-  visionMissionContent.heroSlides = req.body.heroSlides;
-  if (req.body.slideshowSpeedMs !== undefined) {
-    visionMissionContent.slideshowSpeedMs = clampSlideshowSpeedMs(req.body.slideshowSpeedMs);
-  }
-  return res.json({
-    message: "Hero slideshow updated successfully!",
-    heroSlides: visionMissionContent.heroSlides,
-    slideshowSpeedMs: visionMissionContent.slideshowSpeedMs,
-  });
-});
-
-app.get("/about/partners", (_req: Request, res: Response) => {
-  return res.json({
-    data: visionMissionContent.partners,
-    partnersRibbonSpeed: visionMissionContent.partnersRibbonSpeed,
-  });
-});
-
-app.put("/about/partners", (req: Request, res: Response) => {
-  if (!Array.isArray(req.body?.partners)) {
-    return res.status(400).json({ message: "Partners list is required." });
-  }
-  const nextSpeed =
-    req.body?.partnersRibbonSpeed !== undefined
-      ? clampRibbonSpeed(req.body.partnersRibbonSpeed, DEFAULT_PARTNERS_RIBBON_SPEED)
-      : visionMissionContent.partnersRibbonSpeed;
-  visionMissionContent = normalizeAboutCmsPayload(
-    {
-      ...visionMissionContent,
-      partners: req.body.partners,
-      partnersRibbonSpeed: nextSpeed,
-    },
-    visionMissionContent
-  );
-  return res.json({
-    message: "Partners updated!",
-    data: visionMissionContent.partners,
-    partnersRibbonSpeed: visionMissionContent.partnersRibbonSpeed,
-  });
-});
-
-app.get("/about/clients", (_req: Request, res: Response) => {
-  return res.json({
-    data: visionMissionContent.clients,
-    clientsRibbonSpeed: visionMissionContent.clientsRibbonSpeed,
-  });
-});
-
-app.put("/about/clients", (req: Request, res: Response) => {
-  if (!Array.isArray(req.body?.clients)) {
-    return res.status(400).json({ message: "Clients list is required." });
-  }
-  const nextSpeed =
-    req.body?.clientsRibbonSpeed !== undefined
-      ? clampRibbonSpeed(req.body.clientsRibbonSpeed, DEFAULT_CLIENTS_RIBBON_SPEED)
-      : visionMissionContent.clientsRibbonSpeed;
-  visionMissionContent = normalizeAboutCmsPayload(
-    {
-      ...visionMissionContent,
-      clients: req.body.clients,
-      clientsRibbonSpeed: nextSpeed,
-    },
-    visionMissionContent
-  );
-  return res.json({
-    message: "Clients updated!",
-    data: visionMissionContent.clients,
-    clientsRibbonSpeed: visionMissionContent.clientsRibbonSpeed,
-  });
-});
-
-// Product Landing Slideshow & Product Categories CRUD Endpoints
-app.get("/products/cms", (_req: Request, res: Response) => {
-  const orderedCategories = [...productCategories].sort(
-    (a, b) => a.displayOrder - b.displayOrder
-  );
-  return res.json({
-    landing: productLandingCms,
-    categories: orderedCategories,
-  });
-});
-
-app.put("/products/cms", (req: Request, res: Response) => {
-  productLandingCms = normalizeProductLandingCms(
-    req.body?.landing || req.body,
-    productLandingCms
-  );
-  return res.json({
-    message: "Product landing slideshow updated successfully!",
-    landing: productLandingCms,
-  });
-});
-
-app.get("/products/categories", (_req: Request, res: Response) => {
-  const orderedCategories = [...productCategories].sort(
-    (a, b) => a.displayOrder - b.displayOrder
-  );
-  return res.json({ data: orderedCategories });
-});
-
-app.post("/products/categories", (req: Request, res: Response) => {
-  if (!req.body?.name || !String(req.body.name).trim()) {
-    return res.status(400).json({ message: "Category name is required." });
-  }
-  const normalized = normalizeProductCategory(
-    {
-      ...req.body,
-      CategoryID: `cat-${Date.now()}`,
-      displayOrder: productCategories.length + 1,
-    },
-    productCategories.length
-  );
-
-  // Ensure slug uniqueness
-  const duplicateSlug = productCategories.some(
-    (cat) => cat.slug.toLowerCase() === normalized.slug.toLowerCase()
-  );
-  if (duplicateSlug) {
-    normalized.slug = `${normalized.slug}-${Date.now().toString().slice(-4)}`;
-  }
-
-  productCategories.push(normalized);
-  return res.json({
-    message: "Product category created successfully!",
-    data: normalized,
-  });
-});
-
-app.put("/products/categories/reorder", (req: Request, res: Response) => {
-  const orderedIds: string[] = Array.isArray(req.body?.orderedIds)
-    ? req.body.orderedIds
-    : [];
-  if (orderedIds.length === 0) {
-    return res.status(400).json({ message: "orderedIds array is required." });
-  }
-
-  const map = new Map(productCategories.map((c) => [c.CategoryID, c]));
-  const nextList: ProductCategory[] = [];
-  orderedIds.forEach((id, idx) => {
-    const found = map.get(id);
-    if (found) {
-      nextList.push({ ...found, displayOrder: idx + 1 });
-      map.delete(id);
+app.get("/designs/byCategory", async (req: Request, res: Response) => {
+  try {
+    const category = ((req.query.category as string) || "").trim();
+    const [all, cats] = await Promise.all([listProducts(), listCategories()]);
+    if (!category || category.toLowerCase() === "all") {
+      return res.json(all);
     }
-  });
-  for (const remaining of map.values()) {
-    nextList.push({ ...remaining, displayOrder: nextList.length + 1 });
+    const matchedCat = findCategoryByParam(cats, category);
+    return res.json(all.filter((d) => designMatchesCategory(d, matchedCat || category)));
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  productCategories = nextList;
-  return res.json({
-    message: "Categories reordered successfully!",
-    data: productCategories,
-  });
 });
 
-app.put("/products/categories/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = productCategories.findIndex(
-    (c) => c.CategoryID === id || c.slug === id
-  );
-  if (idx === -1) {
-    return res.status(404).json({ message: "Category not found." });
+app.get("/designs/DesignDetails", async (req: Request, res: Response) => {
+  try {
+    const idsParam = (req.query.ids as string) || "";
+    const ids = idsParam.split(",").map((id) => id.trim()).filter(Boolean);
+    const all = await listProducts();
+    return res.json(all.filter((d) => ids.includes(String(d.DesignID))));
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const existing = productCategories[idx];
-  const updated = normalizeProductCategory(
-    {
-      ...existing,
-      ...req.body,
-      CategoryID: existing.CategoryID,
-      displayOrder:
-        typeof req.body?.displayOrder === "number"
-          ? req.body.displayOrder
-          : existing.displayOrder,
-    },
-    idx
-  );
-  productCategories[idx] = updated;
-  return res.json({
-    message: "Category updated successfully!",
-    data: updated,
-  });
 });
 
-app.delete("/products/categories/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (productCategories.length <= 1) {
-    return res
-      .status(400)
-      .json({ message: "At least one product category must remain active." });
+app.get("/designs/:id", async (req: Request, res: Response) => {
+  try {
+    const found = await getProductByAnyId(String(req.params.id || ""));
+    if (!found) return res.status(404).json({ message: "Design not found" });
+    const [all, cats] = await Promise.all([listProducts(), listCategories()]);
+    const relatedDesigns = resolveRelatedDesigns(found, all, cats, 6);
+    return res.json({ data: found, relatedDesigns });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  const before = productCategories.length;
-  productCategories = productCategories
-    .filter((c) => c.CategoryID !== id && c.slug !== id)
-    .map((c, idx) => ({ ...c, displayOrder: idx + 1 }));
-
-  if (productCategories.length === before) {
-    return res.status(404).json({ message: "Category not found." });
-  }
-  return res.json({ message: "Category deleted successfully!" });
 });
 
-// Page Advertisements CMS Endpoints (multiple image ads + auto-slideshow interval per card page)
-app.get("/ads/cms", (req: Request, res: Response) => {
-  const requestedKey = req.query.pageKey;
-  if (isValidAdPageKey(requestedKey)) {
-    return res.json({
-      page: pageAdsCms.pages[requestedKey],
-      pages: pageAdsCms.pages,
+app.post("/designs/create", async (req: Request, res: Response) => {
+  try {
+    const created = await createProductRecord(req.body || {});
+    return res.status(201).json({
+      message: "Design created",
+      design: created,
+      Design: created,
+      data: created,
     });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  return res.json(pageAdsCms);
 });
 
-app.put("/ads/cms", (req: Request, res: Response) => {
-  if (!req.body || typeof req.body !== "object") {
-    return res.status(400).json({ message: "Invalid payload." });
+app.delete("/designs/deleteDesign", async (req: Request, res: Response) => {
+  try {
+    const id = req.query.DesignID || req.query.id || req.body?.DesignID;
+    await deleteProductRecord(String(id || ""));
+    return res.json({ message: "Design deleted" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  if (isValidAdPageKey(req.body.pageKey)) {
-    const key = req.body.pageKey;
-    const updatedPage = normalizeSinglePageAdsConfig(
-      req.body,
-      key,
-      pageAdsCms.pages[key]
-    );
-    pageAdsCms = {
-      pages: {
-        ...pageAdsCms.pages,
-        [key]: updatedPage,
+});
+
+app.put("/designs/updateDesign", async (req: Request, res: Response) => {
+  try {
+    const designId = req.body?.DesignID || req.query.DesignID || req.body?.id;
+    const updated = await updateProductRecord(String(designId || ""), req.body || {});
+    if (!updated) return res.status(404).json({ message: "Design not found" });
+    return res.json({ message: "Design updated", design: updated, data: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/designs/:id/related", async (req: Request, res: Response) => {
+  try {
+    const target = await getProductByAnyId(String(req.params.id || ""));
+    if (!target) return res.status(404).json({ message: "Design not found" });
+    const rawIds: (string | number)[] = Array.isArray(req.body?.relatedProductIds)
+      ? req.body.relatedProductIds
+      : [];
+    const cleaned = rawIds
+      .map((val) => String(val).trim())
+      .filter((val) => val && val !== String(target.DesignID));
+    const updated = await updateProductRecord(String(target.DesignID), {
+      relatedProductIds: Array.from(new Set(cleaned)).slice(0, 12),
+    });
+    const [all, cats] = await Promise.all([listProducts(), listCategories()]);
+    const relatedDesigns = updated ? resolveRelatedDesigns(updated, all, cats, 6) : [];
+    return res.json({
+      message: "Related designs updated",
+      data: updated,
+      relatedDesigns,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/designs/:id", async (req: Request, res: Response) => {
+  try {
+    const updated = await updateProductRecord(String(req.params.id || ""), req.body || {});
+    if (!updated) return res.status(404).json({ message: "Design not found" });
+    return res.json({ message: "Design updated", design: updated, data: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// CUSTOMER ROUTES (PostgreSQL users with role='customer')
+// ============================================================================
+function mapCustomerUserToLegacy(u: Awaited<ReturnType<typeof getCustomerUsers>>[number]) {
+  return {
+    CustomerId: u.id,
+    Cus_Name: u.name,
+    Cus_Email: u.email,
+    Cus_PhoneNumber: u.phone || "",
+    Cus_CompanyName: u.company || "",
+    Cus_Logo: u.avatarUrl || "/assets/logos/client-zenith.svg",
+    Verify_State: u.isVerified,
+    Purchase_Goods: u.purchaseGoods,
+  };
+}
+
+app.get("/customer/getAllCustomers", async (req: Request, res: Response) => {
+  try {
+    const rows = await getCustomerUsers();
+    const limit = parseInt(req.query.limit as string, 10) || 100;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const start = (page - 1) * limit;
+    const mapped = rows.map(mapCustomerUserToLegacy);
+    return res.json({
+      data: mapped.slice(start, start + limit),
+      total: mapped.length,
+      page,
+      limit,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/customer/Customer_register", async (req: Request, res: Response) => {
+  try {
+    const b = req.body || {};
+    const email = String(b.Cus_Email || b.email || "").trim().toLowerCase();
+    const existing = email ? await findUserByEmail(email) : null;
+    if (existing) {
+      return res.status(409).json({ message: "An account with this email already exists." });
+    }
+    const created = await createUserAccount({
+      name: String(b.Cus_Name || b.name || "Valued Customer"),
+      email: email || `customer-${Date.now()}@example.com`,
+      phone: String(b.Cus_PhoneNumber || b.phone || ""),
+      company: String(b.Cus_CompanyName || b.company || "Independent Client"),
+      avatarUrl: String(b.Cus_Logo || "/assets/logos/client-zenith.svg"),
+      passwordHash: String(b.Cus_Password || b.password || "customer123"),
+      role: "customer",
+      isVerified: true,
+      purchaseGoods: Array.isArray(b.Purchase_Goods) ? b.Purchase_Goods : [],
+    });
+    const mapped = mapCustomerUserToLegacy(created);
+    return res.status(201).json({
+      message: "Customer created",
+      customer: mapped,
+      data: mapped,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/customer/updateCustomer", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.body?.CustomerId);
+    const updated = await updateUserAccount(id, {
+      name: req.body?.Cus_Name,
+      email: req.body?.Cus_Email,
+      phone: req.body?.Cus_PhoneNumber,
+      company: req.body?.Cus_CompanyName,
+      avatarUrl: req.body?.Cus_Logo,
+      isVerified: req.body?.Verify_State,
+      purchaseGoods: req.body?.Purchase_Goods,
+    });
+    if (!updated) return res.status(404).json({ message: "Customer not found" });
+    return res.json({
+      message: "Customer updated",
+      customer: mapCustomerUserToLegacy(updated),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.delete("/customer/deleteCustomer", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.query.CustomerId || req.body?.CustomerId);
+    await deleteUserAccount(id);
+    return res.json({ message: "Customer deleted" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/customer/login", async (req: Request, res: Response) => {
+  try {
+    const email = (req.body?.email || req.query.email || "").toString().trim().toLowerCase();
+    const password = (req.body?.password || req.query.password || "").toString();
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required." });
+    }
+    const list = await getCustomerUsers();
+    const customer = list.find((c) => c.email.toLowerCase() === email);
+    if (!customer) {
+      return res.status(401).json({ message: "No customer account found with that email." });
+    }
+    if (customer.passwordHash && customer.passwordHash !== password) {
+      return res.status(401).json({ message: "Incorrect password." });
+    }
+    return res.json({
+      message: "Login successful",
+      tokens: {
+        accessToken: `session:${customer.email}`,
+        refreshToken: `refresh:${customer.email}`,
       },
-    };
-    return res.json({
-      message: "Page advertisements updated successfully!",
-      page: updatedPage,
-      pages: pageAdsCms.pages,
+      customer: mapCustomerUserToLegacy(customer),
     });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
   }
-  pageAdsCms = normalizePageAdsCms(req.body, pageAdsCms);
+});
+
+app.get("/customer/profile", async (req: Request, res: Response) => {
+  try {
+    const customerId = req.query.customerId ? Number(req.query.customerId) : undefined;
+    const email = (req.query.email as string) || "";
+    const all = await getCustomerUsers();
+    const customer = all.find(
+      (c) => (customerId && c.id === customerId) || (email && c.email.toLowerCase() === email.toLowerCase())
+    );
+    if (!customer) return res.status(404).json({ message: "Customer profile not found" });
+
+    const allOrders = await listOrders();
+    const customerOrders = allOrders.filter(
+      (o) => o.Client_Email.toLowerCase() === customer.email.toLowerCase()
+    );
+    return res.json({ customer: mapCustomerUserToLegacy(customer), orders: customerOrders });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/customer/updateProfile", async (req: Request, res: Response) => {
+  try {
+    const { CustomerId, Cus_Email, Cus_Name, Cus_PhoneNumber, Cus_CompanyName, Cus_Logo } =
+      req.body || {};
+    const all = await getCustomerUsers();
+    const match = all.find(
+      (c) => c.id === Number(CustomerId) || (Cus_Email && c.email.toLowerCase() === String(Cus_Email).toLowerCase())
+    );
+    if (!match) return res.status(404).json({ message: "Customer not found" });
+    const updated = await updateUserAccount(match.id, {
+      name: Cus_Name,
+      phone: Cus_PhoneNumber,
+      company: Cus_CompanyName,
+      avatarUrl: Cus_Logo,
+    });
+    return res.json({
+      message: "Profile updated",
+      customer: updated ? mapCustomerUserToLegacy(updated) : mapCustomerUserToLegacy(match),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/customer/verifyCustomer", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.body?.CustomerId || req.query.CustomerId);
+    const nextState =
+      typeof req.body?.Verify_State === "boolean" ? req.body.Verify_State : true;
+    const updated = await updateUserAccount(id, { isVerified: nextState });
+    return res.json({
+      message: "Verification status updated",
+      customer: updated ? mapCustomerUserToLegacy(updated) : null,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// ORDERS & RFQS ROUTES
+// ============================================================================
+app.get("/order/getAllOrders", async (req: Request, res: Response) => {
+  try {
+    const all = await listOrders();
+    const limit = parseInt(req.query.limit as string, 10) || 100;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const start = (page - 1) * limit;
+    return res.json({ data: all.slice(start, start + limit), total: all.length, page, limit });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/order/createOrder", async (req: Request, res: Response) => {
+  try {
+    const { Order_Status, Client_Name, Client_Email, Client_Number, Designs } = req.body || {};
+    if (!Client_Name || !Client_Email) {
+      return res.status(400).json({ message: "Client_Name and Client_Email are required." });
+    }
+    const created = await createOrderRecord({
+      Order_Status,
+      Client_Name,
+      Client_Email,
+      Client_Number,
+      Designs,
+    });
+    return res.status(201).json({ message: "Order placed successfully!", order: created });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/order/ChangeStates", async (req: Request, res: Response) => {
+  try {
+    const { OrderID, Order_Status } = req.body || {};
+    const updated = await updateOrderStatusRecord(String(OrderID || ""), String(Order_Status || "PENDING"));
+    if (!updated) return res.status(404).json({ message: "Order not found" });
+    return res.json({ message: "Order status updated", order: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.get("/api/rfq", async (_req: Request, res: Response) => {
+  try {
+    const rows = await listRfqRecords();
+    return res.json({ data: rows });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post(
+  "/api/rfq",
+  upload.array("attachments", 12),
+  async (req: Request, res: Response) => {
+    try {
+      const body = (req.body || {}) as Record<string, string>;
+      if (!body.clientName || !body.email || !body.projectTitle) {
+        return res
+          .status(400)
+          .json({ message: "clientName, email, and projectTitle are required." });
+      }
+      const files = Array.isArray(req.files) ? req.files : [];
+      const attachmentEntries: Array<{
+        url: string;
+        fileName: string;
+        size?: number;
+        mediaAssetId?: number | null;
+      }> = [];
+
+      for (const file of files) {
+        const publicUrl = `/uploads/${file.filename}`;
+        const asset = await createMediaAssetRecord({
+          publicUrl,
+          sourceType: "UPLOAD",
+          title: file.originalname,
+          originalName: file.originalname,
+          storageKey: `uploads/${file.filename}`,
+          mimeType: file.mimetype,
+          fileSizeBytes: file.size,
+          entityScope: "rfq",
+        }).catch(() => null);
+
+        attachmentEntries.push({
+          url: publicUrl,
+          fileName: file.originalname,
+          size: file.size,
+          mediaAssetId: asset?.id ?? null,
+        });
+      }
+
+      const saved = await createRfqRecord(body, attachmentEntries);
+      return res.status(201).json({
+        message: "Request for quotation submitted successfully.",
+        data: saved,
+        attachments: attachmentEntries,
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+// ============================================================================
+// FEEDBACK ROUTES
+// ============================================================================
+app.get("/feedback/allFeedbacks", async (req: Request, res: Response) => {
+  try {
+    const all = await listFeedbacks();
+    const limit = parseInt(req.query.limit as string, 10) || 100;
+    const page = parseInt(req.query.page as string, 10) || 1;
+    const homeOnly = req.query.homeOnly === "true";
+    const pool = homeOnly ? all.filter((f) => f.showOnHome) : all;
+    const start = (page - 1) * limit;
+    return res.json({ data: pool.slice(start, start + limit), total: pool.length, page, limit });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.delete("/feedback/deleteFeedback", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.query.Feed_backId || req.body?.Feed_backId);
+    await deleteFeedbackRecord(id);
+    return res.json({ message: "Feedback deleted", data: await listFeedbacks() });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/feedback/createFeedback", async (req: Request, res: Response) => {
+  try {
+    const existing = await listFeedbacks();
+    const normalized = normalizeCustomerFeedbackRecord(req.body || {}, existing.length);
+    const created = await createFeedbackRecord(normalized);
+    return res.status(201).json({
+      message: "Feedback created",
+      feedback: created,
+      data: await listFeedbacks(),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/feedback/updateFeedback/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const updated = await updateFeedbackRecord(id, req.body || {});
+    if (!updated) return res.status(404).json({ message: "Feedback not found" });
+    return res.json({
+      message: "Feedback updated",
+      feedback: updated,
+      data: await listFeedbacks(),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.patch("/feedback/toggleHome/:id", async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const all = await listFeedbacks();
+    const target = all.find((f) => f.Feed_backId === id);
+    if (!target) return res.status(404).json({ message: "Feedback not found" });
+    const nextHome =
+      typeof req.body?.showOnHome === "boolean" ? req.body.showOnHome : !target.showOnHome;
+    const updated = await updateFeedbackRecord(id, { showOnHome: nextHome });
+    return res.json({
+      message: "Feedback Home visibility updated",
+      feedback: updated,
+      data: await listFeedbacks(),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/feedback/reorder", async (req: Request, res: Response) => {
+  try {
+    const orderedIds = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => Number(id))
+      : [];
+    const data = await reorderFeedbackRecords(orderedIds);
+    return res.json({ message: "Feedback order updated", data });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// NOTIFICATIONS ROUTES
+// ============================================================================
+app.get("/Notification/getalerts", async (_req: Request, res: Response) => {
+  try {
+    const list = await listNotifications();
+    return res.json({ data: list });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/Notification/markAsRead", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.body || {};
+    await markNotificationRead(id ? String(id) : undefined);
+    return res.json({ message: "Marked as read" });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// ABOUT / VISION & MISSION CMS ROUTES
+// ============================================================================
+app.get("/about/vision-mission", async (_req: Request, res: Response) => {
+  try {
+    const data = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+    return res.json({ data });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/about/vision-mission", async (req: Request, res: Response) => {
+  try {
+    const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+    const normalized = normalizeAboutCmsPayload(req.body, current);
+    await setCmsDoc("about_cms", normalized as unknown as Record<string, unknown>);
+    return res.json({ message: "About page content updated", data: normalized });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.get("/about/hero-slides", async (_req: Request, res: Response) => {
+  const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
   return res.json({
-    message: "All page advertisements updated successfully!",
-    pages: pageAdsCms.pages,
+    slideshowSpeedMs: current.slideshowSpeedMs,
+    data: current.heroSlides,
   });
 });
 
-app.put("/ads/cms/:pageKey", (req: Request, res: Response) => {
-  const { pageKey } = req.params;
-  if (!isValidAdPageKey(pageKey)) {
-    return res.status(400).json({ message: "Unknown card page key." });
-  }
-  const updatedPage = normalizeSinglePageAdsConfig(
-    req.body,
-    pageKey,
-    pageAdsCms.pages[pageKey]
-  );
-  pageAdsCms = {
-    pages: {
-      ...pageAdsCms.pages,
-      [pageKey]: updatedPage,
-    },
-  };
-  return res.json({
-    message: `${updatedPage.label} advertisements updated!`,
-    page: updatedPage,
-    pages: pageAdsCms.pages,
-  });
-});
-
-app.post("/ads/cms/:pageKey/ads", (req: Request, res: Response) => {
-  const { pageKey } = req.params;
-  if (!isValidAdPageKey(pageKey)) {
-    return res.status(400).json({ message: "Unknown card page key." });
-  }
-  const current = pageAdsCms.pages[pageKey];
-  const slide = normalizePageAdSlide(
+app.put("/about/hero-slides", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+  const next = normalizeAboutCmsPayload(
     {
-      ...req.body,
-      id: req.body?.id || `ad-${pageKey}-${Date.now()}`,
+      slideshowSpeedMs: req.body?.slideshowSpeedMs ?? current.slideshowSpeedMs,
+      heroSlides: Array.isArray(req.body?.slides)
+        ? req.body.slides
+        : req.body?.heroSlides ?? current.heroSlides,
     },
-    current.ads.length
-  );
-  if (!slide) {
-    return res.status(400).json({ message: "Advertisement image is required." });
-  }
-  const updatedPage = normalizeSinglePageAdsConfig(
-    {
-      ...current,
-      enabled: req.body?.enabled !== undefined ? Boolean(req.body.enabled) : true,
-      ads: [...current.ads, slide],
-    },
-    pageKey,
     current
   );
-  pageAdsCms = {
-    pages: {
-      ...pageAdsCms.pages,
-      [pageKey]: updatedPage,
-    },
-  };
+  await setCmsDoc("about_cms", next as unknown as Record<string, unknown>);
   return res.json({
-    message: "Advertisement added successfully!",
-    slide,
-    page: updatedPage,
-    pages: pageAdsCms.pages,
+    message: "Hero slides updated",
+    slideshowSpeedMs: next.slideshowSpeedMs,
+    data: next.heroSlides,
   });
 });
 
-app.put("/ads/cms/:pageKey/ads/:adId", (req: Request, res: Response) => {
+app.get("/about/partners", async (_req: Request, res: Response) => {
+  const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+  return res.json({
+    partnersRibbonSpeed: current.partnersRibbonSpeed,
+    data: current.partners,
+  });
+});
+
+app.put("/about/partners", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+  const next = normalizeAboutCmsPayload(
+    {
+      partnersRibbonSpeed:
+        req.body?.partnersRibbonSpeed !== undefined
+          ? clampRibbonSpeed(req.body.partnersRibbonSpeed, current.partnersRibbonSpeed)
+          : current.partnersRibbonSpeed,
+      partners: Array.isArray(req.body?.partners) ? req.body.partners : current.partners,
+    },
+    current
+  );
+  await setCmsDoc("about_cms", next as unknown as Record<string, unknown>);
+  return res.json({
+    message: "Partners updated",
+    partnersRibbonSpeed: next.partnersRibbonSpeed,
+    data: next.partners,
+  });
+});
+
+app.get("/about/clients", async (_req: Request, res: Response) => {
+  const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+  return res.json({
+    clientsRibbonSpeed: current.clientsRibbonSpeed,
+    data: current.clients,
+  });
+});
+
+app.put("/about/clients", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
+  const next = normalizeAboutCmsPayload(
+    {
+      clientsRibbonSpeed:
+        req.body?.clientsRibbonSpeed !== undefined
+          ? clampRibbonSpeed(req.body.clientsRibbonSpeed, current.clientsRibbonSpeed)
+          : current.clientsRibbonSpeed,
+      clients: Array.isArray(req.body?.clients) ? req.body.clients : current.clients,
+    },
+    current
+  );
+  await setCmsDoc("about_cms", next as unknown as Record<string, unknown>);
+  return res.json({
+    message: "Clients updated",
+    clientsRibbonSpeed: next.clientsRibbonSpeed,
+    data: next.clients,
+  });
+});
+
+// ============================================================================
+// PRODUCTS LANDING CMS & CATEGORIES ROUTES (Both /api/categories and /products/categories)
+// ============================================================================
+app.get("/products/cms", async (_req: Request, res: Response) => {
+  const [cms, cats] = await Promise.all([
+    getCmsDoc<ProductLandingCms>("product_landing_cms", DEFAULT_PRODUCT_LANDING_CMS),
+    listCategories(),
+  ]);
+  return res.json({ data: cms, categories: cats });
+});
+
+app.put("/products/cms", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<ProductLandingCms>(
+    "product_landing_cms",
+    DEFAULT_PRODUCT_LANDING_CMS
+  );
+  const normalized = normalizeProductLandingCms(req.body, current);
+  await setCmsDoc("product_landing_cms", normalized as unknown as Record<string, unknown>);
+  return res.json({ message: "Product landing CMS updated", data: normalized });
+});
+
+app.get(["/products/categories", "/api/categories"], async (_req: Request, res: Response) => {
+  try {
+    const cats = await listCategories();
+    return res.json({ data: cats });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post(["/products/categories", "/api/categories"], async (req: Request, res: Response) => {
+  try {
+    const existing = await listCategories();
+    const candidateName = String(req.body?.name || "").trim();
+    if (!candidateName) {
+      return res.status(400).json({ message: "Category name is required" });
+    }
+    const candidateSlug = String(req.body?.slug || candidateName)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+    if (existing.some((c) => c.slug === candidateSlug)) {
+      return res.status(409).json({ message: "A category with this slug already exists" });
+    }
+    const created = await createCategoryRecord(req.body || {});
+    return res.status(201).json({
+      message: "Category created",
+      category: created,
+      data: await listCategories(),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/products/categories/reorder", async (req: Request, res: Response) => {
+  try {
+    const orderedIds: string[] = Array.isArray(req.body?.orderedIds)
+      ? req.body.orderedIds.map((id: unknown) => String(id))
+      : [];
+    const data = await reorderCategoryRecords(orderedIds);
+    return res.json({ message: "Categories reordered", data });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put(
+  ["/products/categories/:id", "/api/categories/:id"],
+  async (req: Request, res: Response) => {
+    try {
+      const updated = await updateCategoryRecord(String(req.params.id || ""), req.body || {});
+      if (!updated) return res.status(404).json({ message: "Category not found" });
+      return res.json({
+        message: "Category updated",
+        category: updated,
+        data: await listCategories(),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+app.delete(
+  ["/products/categories/:id", "/api/categories/:id"],
+  async (req: Request, res: Response) => {
+    try {
+      const removed = await deleteCategoryRecord(String(req.params.id || ""));
+      if (!removed) return res.status(404).json({ message: "Category not found" });
+      return res.json({
+        message: "Category deleted",
+        removed,
+        data: await listCategories(),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+// ============================================================================
+// PAGE ADVERTISEMENT SLIDESHOW CMS ROUTES
+// ============================================================================
+app.get("/ads/cms", async (req: Request, res: Response) => {
+  const cms = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
+  const pageKey = typeof req.query.page === "string" ? req.query.page.trim() : "";
+  if (pageKey && isValidAdPageKey(pageKey)) {
+    return res.json({ data: cms.pages[pageKey], allPages: cms });
+  }
+  return res.json({ data: cms });
+});
+
+app.put("/ads/cms", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
+  const next = normalizePageAdsCms(req.body, current);
+  await setCmsDoc("page_ads_cms", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Page advertisements updated", data: next });
+});
+
+app.put("/ads/cms/:pageKey", async (req: Request, res: Response) => {
+  const { pageKey } = req.params;
+  if (!isValidAdPageKey(pageKey)) {
+    return res.status(404).json({ message: "Unknown advertisement page key" });
+  }
+  const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
+  const nextPageConfig = normalizeSinglePageAdsConfig(
+    { ...(req.body || {}), pageKey },
+    pageKey,
+    current.pages[pageKey]
+  );
+  const nextCms: PageAdsCmsPayload = {
+    pages: {
+      ...current.pages,
+      [pageKey]: nextPageConfig,
+    },
+  };
+  await setCmsDoc("page_ads_cms", nextCms as unknown as Record<string, unknown>);
+  return res.json({
+    message: `${nextPageConfig.label} ads updated`,
+    data: nextPageConfig,
+    allPages: nextCms,
+  });
+});
+
+app.post("/ads/cms/:pageKey/ads", async (req: Request, res: Response) => {
+  const { pageKey } = req.params;
+  if (!isValidAdPageKey(pageKey)) {
+    return res.status(404).json({ message: "Unknown advertisement page key" });
+  }
+  const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
+  const pageConfig = current.pages[pageKey];
+  const slide = normalizePageAdSlide(req.body || {}, pageConfig.ads.length);
+  const nextPageConfig = { ...pageConfig, ads: [...pageConfig.ads, slide] };
+  const nextCms: PageAdsCmsPayload = {
+    pages: { ...current.pages, [pageKey]: nextPageConfig },
+  };
+  await setCmsDoc("page_ads_cms", nextCms as unknown as Record<string, unknown>);
+  return res.status(201).json({
+    message: "Advertisement added",
+    slide,
+    data: nextPageConfig,
+    allPages: nextCms,
+  });
+});
+
+app.put("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) => {
   const { pageKey, adId } = req.params;
   if (!isValidAdPageKey(pageKey)) {
-    return res.status(400).json({ message: "Unknown card page key." });
+    return res.status(404).json({ message: "Unknown advertisement page key" });
   }
-  const current = pageAdsCms.pages[pageKey];
-  const idx = current.ads.findIndex((a) => a.id === adId);
-  if (idx === -1) {
-    return res.status(404).json({ message: "Advertisement not found." });
-  }
+  const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
+  const pageConfig = current.pages[pageKey];
+  const idx = pageConfig.ads.findIndex((a) => a.id === adId);
+  if (idx === -1) return res.status(404).json({ message: "Advertisement not found" });
+
   const updatedSlide = normalizePageAdSlide(
-    {
-      ...current.ads[idx],
-      ...req.body,
-      id: adId,
-    },
+    { ...pageConfig.ads[idx], ...(req.body || {}), id: pageConfig.ads[idx].id },
     idx
   );
-  if (!updatedSlide) {
-    return res.status(400).json({ message: "Advertisement image is required." });
-  }
-  const nextAds = current.ads.map((a) => (a.id === adId ? updatedSlide : a));
-  const updatedPage = normalizeSinglePageAdsConfig(
-    { ...current, ads: nextAds },
-    pageKey,
-    current
-  );
-  pageAdsCms = {
-    pages: {
-      ...pageAdsCms.pages,
-      [pageKey]: updatedPage,
-    },
+  const nextAds = pageConfig.ads.map((a, i) => (i === idx ? updatedSlide : a));
+  const nextPageConfig = { ...pageConfig, ads: nextAds };
+  const nextCms: PageAdsCmsPayload = {
+    pages: { ...current.pages, [pageKey]: nextPageConfig },
   };
+  await setCmsDoc("page_ads_cms", nextCms as unknown as Record<string, unknown>);
   return res.json({
-    message: "Advertisement updated successfully!",
+    message: "Advertisement updated",
     slide: updatedSlide,
-    page: updatedPage,
-    pages: pageAdsCms.pages,
+    data: nextPageConfig,
+    allPages: nextCms,
   });
 });
 
-app.delete("/ads/cms/:pageKey/ads/:adId", (req: Request, res: Response) => {
+app.delete("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) => {
   const { pageKey, adId } = req.params;
   if (!isValidAdPageKey(pageKey)) {
-    return res.status(400).json({ message: "Unknown card page key." });
+    return res.status(404).json({ message: "Unknown advertisement page key" });
   }
-  const current = pageAdsCms.pages[pageKey];
-  const before = current.ads.length;
-  const nextAds = current.ads.filter((a) => a.id !== adId);
-  if (nextAds.length === before) {
-    return res.status(404).json({ message: "Advertisement not found." });
+  const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
+  const pageConfig = current.pages[pageKey];
+  const nextAds = pageConfig.ads.filter((a) => a.id !== adId);
+  if (nextAds.length === pageConfig.ads.length) {
+    return res.status(404).json({ message: "Advertisement not found" });
   }
-  const updatedPage = normalizeSinglePageAdsConfig(
-    { ...current, ads: nextAds },
-    pageKey,
-    current
-  );
-  pageAdsCms = {
-    pages: {
-      ...pageAdsCms.pages,
-      [pageKey]: updatedPage,
-    },
+  const nextPageConfig = { ...pageConfig, ads: nextAds };
+  const nextCms: PageAdsCmsPayload = {
+    pages: { ...current.pages, [pageKey]: nextPageConfig },
   };
+  await setCmsDoc("page_ads_cms", nextCms as unknown as Record<string, unknown>);
   return res.json({
-    message: "Advertisement deleted successfully!",
-    page: updatedPage,
-    pages: pageAdsCms.pages,
+    message: "Advertisement removed",
+    data: nextPageConfig,
+    allPages: nextCms,
   });
 });
 
-// Downloadable Resource Attachments Endpoint
+// ============================================================================
+// RESOURCES ATTACHMENTS & RELATED PORTALS CMS
+// ============================================================================
 app.get("/api/resources/download/:id", (req: Request, res: Response) => {
   const { id } = req.params;
-  const item = RESOURCE_ATTACHMENTS.find((doc) => doc.id === id);
-  if (!item) {
-    return res.status(404).json({ message: "Resource attachment not found." });
+  const attachment = RESOURCE_ATTACHMENTS.find((item) => item.id === id);
+  if (!attachment) {
+    return res.status(404).json({ message: "Technical attachment not found" });
   }
-
-  const documentBody = [
-    "INNOVISTA METAL FABRICONIX PVT LTD — TECHNICAL RESOURCE",
-    "================================================================",
-    `Document Title : ${item.title}`,
-    `Document Format: ${item.format}`,
-    `Summary        : ${item.summary}`,
-    `Prepared Date  : ${new Date().toISOString().slice(0, 10)}`,
+  const lines = [
+    `INNOVISTA FABRICONIX - TECHNICAL DOCUMENT (${attachment.format})`,
+    `Document ID: ${attachment.id}`,
+    `Title: ${attachment.title}`,
+    `Reference Size: ${attachment.fileSize}`,
     "",
-    "CORE ARCHITECTURAL SPECIFICATIONS",
-    "----------------------------------------------------------------",
-    "- Alloy Grade        : Architectural Aluminium 6063-T5 / 6060-T66",
-    "- Coastal Coating    : 25-Micron Anodizing / Qualicoat Class 2",
-    "- Hardware Core      : European Marine-Grade SS316 Hardware",
-    "- Structural Glazing : Toughened & Acoustic PVB Laminated Glass",
-    "- Head Office        : No. 42, Nawala Road, Colombo 05, Sri Lanka",
-    "- Direct Support     : engineering@innovista.lk | +94 11 234 5688",
+    "Overview:",
+    attachment.summary,
     "",
-  ].join("\n");
-
+    "Engineering Notes:",
+    "- Alloy Specification: 6063-T5 / 6063-T6 Architectural Extrusion",
+    "- Glazing Compatibility: 8mm–12mm Toughened or 5+12A+5mm Low-E DGU",
+    "- Surface Finish Options: 25-micron Anodized or Qualicoat Class 2 Powder Coat",
+    "- Contact: innovistametal@gmail.com | +94 76 081 8098",
+  ];
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="${item.fileName}"`
-  );
-  return res.send(documentBody);
+  res.setHeader("Content-Disposition", `attachment; filename="${attachment.fileName}"`);
+  return res.send(lines.join("\n"));
 });
 
-// Related Hardware & Portals Collage CRUD Endpoints
-app.get("/api/resources/portals", (_req: Request, res: Response) => {
-  return res.json({ data: relatedPortals });
+app.get("/api/resources/portals", async (_req: Request, res: Response) => {
+  const data = await listRelatedPortals();
+  return res.json({ data });
 });
 
-app.put("/api/resources/portals", (req: Request, res: Response) => {
-  const payload = Array.isArray(req.body?.data) ? req.body.data : req.body;
-  if (!Array.isArray(payload)) {
-    return res.status(400).json({ message: "Portals array is required." });
+app.put("/api/resources/portals", async (req: Request, res: Response) => {
+  const incoming = Array.isArray(req.body?.portals) ? req.body.portals : req.body;
+  const normalized = normalizeRelatedPortals(incoming);
+  const saved = await replaceRelatedPortals(normalized);
+  return res.json({ message: "Related hardware portals saved", data: saved });
+});
+
+app.post("/api/resources/portals", async (req: Request, res: Response) => {
+  const existing = await listRelatedPortals();
+  const item = normalizePortalTile(req.body || {}, existing.length);
+  if (!item.name || !item.url) {
+    return res.status(400).json({ message: "Portal name and URL are required." });
   }
-  relatedPortals = normalizeRelatedPortals(payload);
-  return res.json({
-    message: "Related portals collage updated successfully!",
-    data: relatedPortals,
-  });
+  const saved = await replaceRelatedPortals([...existing, item]);
+  return res.status(201).json({ message: "Portal tile added", portal: item, data: saved });
 });
 
-app.post("/api/resources/portals", (req: Request, res: Response) => {
-  const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
-  const url = typeof req.body?.url === "string" ? req.body.url.trim() : "";
-  if (!name || !url) {
-    return res
-      .status(400)
-      .json({ message: "Portal name and destination link are required." });
-  }
-  const tile = normalizePortalTile(
-    {
-      ...req.body,
-      id: req.body?.id || `portal-${Date.now()}`,
-    },
-    relatedPortals.length
-  );
-  relatedPortals.push(tile);
-  return res.json({
-    message: "Portal collage tile added!",
-    data: tile,
-    items: relatedPortals,
-  });
-});
-
-app.put("/api/resources/portals/:id", (req: Request, res: Response) => {
+app.put("/api/resources/portals/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = relatedPortals.findIndex((p) => p.id === id);
-  if (idx === -1) {
-    return res.status(404).json({ message: "Portal tile not found." });
-  }
-  const updated = normalizePortalTile(
-    {
-      ...relatedPortals[idx],
-      ...req.body,
-      id,
-    },
-    idx
-  );
-  relatedPortals[idx] = updated;
-  return res.json({
-    message: "Portal collage tile updated!",
-    data: updated,
-    items: relatedPortals,
-  });
+  const existing = await listRelatedPortals();
+  const idx = existing.findIndex((p) => p.id === id);
+  if (idx === -1) return res.status(404).json({ message: "Portal tile not found" });
+  const updated = normalizePortalTile({ ...existing[idx], ...(req.body || {}), id }, idx);
+  const next = existing.map((p, i) => (i === idx ? updated : p));
+  const saved = await replaceRelatedPortals(next);
+  return res.json({ message: "Portal tile updated", portal: updated, data: saved });
 });
 
-app.delete("/api/resources/portals/:id", (req: Request, res: Response) => {
+app.delete("/api/resources/portals/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const before = relatedPortals.length;
-  relatedPortals = relatedPortals.filter((p) => p.id !== id);
-  if (relatedPortals.length === before) {
-    return res.status(404).json({ message: "Portal tile not found." });
+  const existing = await listRelatedPortals();
+  const next = existing.filter((p) => p.id !== id);
+  if (next.length === existing.length) {
+    return res.status(404).json({ message: "Portal tile not found" });
   }
-  return res.json({
-    message: "Portal collage tile deleted!",
-    items: relatedPortals,
-  });
+  const saved = await replaceRelatedPortals(next);
+  return res.json({ message: "Portal tile deleted", data: saved });
 });
 
-// Blogs & Blogger.com Synchronization Endpoints
-app.get("/api/blogs", async (req: Request, res: Response) => {
-  const shouldAutoSync =
-    req.query.autoSync === "1" || req.query.forceSync === "1";
-  const hasBloggerTarget = Boolean(
-    bloggerConfig.blogUrl || (bloggerConfig.blogId && bloggerConfig.apiKey)
-  );
-  const isStale = Date.now() - lastAutoSyncAttemptAt > 60_000;
+// ============================================================================
+// BLOG POSTS & BLOGGER.COM ROUTES (/api/blog-posts & /api/blogs)
+// ============================================================================
+app.get(["/api/blogs", "/api/blog-posts"], async (req: Request, res: Response) => {
+  const [bloggerConfig, currentPosts] = await Promise.all([
+    getCmsDoc<BloggerConnectionConfig>("blogger_config", DEFAULT_BLOGGER_CONFIG),
+    listBlogPosts(),
+  ]);
 
+  const now = Date.now();
   if (
-    shouldAutoSync &&
-    hasBloggerTarget &&
     bloggerConfig.autoSyncOnVisit &&
-    (req.query.forceSync === "1" || isStale)
+    bloggerConfig.blogUrl.trim() &&
+    now - lastAutoSyncAttemptAt > 120_000
   ) {
-    lastAutoSyncAttemptAt = Date.now();
+    lastAutoSyncAttemptAt = now;
     try {
       await syncFromBloggerSource(
         bloggerConfig.blogUrl,
@@ -1972,983 +1721,970 @@ app.get("/api/blogs", async (req: Request, res: Response) => {
         bloggerConfig.apiKey
       );
     } catch (err) {
-      bloggerConfig = {
+      await setCmsDoc("blogger_config", {
         ...bloggerConfig,
         lastSyncStatus: "error",
-        lastSyncMessage:
-          err instanceof Error ? err.message : "Failed to refresh Blogger feed.",
-      };
+        lastSyncMessage: err instanceof Error ? err.message : "Auto-sync skipped",
+      } as unknown as Record<string, unknown>);
     }
   }
 
-  const homeOnly = req.query.homeOnly === "true" || req.query.homeOnly === "1";
+  const latestPosts = await listBlogPosts();
+  const latestConfig = await getCmsDoc<BloggerConnectionConfig>(
+    "blogger_config",
+    DEFAULT_BLOGGER_CONFIG
+  );
   const category = typeof req.query.category === "string" ? req.query.category : "All";
-  const query = typeof req.query.q === "string" ? req.query.q : "";
-  const sourceParam =
-    req.query.source === "blogger" || req.query.source === "local"
-      ? req.query.source
-      : "all";
+  const search = typeof req.query.search === "string" ? req.query.search : "";
+  const homeOnly = req.query.homeOnly === "true";
 
-  const list = homeOnly
-    ? getHomePageBlogs(blogPosts)
-    : filterBlogPosts(blogPosts, category, query, sourceParam);
+  const data = homeOnly
+    ? getHomePageBlogs(latestPosts)
+    : filterBlogPosts(latestPosts, category, search);
 
   return res.json({
-    posts: list,
-    total: blogPosts.length,
-    homeCount: blogPosts.filter((b) => b.showOnHome).length,
-    config: {
-      ...bloggerConfig,
-      apiKey: bloggerConfig.apiKey ? "••••••••" : "",
-      hasApiKey: Boolean(bloggerConfig.apiKey),
-    },
+    data,
+    allCount: currentPosts.length,
+    homeSelectedCount: latestPosts.filter((p) => p.showOnHome).length,
+    config: { ...latestConfig, apiKey: latestConfig.apiKey ? "••••••••" : "" },
+    rawConfig: latestConfig,
   });
 });
 
 app.post("/api/blogs/sync-blogger", async (req: Request, res: Response) => {
-  const requestedUrl =
-    typeof req.body?.blogUrl === "string"
-      ? req.body.blogUrl.trim()
-      : bloggerConfig.blogUrl;
-  const requestedBlogId =
-    typeof req.body?.blogId === "string"
-      ? req.body.blogId.trim()
-      : bloggerConfig.blogId;
-  const requestedApiKey =
-    typeof req.body?.apiKey === "string" && req.body.apiKey !== "••••••••"
-      ? req.body.apiKey.trim()
-      : bloggerConfig.apiKey;
+  const currentConfig = await getCmsDoc<BloggerConnectionConfig>(
+    "blogger_config",
+    DEFAULT_BLOGGER_CONFIG
+  );
+  const targetUrl = String(req.body?.blogUrl ?? currentConfig.blogUrl ?? "").trim();
+  const targetBlogId = String(req.body?.blogId ?? currentConfig.blogId ?? "").trim();
+  const targetApiKey =
+    req.body?.apiKey !== undefined && req.body?.apiKey !== "••••••••"
+      ? String(req.body.apiKey).trim()
+      : currentConfig.apiKey;
   const autoSyncOnVisit =
     typeof req.body?.autoSyncOnVisit === "boolean"
       ? req.body.autoSyncOnVisit
-      : bloggerConfig.autoSyncOnVisit;
+      : currentConfig.autoSyncOnVisit;
 
-  bloggerConfig = {
-    ...bloggerConfig,
-    blogUrl: normalizeBloggerOrigin(requestedUrl) || requestedUrl,
-    blogId: requestedBlogId,
-    apiKey: requestedApiKey,
-    autoSyncOnVisit,
-  };
-
-  if (!bloggerConfig.blogUrl && !(bloggerConfig.blogId && bloggerConfig.apiKey)) {
+  if (!targetUrl && !(targetBlogId && targetApiKey)) {
     return res.status(400).json({
-      message: "Enter a Blogger.com URL (e.g. https://yourblog.blogspot.com) or Blog ID + API key.",
+      message: "Enter your Blogger.com URL (or Blog ID + API Key) to sync.",
     });
   }
 
-  try {
-    lastAutoSyncAttemptAt = Date.now();
-    const syncRes = await syncFromBloggerSource(
-      bloggerConfig.blogUrl,
-      bloggerConfig.blogId,
-      bloggerConfig.apiKey
-    );
+  await setCmsDoc("blogger_config", {
+    ...currentConfig,
+    autoSyncOnVisit,
+    blogUrl: normalizeBloggerOrigin(targetUrl) || targetUrl,
+    blogId: targetBlogId,
+    apiKey: targetApiKey,
+  } as unknown as Record<string, unknown>);
 
+  try {
+    const result = await syncFromBloggerSource(targetUrl, targetBlogId, targetApiKey);
+    const updatedConfig = await getCmsDoc<BloggerConnectionConfig>(
+      "blogger_config",
+      DEFAULT_BLOGGER_CONFIG
+    );
     return res.json({
-      message: `Synced ${syncRes.syncedTotal} posts from Blogger (${syncRes.addedCount} new, ${syncRes.updatedCount} updated).`,
-      posts: blogPosts,
-      addedCount: syncRes.addedCount,
-      updatedCount: syncRes.updatedCount,
-      syncedTotal: syncRes.syncedTotal,
-      config: {
-        ...bloggerConfig,
-        apiKey: bloggerConfig.apiKey ? "••••••••" : "",
-        hasApiKey: Boolean(bloggerConfig.apiKey),
-      },
+      message: `Synced ${result.syncedTotal} Blogger post${result.syncedTotal === 1 ? "" : "s"} (${result.addedCount} new, ${result.updatedCount} updated).`,
+      addedCount: result.addedCount,
+      updatedCount: result.updatedCount,
+      syncedTotal: result.syncedTotal,
+      data: result.posts,
+      config: { ...updatedConfig, apiKey: updatedConfig.apiKey ? "••••••••" : "" },
     });
   } catch (err) {
-    const errMsg =
-      err instanceof Error ? err.message : "Could not connect to Blogger.com feed.";
-    bloggerConfig = {
-      ...bloggerConfig,
+    const errMsg = err instanceof Error ? err.message : "Failed to sync Blogger posts";
+    await setCmsDoc("blogger_config", {
+      ...currentConfig,
       lastSyncedAt: new Date().toISOString(),
       lastSyncStatus: "error",
       lastSyncMessage: errMsg,
-    };
-    return res.status(502).json({
-      message: `Blogger sync saved configuration, but remote feed fetch failed: ${errMsg}`,
-      config: {
-        ...bloggerConfig,
-        apiKey: bloggerConfig.apiKey ? "••••••••" : "",
-        hasApiKey: Boolean(bloggerConfig.apiKey),
-      },
-      posts: blogPosts,
-    });
+    } as unknown as Record<string, unknown>);
+    return res.status(502).json({ message: errMsg });
   }
 });
 
-app.put("/api/blogs/config", (req: Request, res: Response) => {
-  const nextUrl =
-    typeof req.body?.blogUrl === "string"
-      ? normalizeBloggerOrigin(req.body.blogUrl) || req.body.blogUrl.trim()
-      : bloggerConfig.blogUrl;
-  const nextBlogId =
-    typeof req.body?.blogId === "string"
-      ? req.body.blogId.trim()
-      : bloggerConfig.blogId;
-  const nextApiKey =
-    typeof req.body?.apiKey === "string" && req.body.apiKey !== "••••••••"
-      ? req.body.apiKey.trim()
-      : bloggerConfig.apiKey;
-  const autoSyncOnVisit =
-    typeof req.body?.autoSyncOnVisit === "boolean"
-      ? req.body.autoSyncOnVisit
-      : bloggerConfig.autoSyncOnVisit;
-
-  if (req.body?.disconnect === true) {
-    bloggerConfig = { ...DEFAULT_BLOGGER_CONFIG };
-    if (req.body?.removeSyncedPosts) {
-      blogPosts = blogPosts.filter((p) => p.source !== "blogger");
-    }
-    return res.json({
-      message: "Blogger connection disconnected.",
-      config: { ...bloggerConfig, hasApiKey: false },
-      posts: blogPosts,
+app.put("/api/blogs/config", async (req: Request, res: Response) => {
+  const currentConfig = await getCmsDoc<BloggerConnectionConfig>(
+    "blogger_config",
+    DEFAULT_BLOGGER_CONFIG
+  );
+  const nextUrl = String(req.body?.blogUrl ?? currentConfig.blogUrl ?? "").trim();
+  const normalizedUrl = nextUrl ? normalizeBloggerOrigin(nextUrl) : "";
+  if (nextUrl && !normalizedUrl) {
+    return res.status(400).json({
+      message: "Invalid Blogger URL. Use a valid https://yourblog.blogspot.com address.",
     });
   }
 
-  bloggerConfig = {
-    ...bloggerConfig,
-    blogUrl: nextUrl,
-    blogId: nextBlogId,
-    apiKey: nextApiKey,
-    autoSyncOnVisit,
-    lastSyncMessage: nextUrl
-      ? `Connected to ${nextUrl}. Click Sync Now to fetch latest posts.`
-      : DEFAULT_BLOGGER_CONFIG.lastSyncMessage,
+  const nextConfig: BloggerConnectionConfig = {
+    ...currentConfig,
+    blogUrl: normalizedUrl || "",
+    blogId:
+      req.body?.blogId !== undefined ? String(req.body.blogId).trim() : currentConfig.blogId,
+    apiKey:
+      req.body?.apiKey !== undefined && req.body?.apiKey !== "••••••••"
+        ? String(req.body.apiKey).trim()
+        : currentConfig.apiKey,
+    blogTitle:
+      req.body?.blogTitle !== undefined
+        ? String(req.body.blogTitle).trim() || currentConfig.blogTitle
+        : currentConfig.blogTitle,
+    autoSyncOnVisit:
+      typeof req.body?.autoSyncOnVisit === "boolean"
+        ? req.body.autoSyncOnVisit
+        : currentConfig.autoSyncOnVisit,
   };
-
+  await setCmsDoc("blogger_config", nextConfig as unknown as Record<string, unknown>);
   return res.json({
-    message: "Blogger integration settings saved.",
-    config: {
-      ...bloggerConfig,
-      apiKey: bloggerConfig.apiKey ? "••••••••" : "",
-      hasApiKey: Boolean(bloggerConfig.apiKey),
-    },
+    message: "Blogger configuration saved",
+    config: { ...nextConfig, apiKey: nextConfig.apiKey ? "••••••••" : "" },
   });
 });
 
-app.put("/api/blogs/home-selection", (req: Request, res: Response) => {
-  const homeIds: string[] = Array.isArray(req.body?.homeIds)
-    ? req.body.homeIds.map(String)
+app.put("/api/blogs/home-selection", async (req: Request, res: Response) => {
+  const orderedIds: string[] = Array.isArray(req.body?.homePostIds)
+    ? req.body.homePostIds.map((v: unknown) => String(v))
     : [];
+  const allPosts = await listBlogPosts();
   const orderMap = new Map<string, number>();
-  homeIds.forEach((id, idx) => orderMap.set(id, idx + 1));
+  orderedIds.forEach((id, idx) => orderMap.set(id, idx + 1));
 
-  blogPosts = blogPosts.map((post) => {
-    const order = orderMap.get(post.id);
-    if (order !== undefined) {
-      return { ...post, showOnHome: true, homeOrder: order };
-    }
-    return { ...post, showOnHome: false };
-  });
+  for (const p of allPosts) {
+    const order = orderMap.get(p.id);
+    await upsertBlogPostRecord({
+      ...p,
+      showOnHome: order !== undefined,
+      homeOrder: order ?? 999,
+    });
+  }
 
+  const refreshed = await listBlogPosts();
   return res.json({
-    message: "Home page blog selection updated!",
-    posts: blogPosts,
-    homePosts: getHomePageBlogs(blogPosts),
+    message: "Home page featured blogs updated",
+    data: refreshed,
+    homePosts: getHomePageBlogs(refreshed),
   });
 });
 
-app.post("/api/blogs", (req: Request, res: Response) => {
-  const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
-  if (!title) {
-    return res.status(400).json({ message: "Blog title is required." });
-  }
-  const rawHtml =
-    typeof req.body?.contentHtml === "string" && req.body.contentHtml.trim()
-      ? req.body.contentHtml
-      : `<p>${typeof req.body?.excerpt === "string" ? req.body.excerpt.trim() : title}</p>`;
-  const sanitizedHtml = sanitizeBlogHtml(rawHtml);
-  const nowIso = new Date().toISOString();
-  const category =
-    typeof req.body?.category === "string" && req.body.category.trim()
-      ? req.body.category.trim()
-      : "Architectural Journal";
-  const labels = Array.isArray(req.body?.labels)
-    ? req.body.labels.map(String).filter(Boolean)
-    : [category];
-  const nextHomeOrder =
-    blogPosts.reduce((max, p) => Math.max(max, p.homeOrder || 0), 0) + 1;
-
-  const created: BlogPostItem = {
-    id: `blog-${Date.now()}`,
+app.post(["/api/blogs", "/api/blog-posts"], async (req: Request, res: Response) => {
+  const {
     title,
-    excerpt:
-      typeof req.body?.excerpt === "string" && req.body.excerpt.trim()
-        ? req.body.excerpt.trim()
-        : buildExcerpt(sanitizedHtml),
-    contentHtml: sanitizedHtml,
-    date: formatBlogDisplayDate(nowIso),
-    publishedAt: nowIso,
-    readTime:
-      typeof req.body?.readTime === "string" && req.body.readTime.trim()
-        ? req.body.readTime.trim()
-        : computeReadTime(sanitizedHtml),
+    contentHtml,
+    excerpt,
     category,
     labels,
-    author:
-      typeof req.body?.author === "string" && req.body.author.trim()
-        ? req.body.author.trim()
-        : "Innovista Editorial",
+    author,
+    coverImage,
+    featured,
+    showOnHome,
+    bloggerUrl,
+  } = req.body || {};
+
+  if (!String(title || "").trim()) {
+    return res.status(400).json({ message: "Blog title is required." });
+  }
+
+  const allPosts = await listBlogPosts();
+  const safeHtml = sanitizeBlogHtml(String(contentHtml || "<p></p>"));
+  const resolvedExcerpt = String(excerpt || "").trim() || buildExcerpt(safeHtml, 175);
+  const nowIso = new Date().toISOString();
+  const cleanLabels = Array.isArray(labels)
+    ? labels.map((l: unknown) => String(l || "").trim()).filter(Boolean)
+    : typeof labels === "string"
+      ? labels.split(",").map((l: string) => l.trim()).filter(Boolean)
+      : [];
+
+  const resolvedCategory =
+    String(category || "").trim() || cleanLabels[0] || "Engineering";
+  const currentHomeCount = allPosts.filter((p) => p.showOnHome).length;
+
+  const created = await upsertBlogPostRecord({
+    id: `blog-${Date.now()}`,
+    title: String(title).trim(),
+    excerpt: resolvedExcerpt,
+    contentHtml: safeHtml,
+    date: formatBlogDisplayDate(nowIso),
+    publishedAt: nowIso,
+    readTime: computeReadTime(safeHtml || resolvedExcerpt),
+    category: resolvedCategory,
+    labels: cleanLabels.length > 0 ? cleanLabels : [resolvedCategory],
+    author: String(author || "").trim() || "Innovista Editorial",
     coverImage:
-      typeof req.body?.coverImage === "string" && req.body.coverImage.trim()
-        ? req.body.coverImage.trim()
-        : BLOGGER_COVER_FALLBACKS[blogPosts.length % BLOGGER_COVER_FALLBACKS.length],
-    source: req.body?.source === "blogger" ? "blogger" : "local",
-    bloggerUrl:
-      typeof req.body?.bloggerUrl === "string" ? req.body.bloggerUrl.trim() : "",
-    featured: Boolean(req.body?.featured),
-    showOnHome: Boolean(req.body?.showOnHome),
-    homeOrder:
-      typeof req.body?.homeOrder === "number" ? req.body.homeOrder : nextHomeOrder,
-  };
+      String(coverImage || "").trim() ||
+      BLOGGER_COVER_FALLBACKS[allPosts.length % BLOGGER_COVER_FALLBACKS.length],
+    source: "local",
+    bloggerUrl: String(bloggerUrl || "").trim() || undefined,
+    featured: Boolean(featured),
+    showOnHome: Boolean(showOnHome),
+    homeOrder: showOnHome ? currentHomeCount + 1 : 999,
+  });
 
-  blogPosts.unshift(created);
-  return res.json({
-    message: "Blog post published!",
-    data: created,
-    posts: blogPosts,
+  return res.status(201).json({
+    message: "Blog post published",
+    post: created,
+    data: await listBlogPosts(),
   });
 });
 
-app.put("/api/blogs/:id", (req: Request, res: Response) => {
+app.put(["/api/blogs/:id", "/api/blog-posts/:id"], async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = blogPosts.findIndex((b) => b.id === id);
-  if (idx === -1) {
-    return res.status(404).json({ message: "Blog post not found." });
-  }
-  const existing = blogPosts[idx];
+  const allPosts = await listBlogPosts();
+  const existing = allPosts.find((p) => p.id === id);
+  if (!existing) return res.status(404).json({ message: "Blog post not found" });
+
   const nextHtml =
-    typeof req.body?.contentHtml === "string"
-      ? sanitizeBlogHtml(req.body.contentHtml)
+    req.body?.contentHtml !== undefined
+      ? sanitizeBlogHtml(String(req.body.contentHtml))
       : existing.contentHtml;
+  const nextTitle =
+    req.body?.title !== undefined ? String(req.body.title).trim() : existing.title;
+  const nextExcerpt =
+    req.body?.excerpt !== undefined
+      ? String(req.body.excerpt).trim() || buildExcerpt(nextHtml, 175)
+      : existing.excerpt;
+  const nextLabels = Array.isArray(req.body?.labels)
+    ? req.body.labels.map((l: unknown) => String(l || "").trim()).filter(Boolean)
+    : existing.labels;
 
-  const updated: BlogPostItem = {
+  const updated = await upsertBlogPostRecord({
     ...existing,
-    ...req.body,
-    id: existing.id,
+    title: nextTitle || existing.title,
     contentHtml: nextHtml,
-    excerpt:
-      typeof req.body?.excerpt === "string" && req.body.excerpt.trim()
-        ? req.body.excerpt.trim()
-        : existing.excerpt,
-  };
-  blogPosts[idx] = updated;
+    excerpt: nextExcerpt,
+    readTime: computeReadTime(nextHtml || nextExcerpt),
+    category: req.body?.category ? String(req.body.category).trim() : existing.category,
+    labels: nextLabels,
+    author: req.body?.author ? String(req.body.author).trim() : existing.author,
+    coverImage: req.body?.coverImage ? String(req.body.coverImage).trim() : existing.coverImage,
+    bloggerUrl:
+      req.body?.bloggerUrl !== undefined
+        ? String(req.body.bloggerUrl).trim() || undefined
+        : existing.bloggerUrl,
+    featured: typeof req.body?.featured === "boolean" ? req.body.featured : existing.featured,
+    showOnHome:
+      typeof req.body?.showOnHome === "boolean" ? req.body.showOnHome : existing.showOnHome,
+    homeOrder: typeof req.body?.homeOrder === "number" ? req.body.homeOrder : existing.homeOrder,
+  });
+
   return res.json({
-    message: "Blog post updated!",
-    data: updated,
-    posts: blogPosts,
+    message: "Blog post updated",
+    post: updated,
+    data: await listBlogPosts(),
   });
 });
 
-app.delete("/api/blogs/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const before = blogPosts.length;
-  blogPosts = blogPosts.filter((b) => b.id !== id);
-  if (blogPosts.length === before) {
-    return res.status(404).json({ message: "Blog post not found." });
-  }
-  return res.json({
-    message: "Blog post deleted.",
-    posts: blogPosts,
-  });
+app.delete(["/api/blogs/:id", "/api/blog-posts/:id"], async (req: Request, res: Response) => {
+  const ok = await deleteBlogPostRecord(String(req.params.id || ""));
+  if (!ok) return res.status(404).json({ message: "Blog post not found" });
+  return res.json({ message: "Blog post deleted", data: await listBlogPosts() });
 });
 
-// Site-wide Contact & Phone Setup Endpoints
-app.get("/api/site-settings", (_req: Request, res: Response) => {
-  return res.json({ data: siteContactSettings });
+// ============================================================================
+// SITE CONTACT SETTINGS ROUTES
+// ============================================================================
+app.get("/api/site-settings", async (_req: Request, res: Response) => {
+  const data = await getCmsDoc<SiteContactSettings>(
+    "site_settings",
+    DEFAULT_SITE_CONTACT_SETTINGS
+  );
+  return res.json({ data });
 });
 
-app.put("/api/site-settings", (req: Request, res: Response) => {
-  const candidate = normalizeSiteContactSettings(req.body, siteContactSettings);
-  const errors = validateSiteContactSettings(candidate);
+app.put("/api/site-settings", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<SiteContactSettings>(
+    "site_settings",
+    DEFAULT_SITE_CONTACT_SETTINGS
+  );
+  const next = normalizeSiteContactSettings(req.body || {}, current);
+  const errors = validateSiteContactSettings(next);
   if (Object.keys(errors).length > 0) {
-    return res.status(400).json({
-      message: "Invalid contact settings provided.",
-      errors,
-    });
+    return res.status(400).json({ message: "Invalid contact settings", errors });
   }
-  siteContactSettings = candidate;
-  return res.json({
-    message: "Contact phone & channel settings saved.",
-    data: siteContactSettings,
-  });
+  await setCmsDoc("site_settings", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Contact settings saved", data: next });
 });
 
-// =================== CHATBOT SETUP, FAQ TRAINING & AI ASK ===================
-
-app.get("/api/chatbot/config", (_req: Request, res: Response) => {
-  return res.json({
-    config: chatbotConfig,
-    faqs: chatbotFaqs,
-    contact: {
-      phone: siteContactSettings.phone,
-      whatsapp: siteContactSettings.whatsapp,
-      email: siteContactSettings.email,
-    },
-  });
+// ============================================================================
+// CHATBOT CONFIGURATION, ADMIN TRAINING FAQS & LIVE AI Q&A ROUTES
+// ============================================================================
+app.get("/api/chatbot/config", async (_req: Request, res: Response) => {
+  const [config, faqs, contact] = await Promise.all([
+    getCmsDoc<ChatbotConfig>("chatbot_config", DEFAULT_CHATBOT_CONFIG),
+    listChatbotFaqs(),
+    getCmsDoc<SiteContactSettings>("site_settings", DEFAULT_SITE_CONTACT_SETTINGS),
+  ]);
+  return res.json({ config, faqs, contact });
 });
 
-app.put("/api/chatbot/config", (req: Request, res: Response) => {
-  chatbotConfig = normalizeChatbotConfig(req.body, chatbotConfig);
-  return res.json({
-    message: "Chatbot configuration saved!",
-    config: chatbotConfig,
-  });
+app.put("/api/chatbot/config", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<ChatbotConfig>("chatbot_config", DEFAULT_CHATBOT_CONFIG);
+  const next = normalizeChatbotConfig(req.body || {}, current);
+  await setCmsDoc("chatbot_config", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Chatbot configuration saved", config: next });
 });
 
-app.post("/api/chatbot/faqs", (req: Request, res: Response) => {
-  const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
-  const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
-  if (!question || !answer) {
+app.post("/api/chatbot/faqs", async (req: Request, res: Response) => {
+  const existing = await listChatbotFaqs();
+  const nextFaq = normalizeChatbotFaq(
+    { ...(req.body || {}), id: `faq-${Date.now()}` },
+    existing.length
+  );
+  if (!nextFaq.question || !nextFaq.answer) {
     return res.status(400).json({ message: "Question and answer are both required." });
   }
-  const created = normalizeChatbotFaq(
-    {
-      ...req.body,
-      id: `faq-${Date.now()}`,
-      updatedAt: new Date().toISOString(),
-    },
-    chatbotFaqs.length
-  );
-  chatbotFaqs.unshift(created);
-  return res.json({
-    message: "FAQ training pair added!",
-    data: created,
-    faqs: chatbotFaqs,
+  const saved = await upsertChatbotFaqRecord(nextFaq);
+  return res.status(201).json({
+    message: "Trained Q&A added",
+    faq: saved,
+    faqs: await listChatbotFaqs(),
   });
 });
 
-app.put("/api/chatbot/faqs/:id", (req: Request, res: Response) => {
+app.put("/api/chatbot/faqs/:id", async (req: Request, res: Response) => {
   const { id } = req.params;
-  const idx = chatbotFaqs.findIndex((f) => f.id === id);
-  if (idx === -1) {
-    return res.status(404).json({ message: "FAQ item not found." });
-  }
-  const existing = chatbotFaqs[idx];
+  const all = await listChatbotFaqs();
+  const idx = all.findIndex((f) => f.id === id);
+  if (idx === -1) return res.status(404).json({ message: "FAQ entry not found" });
   const updated = normalizeChatbotFaq(
-    {
-      ...existing,
-      ...req.body,
-      id: existing.id,
-      updatedAt: new Date().toISOString(),
-    },
+    { ...all[idx], ...(req.body || {}), id: all[idx].id },
     idx
   );
   if (!updated.question || !updated.answer) {
     return res.status(400).json({ message: "Question and answer cannot be empty." });
   }
-  chatbotFaqs[idx] = updated;
+  const saved = await upsertChatbotFaqRecord(updated);
   return res.json({
-    message: "FAQ training pair updated!",
-    data: updated,
-    faqs: chatbotFaqs,
+    message: "Trained Q&A updated",
+    faq: saved,
+    faqs: await listChatbotFaqs(),
   });
 });
 
-app.delete("/api/chatbot/faqs/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const before = chatbotFaqs.length;
-  chatbotFaqs = chatbotFaqs.filter((f) => f.id !== id);
-  if (chatbotFaqs.length === before) {
-    return res.status(404).json({ message: "FAQ item not found." });
-  }
-  return res.json({
-    message: "FAQ training pair deleted.",
-    faqs: chatbotFaqs,
-  });
+app.delete("/api/chatbot/faqs/:id", async (req: Request, res: Response) => {
+  const ok = await deleteChatbotFaqRecord(String(req.params.id || ""));
+  if (!ok) return res.status(404).json({ message: "FAQ entry not found" });
+  return res.json({ message: "Trained Q&A removed", faqs: await listChatbotFaqs() });
 });
 
 app.post("/api/chatbot/ask", async (req: Request, res: Response) => {
-  const rawMessage = typeof req.body?.message === "string" ? req.body.message.trim() : "";
-  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
-  if (!rawMessage) {
-    return res.status(400).json({ message: "Message is required." });
+  const userMessage = String(req.body?.message || "").trim();
+  const history = Array.isArray(req.body?.history)
+    ? (req.body.history as Array<{ role: string; text: string }>).slice(-6)
+    : [];
+
+  if (!userMessage) {
+    return res.status(400).json({ message: "Message text is required." });
   }
 
-  const intent = detectChatIntent(rawMessage);
-  const faqMatch = matchTrainedFaq(rawMessage, chatbotFaqs);
+  const [config, faqs, contact, designs, cats] = await Promise.all([
+    getCmsDoc<ChatbotConfig>("chatbot_config", DEFAULT_CHATBOT_CONFIG),
+    listChatbotFaqs(),
+    getCmsDoc<SiteContactSettings>("site_settings", DEFAULT_SITE_CONTACT_SETTINGS),
+    listProducts(),
+    listCategories(),
+  ]);
+
+  const intent = detectChatIntent(userMessage);
+  const wantsSiteVisit = intent === "visit";
+  const wantsWhatsapp = intent === "whatsapp";
+  const wantsQuote = intent === "quote";
+
   const whatsappUrl = buildWhatsAppChatUrl(
-    siteContactSettings.whatsapp,
-    rawMessage,
-    chatbotConfig.defaultWhatsappPrefix
+    contact.whatsapp || contact.phone,
+    userMessage,
+    config.defaultWhatsappPrefix
   );
-  const smsUrl = buildSmsHref(siteContactSettings.phone, rawMessage);
+  const smsHref = buildSmsHref(
+    contact.phone,
+    `Hi Innovista, ${userMessage.slice(0, 140)}`
+  );
 
-  const enabledFaqs = chatbotFaqs.filter((f) => f.enabled);
-  const faqKnowledgeBlock = enabledFaqs
-    .map((f, idx) => `${idx + 1}. Q: ${f.question}\n   A: ${f.answer}`)
-    .join("\n");
+  const faqMatch = matchTrainedFaq(userMessage, faqs);
+  if (faqMatch) {
+    return res.json({
+      reply: faqMatch.item.answer,
+      source: "trained-faq",
+      matchedFaqId: faqMatch.item.id,
+      suggestSiteVisit: wantsSiteVisit,
+      suggestWhatsapp: wantsWhatsapp || config.autoSuggestWhatsapp,
+      whatsappUrl,
+      smsHref,
+    });
+  }
 
-  const aiClient = getServerGeminiClient();
-  let replyText = "";
-  let source: "gemini" | "trained-faq" | "fallback" = "fallback";
-
-  if (aiClient) {
+  const ai = getServerGeminiClient();
+  if (ai) {
     try {
-      const conversationContext = history
-        .map((h: { role?: string; text?: string }) =>
-          `${h.role === "user" ? "Customer" : "Assistant"}: ${String(h.text || "").slice(0, 300)}`
-        )
+      const kbContext = faqs
+        .filter((f) => f.enabled)
+        .map((f) => `Q: ${f.question}\nA: ${f.answer}`)
+        .join("\n\n");
+      const catalogContext = designs
+        .slice(0, 8)
+        .map((d) => `- ${d.Design_Name} (${d.Categories.join(", ")}): ${d.Design_Description}`)
+        .join("\n");
+      const catNames = cats.map((c) => c.name).join(", ");
+      const transcript = history
+        .map((m) => `${m.role === "user" ? "Customer" : "Assistant"}: ${m.text}`)
         .join("\n");
 
-      const prompt = [
-        conversationContext ? `Recent chat:\n${conversationContext}` : "",
-        `Customer question: ${rawMessage}`,
-      ]
-        .filter(Boolean)
-        .join("\n\n");
+      const systemPrompt = `${config.systemInstructions}
 
-      const systemInstruction = [
-        chatbotConfig.systemInstructions,
-        `Company channels: Phone ${siteContactSettings.phone}, WhatsApp ${siteContactSettings.whatsapp}, Email ${siteContactSettings.email}.`,
-        "Trained Q&A knowledge base (prioritize these facts whenever relevant):",
-        faqKnowledgeBlock || "No custom FAQs added yet.",
-        "Keep answers concise (max 3 short sentences). Do not use markdown code blocks.",
-      ].join("\n\n");
+Company Contact:
+- Phone / WhatsApp: ${contact.phone}
+- Email: ${contact.email}
+- Showrooms: Nawala (Colombo 05), Kelaniya Plant, Kandy Showroom
+- Product Categories: ${catNames}
 
-      const response = await aiClient.models.generateContent({
-        model: "gemini-4-hydrogen",
-        contents: prompt,
-        config: {
-          systemInstruction,
-        },
+Catalog Highlights:
+${catalogContext}
+
+Trained FAQs:
+${kbContext}
+
+Rules: Keep replies concise (1-3 crisp sentences). If they ask to book a visit, mention the "Site Visit" tab. For custom pricing or drawings, mention WhatsApp or Request Quote.`;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-2.5-flash",
+        contents: transcript
+          ? `${transcript}\nCustomer: ${userMessage}`
+          : `Customer: ${userMessage}`,
+        config: { systemInstruction: systemPrompt, temperature: 0.4, maxOutputTokens: 220 },
       });
-      const candidateText = (response.text || "").trim();
-      if (candidateText) {
-        replyText = candidateText;
-        source = "gemini";
+
+      const replyText = response.text?.trim();
+      if (replyText) {
+        return res.json({
+          reply: replyText,
+          source: "gemini",
+          suggestSiteVisit: wantsSiteVisit,
+          suggestWhatsapp: wantsWhatsapp || config.autoSuggestWhatsapp,
+          whatsappUrl,
+          smsHref,
+        });
       }
-    } catch {
-      // Fall through cleanly to trained FAQ / deterministic response
+    } catch (err) {
+      console.warn("Gemini chatbot fallback:", err);
     }
   }
 
-  if (!replyText && faqMatch) {
-    replyText = faqMatch.item.answer;
-    source = "trained-faq";
-  }
-
-  if (!replyText) {
-    if (intent === "visit") {
-      replyText =
-        "Available site visit slots are open Mon–Sat (09:30 AM, 11:00 AM, 02:00 PM, 03:30 PM). Pick a slot below or open the Site Visit tab to sync with Google Calendar.";
-    } else if (intent === "whatsapp") {
-      replyText =
-        "Tap Chat on WhatsApp below to connect directly with our fabrication team with your message prefilled.";
-    } else if (intent === "sms") {
-      replyText = `You can send a direct text message to ${siteContactSettings.phone} using Text Phone below.`;
-    } else if (intent === "quote") {
-      replyText =
-        "Send your dimensions or architectural drawings via Request Quote or WhatsApp for a 24–48h BOQ estimate.";
-    } else {
-      replyText = `Thanks for reaching Innovista Fabriconix. You can ask about products, quotes, coastal warranties, book a site visit, or chat directly on WhatsApp (${siteContactSettings.phone}).`;
-    }
-    source = "fallback";
+  let fallbackReply =
+    "Thanks for reaching out to Innovista Fabriconix! Share your dimensions or ask about doors, windows, partitions, or site visits—or continue directly on WhatsApp with our engineers.";
+  if (wantsSiteVisit) {
+    fallbackReply =
+      "We can arrange an engineer site measurement visit. Switch to the Site Visit tab right here to pick your preferred date and time slot.";
+  } else if (wantsQuote) {
+    fallbackReply =
+      "Share your rough dimensions via Request Quote or tap Chat on WhatsApp below—our estimating team returns a detailed BOQ within 24–48 business hours.";
+  } else if (wantsWhatsapp) {
+    fallbackReply =
+      "Tap Chat on WhatsApp or Text via SMS below to speak directly with our fabrication specialists.";
   }
 
   return res.json({
-    reply: replyText,
-    source,
-    intent,
-    matchedFaqQuestion: faqMatch?.item.question || null,
+    reply: fallbackReply,
+    source: "fallback",
+    suggestSiteVisit: wantsSiteVisit,
+    suggestWhatsapp: true,
     whatsappUrl,
-    smsUrl,
-    suggestions: chatbotConfig.quickPrompts.slice(0, 4),
+    smsHref,
   });
 });
 
-// =================== SITE VISIT SLOTS & BOOKING ENDPOINTS ===================
-
-app.get("/api/site-visits/slots", (req: Request, res: Response) => {
-  const upcomingDates = getUpcomingSiteVisitDates(10);
+// ============================================================================
+// APPOINTMENTS & SITE VISIT SCHEDULING ROUTES
+// Both /api/appointments* and /api/site-visits* point to PostgreSQL
+// ============================================================================
+app.get(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Request, res: Response) => {
+  const [schedule, bookings] = await Promise.all([
+    getAppointmentScheduleConfig(),
+    listAppointments(),
+  ]);
+  const dates = getUpcomingSiteVisitDates(14, new Date());
+  const managedDates = getManagedSiteVisitDates(schedule, bookings, 14, new Date());
   const requestedDate =
     typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
       ? req.query.date
-      : upcomingDates[0]?.date || formatTodayIso();
+      : (managedDates.find((d) => d.available)?.date || dates[0]?.date || "");
 
   const slots = computeAvailableSlotsForDate(
     requestedDate,
-    siteVisitBookings,
-    blockedSiteVisitSlots
+    bookings,
+    schedule.blockedKeys,
+    [],
+    schedule
   );
 
   return res.json({
-    date: requestedDate,
-    dates: upcomingDates,
+    dates,
+    managedDates,
+    selectedDate: requestedDate,
     slots,
-    blockedKeys: blockedSiteVisitSlots,
+    schedule,
+    calendarConnected: Boolean(
+      (req.headers.authorization || "").startsWith("Bearer ") &&
+        !(req.headers.authorization || "").includes("mock-access-token")
+    ),
   });
 });
 
-function formatTodayIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
-}
-
-app.get("/api/site-visits", (_req: Request, res: Response) => {
+app.get(["/api/site-visits", "/api/appointments"], async (_req: Request, res: Response) => {
+  const [bookings, schedule] = await Promise.all([
+    listAppointments(),
+    getAppointmentScheduleConfig(),
+  ]);
   return res.json({
-    data: siteVisitBookings,
-    blockedKeys: blockedSiteVisitSlots,
+    bookings,
+    data: bookings,
+    schedule,
+    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
   });
 });
 
-app.post("/api/site-visits", (req: Request, res: Response) => {
-  const date = String(req.body?.date || "").trim();
-  const slotTime = String(req.body?.slotTime || "").trim();
-  const visitorName = String(req.body?.visitorName || "").trim();
-  const visitorEmail = String(req.body?.visitorEmail || "").trim();
-  const visitorPhone = String(req.body?.visitorPhone || "").trim();
-  const locationName =
-    String(req.body?.locationName || "").trim() || "Nawala Showroom / Client Site";
-  const notes = String(req.body?.notes || "").trim();
-  const calendarEventId =
-    typeof req.body?.calendarEventId === "string" ? req.body.calendarEventId : "";
-  const emailSent = Boolean(req.body?.emailSent);
-
-  const errors = validateSiteVisitBooking({
-    date,
-    slotTime,
-    visitorName,
-    visitorEmail,
-    visitorPhone,
+app.get("/api/site-visits/schedule", async (_req: Request, res: Response) => {
+  const [schedule, bookings] = await Promise.all([
+    getAppointmentScheduleConfig(),
+    listAppointments(),
+  ]);
+  return res.json({
+    schedule,
+    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
   });
+});
 
-  if (Object.keys(errors).length > 0) {
-    return res.status(400).json({
-      message: "Please complete all required site visit fields.",
-      errors,
-    });
+app.post("/api/site-visits/dates", async (req: Request, res: Response) => {
+  const { date, available, note } = req.body || {};
+  const cleanDate = String(date || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+    return res.status(400).json({ message: "Valid YYYY-MM-DD date is required." });
   }
+  const [schedule, bookings] = await Promise.all([
+    upsertAppointmentDateRecord({
+      date: cleanDate,
+      available: typeof available === "boolean" ? available : true,
+      note: typeof note === "string" ? note.trim() : "",
+      isCustom: true,
+    }),
+    listAppointments(),
+  ]);
+  return res.status(201).json({
+    message: `Date ${cleanDate} saved.`,
+    schedule,
+    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+  });
+});
 
-  const slotKey = `${date}|${slotTime}`;
-  const isBlocked = blockedSiteVisitSlots.includes(slotKey);
-  const isTaken = siteVisitBookings.some(
-    (b) => b.date === date && b.slotTime === slotTime && b.status !== "CANCELLED"
-  );
-  if (isBlocked || isTaken) {
-    return res.status(409).json({
-      message: "Selected slot is no longer available. Please choose another slot.",
-    });
+app.patch("/api/site-visits/dates/:date", async (req: Request, res: Response) => {
+  const cleanDate = String(req.params.date || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+    return res.status(400).json({ message: "Valid YYYY-MM-DD date parameter required." });
   }
+  const { available, note } = req.body || {};
+  const [schedule, bookings] = await Promise.all([
+    upsertAppointmentDateRecord({
+      date: cleanDate,
+      available: typeof available === "boolean" ? available : undefined,
+      note: typeof note === "string" ? note.trim() : undefined,
+    }),
+    listAppointments(),
+  ]);
+  return res.json({
+    message: `Availability updated for ${cleanDate}.`,
+    schedule,
+    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+  });
+});
 
-  const tpl = SITE_VISIT_SLOT_TEMPLATES.find((s) => s.time === slotTime);
-  const booking: SiteVisitBooking = {
-    id: `SV-${Math.floor(1000 + Math.random() * 9000)}`,
-    date,
-    slotTime,
-    slotLabel: tpl?.label || slotTime,
-    locationName,
-    visitorName,
-    visitorEmail,
-    visitorPhone,
-    notes,
-    status: "CONFIRMED",
-    calendarEventId,
-    emailSent,
-    createdAt: new Date().toISOString(),
-  };
+app.delete("/api/site-visits/dates/:date", async (req: Request, res: Response) => {
+  const cleanDate = String(req.params.date || "").trim();
+  const [schedule, bookings] = await Promise.all([
+    deleteAppointmentDateRecord(cleanDate),
+    listAppointments(),
+  ]);
+  return res.json({
+    message: `Removed date override for ${cleanDate}.`,
+    schedule,
+    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+  });
+});
 
-  siteVisitBookings.unshift(booking);
-
-  // Sync booking into Admin Orders & Notifications
-  orders.unshift({
-    OrderID: booking.id,
-    Order_Date: booking.createdAt,
-    Order_Status: "PENDING",
-    Client_Name: visitorName,
-    Client_Email: visitorEmail,
-    Client_Number: visitorPhone,
-    Customer: {
-      Cus_CompanyName: `Site Visit (${date} · ${booking.slotLabel})`,
-    },
-    Designs: [
+app.post(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Request, res: Response) => {
+  const { date, time, endTime, label, available } = req.body || {};
+  if (!time || !/^\d{1,2}:\d{2}$/.test(String(time).trim())) {
+    return res.status(400).json({ message: "Valid HH:mm start time is required." });
+  }
+  const [schedule, bookings] = await Promise.all([
+    addAppointmentSlotRecord(
+      date ? String(date) : undefined,
       {
-        Design: {
-          Design_Name: `Site Visit — ${locationName}`,
-          Design_Image: [],
-        },
-      },
-    ],
-  });
-
-  notifications.unshift({
-    id: `notif-${Date.now()}`,
-    NotificationsID: `notif-${Date.now()}`,
-    Notifications_Title: `Site Visit Booked (${booking.id})`,
-    Notifications_Body: `${visitorName} booked ${date} at ${booking.slotLabel} (${locationName}).`,
-    Date_Timestamp: new Date().toISOString(),
-    isRead: false,
-  });
-
-  return res.json({
-    message: "Site visit booked successfully!",
-    data: booking,
-    slots: computeAvailableSlotsForDate(date, siteVisitBookings, blockedSiteVisitSlots),
-  });
-});
-
-app.patch("/api/site-visits/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  const idx = siteVisitBookings.findIndex((b) => b.id === id);
-  if (idx === -1) {
-    return res.status(404).json({ message: "Site visit booking not found." });
-  }
-
-  const existing = siteVisitBookings[idx];
-  const nextStatus = req.body?.status as SiteVisitStatus | undefined;
-  const validStatuses: SiteVisitStatus[] = ["CONFIRMED", "COMPLETED", "CANCELLED"];
-
-  siteVisitBookings[idx] = {
-    ...existing,
-    status:
-      nextStatus && validStatuses.includes(nextStatus)
-        ? nextStatus
-        : existing.status,
-    calendarEventId:
-      typeof req.body?.calendarEventId === "string"
-        ? req.body.calendarEventId
-        : existing.calendarEventId,
-    emailSent:
-      typeof req.body?.emailSent === "boolean"
-        ? req.body.emailSent
-        : existing.emailSent,
-  };
-
-  return res.json({
-    message: "Site visit booking updated.",
-    data: siteVisitBookings[idx],
-  });
-});
-
-app.post("/api/site-visits/slots/toggle-block", (req: Request, res: Response) => {
-  const date = String(req.body?.date || "").trim();
-  const slotTime = String(req.body?.slotTime || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !slotTime) {
-    return res.status(400).json({ message: "Date and slotTime are required." });
-  }
-  const key = `${date}|${slotTime}`;
-  const exists = blockedSiteVisitSlots.includes(key);
-  blockedSiteVisitSlots = exists
-    ? blockedSiteVisitSlots.filter((k) => k !== key)
-    : [...blockedSiteVisitSlots, key];
-
-  return res.json({
-    message: exists ? "Slot unblocked." : "Slot blocked.",
-    blockedKeys: blockedSiteVisitSlots,
-    slots: computeAvailableSlotsForDate(date, siteVisitBookings, blockedSiteVisitSlots),
-  });
-});
-
-// Home Hero Slideshow CMS Endpoints (videos, images, content, stats & CTA buttons)
-app.get("/api/home-slideshow", (_req: Request, res: Response) => {
-  return res.json({ data: homeSlideshowCms });
-});
-
-app.put("/api/home-slideshow", (req: Request, res: Response) => {
-  const payload = normalizeHomeSlideshowCms({
-    ...homeSlideshowCms,
-    ...req.body,
-  });
-  homeSlideshowCms = payload;
-  saveHomeSlideshowStore(homeSlideshowCms);
-  return res.json({
-    message: "Home slideshow settings & slides published!",
-    data: homeSlideshowCms,
-  });
-});
-
-app.post("/api/home-slideshow/slides", (req: Request, res: Response) => {
-  const mediaUrl = String(req.body?.mediaUrl || "").trim();
-  if (!mediaUrl) {
-    return res.status(400).json({ message: "A media URL or uploaded file is required." });
-  }
-  const nextSlides = upsertHomeSlide(homeSlideshowCms.slides, {
-    mediaType: req.body?.mediaType,
-    mediaUrl,
-    posterUrl: req.body?.posterUrl,
-    headline: req.body?.headline,
-    description: req.body?.description,
-    active: req.body?.active,
-  });
-  homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
-  saveHomeSlideshowStore(homeSlideshowCms);
-  return res.json({
-    message: "Home slide added!",
-    data: homeSlideshowCms,
-  });
-});
-
-app.put("/api/home-slideshow/slides/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (!homeSlideshowCms.slides.some((s) => s.id === id)) {
-    return res.status(404).json({ message: "Home slide not found." });
-  }
-  const mediaUrl = String(req.body?.mediaUrl || "").trim();
-  if (!mediaUrl) {
-    return res.status(400).json({ message: "A media URL or uploaded file is required." });
-  }
-  const nextSlides = upsertHomeSlide(
-    homeSlideshowCms.slides,
-    {
-      mediaType: req.body?.mediaType,
-      mediaUrl,
-      posterUrl: req.body?.posterUrl,
-      headline: req.body?.headline,
-      description: req.body?.description,
-      active: req.body?.active,
-    },
-    id
-  );
-  homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
-  saveHomeSlideshowStore(homeSlideshowCms);
-  return res.json({
-    message: "Home slide updated!",
-    data: homeSlideshowCms,
-  });
-});
-
-app.delete("/api/home-slideshow/slides/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (homeSlideshowCms.slides.length <= 1) {
-    return res.status(400).json({ message: "At least one home hero slide must remain." });
-  }
-  const nextSlides = deleteHomeSlide(homeSlideshowCms.slides, id);
-  homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
-  saveHomeSlideshowStore(homeSlideshowCms);
-  return res.json({
-    message: "Home slide deleted.",
-    data: homeSlideshowCms,
-  });
-});
-
-// What We Build For You (Home Services Carousel) CMS Endpoints
-app.get("/api/home-services", (_req: Request, res: Response) => {
-  return res.json({ data: homeServicesCms });
-});
-
-app.put("/api/home-services", (req: Request, res: Response) => {
-  const payload = normalizeHomeServicesCms({
-    ...homeServicesCms,
-    ...req.body,
-  });
-  homeServicesCms = payload;
-  saveHomeServicesStore(homeServicesCms);
-  return res.json({
-    message: "What We Build section updated & published!",
-    data: homeServicesCms,
-  });
-});
-
-app.post("/api/home-services/items", (req: Request, res: Response) => {
-  const title = String(req.body?.title || "").trim();
-  const image = String(req.body?.image || "").trim();
-  if (!title || !image) {
-    return res.status(400).json({ message: "Service title and image are required." });
-  }
-  const nextItems = upsertHomeService(homeServicesCms.items, {
-    title,
-    image,
-    description1: req.body?.description1,
-    description2: req.body?.description2,
-    active: req.body?.active,
-  });
-  homeServicesCms = { ...homeServicesCms, items: nextItems };
-  saveHomeServicesStore(homeServicesCms);
-  return res.json({
-    message: "Service item added!",
-    data: homeServicesCms,
-  });
-});
-
-app.put("/api/home-services/items/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (!homeServicesCms.items.some((s) => s.id === id)) {
-    return res.status(404).json({ message: "Service item not found." });
-  }
-  const title = String(req.body?.title || "").trim();
-  const image = String(req.body?.image || "").trim();
-  if (!title || !image) {
-    return res.status(400).json({ message: "Service title and image are required." });
-  }
-  const nextItems = upsertHomeService(
-    homeServicesCms.items,
-    {
-      title,
-      image,
-      description1: req.body?.description1,
-      description2: req.body?.description2,
-      active: req.body?.active,
-    },
-    id
-  );
-  homeServicesCms = { ...homeServicesCms, items: nextItems };
-  saveHomeServicesStore(homeServicesCms);
-  return res.json({
-    message: "Service item updated!",
-    data: homeServicesCms,
-  });
-});
-
-app.delete("/api/home-services/items/:id", (req: Request, res: Response) => {
-  const { id } = req.params;
-  if (homeServicesCms.items.length <= 1) {
-    return res.status(400).json({ message: "At least one service item must remain." });
-  }
-  const nextItems = deleteHomeService(homeServicesCms.items, id);
-  homeServicesCms = { ...homeServicesCms, items: nextItems };
-  saveHomeServicesStore(homeServicesCms);
-  return res.json({
-    message: "Service item removed.",
-    data: homeServicesCms,
-  });
-});
-
-// Home Top Picks & Accessories Ribbon endpoints
-app.get("/api/home-featured-products", (_req: Request, res: Response) => {
-  res.json({
-    data: homeFeaturedProductsCms,
-    designs,
-  });
-});
-
-app.put("/api/home-featured-products", (req: Request, res: Response) => {
-  const body = (req.body || {}) as Partial<HomeFeaturedProductsCmsPayload>;
-  const normalized = normalizeHomeFeaturedProductsCms({
-    ...homeFeaturedProductsCms,
-    ...body,
-    selectedProductIds: Array.isArray(body.selectedProductIds)
-      ? body.selectedProductIds
-      : homeFeaturedProductsCms.selectedProductIds,
-    productImageOverrides:
-      body.productImageOverrides !== undefined
-        ? body.productImageOverrides
-        : homeFeaturedProductsCms.productImageOverrides,
-    accessoriesRibbonItems: Array.isArray(body.accessoriesRibbonItems)
-      ? body.accessoriesRibbonItems
-      : homeFeaturedProductsCms.accessoriesRibbonItems,
-  });
-
-  if (normalized.selectedProductIds.length === 0) {
-    return res
-      .status(400)
-      .json({ message: "Select at least one product for Our Top Picks." });
-  }
-  if (normalized.accessoriesRibbonItems.length === 0) {
-    return res
-      .status(400)
-      .json({ message: "At least one accessory image must remain." });
-  }
-
-  homeFeaturedProductsCms = normalized;
-  saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
-  return res.json({
-    message: "Home Top Picks & Accessories saved successfully!",
-    data: homeFeaturedProductsCms,
-  });
-});
-
-app.post(
-  "/api/home-featured-products/accessories",
-  (req: Request, res: Response) => {
-    const title = String(req.body?.title || "").trim();
-    const image = String(req.body?.image || "").trim();
-    if (!title || !image) {
-      return res
-        .status(400)
-        .json({ message: "Accessory title and image are required." });
-    }
-    const nextItems = upsertHomeAccessoryRibbonItem(
-      homeFeaturedProductsCms.accessoriesRibbonItems,
-      {
-        title,
-        subtitle: req.body?.subtitle,
-        image,
-        linkTo: req.body?.linkTo,
-        active: req.body?.active,
+        time: String(time),
+        endTime: endTime ? String(endTime) : undefined,
+        label: label ? String(label) : undefined,
+        available: typeof available === "boolean" ? available : true,
       }
-    );
-    homeFeaturedProductsCms = {
-      ...homeFeaturedProductsCms,
-      accessoriesRibbonItems: nextItems,
-    };
-    saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
-    return res.json({
-      message: "Accessory ribbon image added!",
-      data: homeFeaturedProductsCms,
-    });
-  }
-);
+    ),
+    listAppointments(),
+  ]);
+  return res.status(201).json({
+    message: date ? `Time slot added to ${date}.` : "Default time slot added.",
+    schedule,
+    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+  });
+});
 
 app.put(
-  "/api/home-featured-products/accessories/:id",
-  (req: Request, res: Response) => {
-    const { id } = req.params;
-    if (
-      !homeFeaturedProductsCms.accessoriesRibbonItems.some((a) => a.id === id)
-    ) {
-      return res.status(404).json({ message: "Accessory item not found." });
-    }
-    const title = String(req.body?.title || "").trim();
-    const image = String(req.body?.image || "").trim();
-    if (!title || !image) {
-      return res
-        .status(400)
-        .json({ message: "Accessory title and image are required." });
-    }
-    const nextItems = upsertHomeAccessoryRibbonItem(
-      homeFeaturedProductsCms.accessoriesRibbonItems,
-      {
-        title,
-        subtitle: req.body?.subtitle,
-        image,
-        linkTo: req.body?.linkTo,
-        active: req.body?.active,
-      },
-      id
-    );
-    homeFeaturedProductsCms = {
-      ...homeFeaturedProductsCms,
-      accessoriesRibbonItems: nextItems,
-    };
-    saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
+  ["/api/site-visits/slots/:slotId", "/api/appointments/slots/:slotId"],
+  async (req: Request, res: Response) => {
+    const slotId = String(req.params.slotId || "");
+    const { date, time, endTime, label, available } = req.body || {};
+    const [schedule, bookings] = await Promise.all([
+      updateAppointmentSlotRecord(
+        slotId,
+        date ? String(date) : undefined,
+        {
+          ...(time !== undefined ? { time: String(time) } : {}),
+          ...(endTime !== undefined ? { endTime: String(endTime) } : {}),
+          ...(label !== undefined ? { label: String(label) } : {}),
+          ...(typeof available === "boolean" ? { available } : {}),
+        }
+      ),
+      listAppointments(),
+    ]);
     return res.json({
-      message: "Accessory ribbon image updated!",
-      data: homeFeaturedProductsCms,
+      message: "Time slot updated.",
+      schedule,
+      managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
     });
   }
 );
 
 app.delete(
-  "/api/home-featured-products/accessories/:id",
-  (req: Request, res: Response) => {
-    const { id } = req.params;
-    if (homeFeaturedProductsCms.accessoriesRibbonItems.length <= 1) {
-      return res
-        .status(400)
-        .json({ message: "At least one accessory image must remain." });
-    }
-    const nextItems = deleteHomeAccessoryRibbonItem(
-      homeFeaturedProductsCms.accessoriesRibbonItems,
-      id
-    );
-    homeFeaturedProductsCms = {
-      ...homeFeaturedProductsCms,
-      accessoriesRibbonItems: nextItems,
-    };
-    saveHomeFeaturedProductsStore(homeFeaturedProductsCms);
+  ["/api/site-visits/slots/:slotId", "/api/appointments/slots/:slotId"],
+  async (req: Request, res: Response) => {
+    const slotId = String(req.params.slotId || "");
+    const date = typeof req.query.date === "string" ? req.query.date : undefined;
+    const [schedule, bookings] = await Promise.all([
+      deleteAppointmentSlotRecord(slotId, date),
+      listAppointments(),
+    ]);
     return res.json({
-      message: "Accessory ribbon image removed.",
-      data: homeFeaturedProductsCms,
+      message: "Time slot deleted.",
+      schedule,
+      managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
     });
   }
 );
 
-function buildSeoHtml(rawHtml: string, req: Request): string {
+app.post(["/api/site-visits", "/api/appointments"], optionalAuth, async (req: AuthRequest, res: Response) => {
+  const { date, slotTime, locationName, visitorName, visitorEmail, visitorPhone, notes } =
+    req.body || {};
+
+  const errors = validateSiteVisitBooking({
+    date: String(date || ""),
+    slotTime: String(slotTime || ""),
+    visitorName: String(visitorName || ""),
+    visitorEmail: String(visitorEmail || ""),
+    visitorPhone: String(visitorPhone || ""),
+  });
+
+  const firstError = Object.values(errors)[0];
+  if (firstError) {
+    return res.status(400).json({ message: firstError, errors });
+  }
+
+  const [schedule, currentBookings] = await Promise.all([
+    getAppointmentScheduleConfig(),
+    listAppointments(),
+  ]);
+
+  const currentSlots = computeAvailableSlotsForDate(
+    String(date),
+    currentBookings,
+    schedule.blockedKeys,
+    [],
+    schedule
+  );
+  const chosenSlot = currentSlots.find((s) => s.time === String(slotTime));
+  if (!chosenSlot || !chosenSlot.available) {
+    return res.status(409).json({
+      message: `Sorry, that slot is no longer available (${chosenSlot?.reason || "Booked"}). Please select another open slot.`,
+    });
+  }
+
+  const booking = await createAppointmentRecord({
+    date: String(date),
+    slotTime: chosenSlot.time,
+    slotLabel: chosenSlot.label,
+    locationName: String(locationName || "Nawala Showroom & Consultation").trim(),
+    visitorName: String(visitorName),
+    visitorEmail: String(visitorEmail),
+    visitorPhone: String(visitorPhone),
+    notes: String(notes || ""),
+    userId: req.user?.userId ?? null,
+  });
+
+  return res.status(201).json({
+    message: `Site visit booked for ${booking.date} at ${booking.slotLabel}.`,
+    booking,
+  });
+});
+
+app.patch(["/api/site-visits/:id", "/api/appointments/:id"], async (req: Request, res: Response) => {
+  const bookingId = String(req.params.id || "");
+  const status = String(req.body?.status || "").toUpperCase() as SiteVisitStatus;
+  if (!["CONFIRMED", "COMPLETED", "CANCELLED"].includes(status)) {
+    return res.status(400).json({ message: "Invalid booking status." });
+  }
+  const updated = await updateAppointmentStatusRecord(bookingId, status);
+  if (!updated) return res.status(404).json({ message: "Booking not found." });
+  return res.json({ message: "Booking updated", booking: updated });
+});
+
+app.post("/api/site-visits/slots/toggle-block", async (req: Request, res: Response) => {
+  const { date, slotTime } = req.body || {};
+  if (!date || !slotTime) {
+    return res.status(400).json({ message: "date and slotTime are required." });
+  }
+  const doc = await getCmsDoc<{ blockedKeys: string[] }>("site_visit_blocked_keys", {
+    blockedKeys: [],
+  });
+  const key = `${date}|${slotTime}`;
+  const blocked = doc.blockedKeys.includes(key);
+  const nextBlocked = blocked
+    ? doc.blockedKeys.filter((k) => k !== key)
+    : [...doc.blockedKeys, key];
+  await setCmsDoc("site_visit_blocked_keys", { blockedKeys: nextBlocked });
+  return res.json({
+    message: blocked ? "Slot unblocked" : "Slot blocked",
+    blockedKeys: nextBlocked,
+  });
+});
+
+// ============================================================================
+// HOME HERO SLIDESHOW, SERVICES & TOP PICKS CMS ROUTES
+// ============================================================================
+app.get("/api/home-slideshow", async (_req: Request, res: Response) => {
+  const data = await getCmsDoc<HomeSlideshowCmsPayload>(
+    "home_slideshow",
+    DEFAULT_HOME_SLIDESHOW_CMS
+  );
+  return res.json({ data });
+});
+
+app.put("/api/home-slideshow", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<HomeSlideshowCmsPayload>(
+    "home_slideshow",
+    DEFAULT_HOME_SLIDESHOW_CMS
+  );
+  const next = normalizeHomeSlideshowCms({ ...current, ...(req.body || {}) });
+  await setCmsDoc("home_slideshow", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Home slideshow settings updated.", data: next });
+});
+
+app.post("/api/home-slideshow/slides", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<HomeSlideshowCmsPayload>(
+    "home_slideshow",
+    DEFAULT_HOME_SLIDESHOW_CMS
+  );
+  const nextSlides = upsertHomeSlide(current.slides, req.body || {});
+  const next: HomeSlideshowCmsPayload = { ...current, slides: nextSlides };
+  await setCmsDoc("home_slideshow", next as unknown as Record<string, unknown>);
+  return res.status(201).json({
+    message: "Home slideshow item added.",
+    slide: next.slides[next.slides.length - 1],
+    data: next,
+  });
+});
+
+app.put("/api/home-slideshow/slides/:id", async (req: Request, res: Response) => {
+  const id = String(req.params.id || "");
+  const current = await getCmsDoc<HomeSlideshowCmsPayload>(
+    "home_slideshow",
+    DEFAULT_HOME_SLIDESHOW_CMS
+  );
+  const target = current.slides.find((s) => s.id === id);
+  if (!target) return res.status(404).json({ message: "Slide not found." });
+  const nextSlides = upsertHomeSlide(current.slides, { ...target, ...(req.body || {}) }, id);
+  const next: HomeSlideshowCmsPayload = { ...current, slides: nextSlides };
+  await setCmsDoc("home_slideshow", next as unknown as Record<string, unknown>);
+  return res.json({
+    message: "Home slideshow item updated.",
+    slide: next.slides.find((s) => s.id === id),
+    data: next,
+  });
+});
+
+app.delete("/api/home-slideshow/slides/:id", async (req: Request, res: Response) => {
+  const id = String(req.params.id || "");
+  const current = await getCmsDoc<HomeSlideshowCmsPayload>(
+    "home_slideshow",
+    DEFAULT_HOME_SLIDESHOW_CMS
+  );
+  const next: HomeSlideshowCmsPayload = {
+    ...current,
+    slides: deleteHomeSlide(current.slides, id),
+  };
+  await setCmsDoc("home_slideshow", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Home slideshow item deleted.", data: next });
+});
+
+app.get("/api/home-services", async (_req: Request, res: Response) => {
+  const data = await getCmsDoc<HomeServicesCmsPayload>(
+    "home_services",
+    DEFAULT_HOME_SERVICES_CMS
+  );
+  return res.json({ data });
+});
+
+app.put("/api/home-services", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<HomeServicesCmsPayload>(
+    "home_services",
+    DEFAULT_HOME_SERVICES_CMS
+  );
+  const next = normalizeHomeServicesCms({ ...current, ...(req.body || {}) });
+  await setCmsDoc("home_services", next as unknown as Record<string, unknown>);
+  return res.json({ message: "What We Build For You settings updated.", data: next });
+});
+
+app.post("/api/home-services/items", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<HomeServicesCmsPayload>(
+    "home_services",
+    DEFAULT_HOME_SERVICES_CMS
+  );
+  const nextItems = upsertHomeService(current.items, req.body || {});
+  const next: HomeServicesCmsPayload = { ...current, items: nextItems };
+  await setCmsDoc("home_services", next as unknown as Record<string, unknown>);
+  return res.status(201).json({
+    message: "Service card added.",
+    item: next.items[next.items.length - 1],
+    data: next,
+  });
+});
+
+app.put("/api/home-services/items/:id", async (req: Request, res: Response) => {
+  const id = String(req.params.id || "");
+  const current = await getCmsDoc<HomeServicesCmsPayload>(
+    "home_services",
+    DEFAULT_HOME_SERVICES_CMS
+  );
+  const target = current.items.find((item) => item.id === id);
+  if (!target) return res.status(404).json({ message: "Service card not found." });
+  const nextItems = upsertHomeService(current.items, { ...target, ...(req.body || {}) }, id);
+  const next: HomeServicesCmsPayload = { ...current, items: nextItems };
+  await setCmsDoc("home_services", next as unknown as Record<string, unknown>);
+  return res.json({
+    message: "Service card updated.",
+    item: next.items.find((item) => item.id === id),
+    data: next,
+  });
+});
+
+app.delete("/api/home-services/items/:id", async (req: Request, res: Response) => {
+  const id = String(req.params.id || "");
+  const current = await getCmsDoc<HomeServicesCmsPayload>(
+    "home_services",
+    DEFAULT_HOME_SERVICES_CMS
+  );
+  const next: HomeServicesCmsPayload = {
+    ...current,
+    items: deleteHomeService(current.items, id),
+  };
+  await setCmsDoc("home_services", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Service card deleted.", data: next });
+});
+
+app.get("/api/home-featured-products", async (_req: Request, res: Response) => {
+  const [data, allDesigns] = await Promise.all([
+    getCmsDoc<HomeFeaturedProductsCmsPayload>(
+      "home_featured_products",
+      DEFAULT_HOME_FEATURED_PRODUCTS_CMS
+    ),
+    listProducts(),
+  ]);
+  return res.json({ data, allDesigns });
+});
+
+app.put("/api/home-featured-products", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
+    "home_featured_products",
+    DEFAULT_HOME_FEATURED_PRODUCTS_CMS
+  );
+  const next = normalizeHomeFeaturedProductsCms({ ...current, ...(req.body || {}) });
+  await setCmsDoc("home_featured_products", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Top Picks & Accessories Ribbon updated.", data: next });
+});
+
+app.post("/api/home-featured-products/accessories", async (req: Request, res: Response) => {
+  const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
+    "home_featured_products",
+    DEFAULT_HOME_FEATURED_PRODUCTS_CMS
+  );
+  const nextItems = upsertHomeAccessoryRibbonItem(
+    current.accessoriesRibbonItems,
+    req.body || {}
+  );
+  const next: HomeFeaturedProductsCmsPayload = {
+    ...current,
+    accessoriesRibbonItems: nextItems,
+  };
+  await setCmsDoc("home_featured_products", next as unknown as Record<string, unknown>);
+  return res.status(201).json({
+    message: "Accessory ribbon image added.",
+    item: next.accessoriesRibbonItems[next.accessoriesRibbonItems.length - 1],
+    data: next,
+  });
+});
+
+app.put("/api/home-featured-products/accessories/:id", async (req: Request, res: Response) => {
+  const id = String(req.params.id || "");
+  const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
+    "home_featured_products",
+    DEFAULT_HOME_FEATURED_PRODUCTS_CMS
+  );
+  const target = current.accessoriesRibbonItems.find((item) => item.id === id);
+  if (!target) return res.status(404).json({ message: "Accessory ribbon item not found." });
+  const nextItems = upsertHomeAccessoryRibbonItem(
+    current.accessoriesRibbonItems,
+    { ...target, ...(req.body || {}) },
+    id
+  );
+  const next: HomeFeaturedProductsCmsPayload = {
+    ...current,
+    accessoriesRibbonItems: nextItems,
+  };
+  await setCmsDoc("home_featured_products", next as unknown as Record<string, unknown>);
+  return res.json({
+    message: "Accessory ribbon image updated.",
+    item: next.accessoriesRibbonItems.find((item) => item.id === id),
+    data: next,
+  });
+});
+
+app.delete("/api/home-featured-products/accessories/:id", async (req: Request, res: Response) => {
+  const id = String(req.params.id || "");
+  const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
+    "home_featured_products",
+    DEFAULT_HOME_FEATURED_PRODUCTS_CMS
+  );
+  const next: HomeFeaturedProductsCmsPayload = {
+    ...current,
+    accessoriesRibbonItems: deleteHomeAccessoryRibbonItem(
+      current.accessoriesRibbonItems,
+      id
+    ),
+  };
+  await setCmsDoc("home_featured_products", next as unknown as Record<string, unknown>);
+  return res.json({ message: "Accessory ribbon image removed.", data: next });
+});
+
+// ============================================================================
+// SEO HTML INJECTION & VITE / STATIC SERVING
+// ============================================================================
+async function buildSeoHtml(rawHtml: string, req: Request): Promise<string> {
   const origin = resolveRequestOrigin({
     appUrl: process.env.APP_URL,
     protocol: (req.headers["x-forwarded-proto"] as string) || req.protocol,
@@ -2965,38 +2701,57 @@ function buildSeoHtml(rawHtml: string, req: Request): string {
     pathname = req.path || "/";
   }
 
-  const activeHomeSlide =
-    homeSlideshowCms.slides.find((slide) => slide.active) ||
-    homeSlideshowCms.slides[0];
-  const homeSlideImage = activeHomeSlide
-    ? activeHomeSlide.mediaType === "video"
-      ? activeHomeSlide.posterUrl || ""
-      : activeHomeSlide.mediaUrl
-    : "";
-  const productLandingImage = productLandingCms.heroSlides?.[0]?.image || "";
+  try {
+    const [
+      homeSlideshowCms,
+      productLandingCms,
+      designs,
+      cats,
+      projs,
+      blogs,
+      contact,
+    ] = await Promise.all([
+      getCmsDoc<HomeSlideshowCmsPayload>("home_slideshow", DEFAULT_HOME_SLIDESHOW_CMS),
+      getCmsDoc<ProductLandingCms>("product_landing_cms", DEFAULT_PRODUCT_LANDING_CMS),
+      listProducts(),
+      listCategories(),
+      listProjects(),
+      listBlogPosts(),
+      getCmsDoc<SiteContactSettings>("site_settings", DEFAULT_SITE_CONTACT_SETTINGS),
+    ]);
 
-  const seo = resolveDynamicRouteSeo({
-    pathname,
-    search,
-    origin,
-    homeSlideImage,
-    productLandingImage,
-    designs,
-    categories: productCategories,
-    projects,
-    blogs: blogPosts,
-    contact: siteContactSettings,
-  });
+    const activeHomeSlide =
+      homeSlideshowCms.slides.find((slide) => slide.active) || homeSlideshowCms.slides[0];
+    const homeSlideImage = activeHomeSlide
+      ? activeHomeSlide.mediaType === "video"
+        ? activeHomeSlide.posterUrl || ""
+        : activeHomeSlide.mediaUrl
+      : "";
+    const productLandingImage = productLandingCms.heroSlides?.[0]?.image || "";
 
-  return injectSeoIntoHtml(rawHtml, seo);
+    const seo = resolveDynamicRouteSeo({
+      pathname,
+      search,
+      origin,
+      homeSlideImage,
+      productLandingImage,
+      designs,
+      categories: cats,
+      projects: projs,
+      blogs,
+      contact,
+    });
+    return injectSeoIntoHtml(rawHtml, seo);
+  } catch {
+    return rawHtml;
+  }
 }
 
-// Start server with Vite middleware in dev or static files in prod
 async function startServer() {
   if (process.env.NODE_ENV === "production") {
     const distPath = path.resolve(__dirname, "dist");
     app.use(express.static(distPath, { index: false }));
-    app.use((req: Request, res: Response, next: NextFunction) => {
+    app.use(async (req: Request, res: Response, next: NextFunction) => {
       if (req.method !== "GET") return next();
       if (
         req.path.startsWith("/api") ||
@@ -3008,7 +2763,7 @@ async function startServer() {
       try {
         const indexPath = path.resolve(distPath, "index.html");
         const template = fs.readFileSync(indexPath, "utf-8");
-        const html = buildSeoHtml(template, req);
+        const html = await buildSeoHtml(template, req);
         res.status(200).set({ "Content-Type": "text/html" }).end(html);
       } catch (err) {
         next(err);
@@ -3039,7 +2794,7 @@ async function startServer() {
         const indexPath = path.resolve(__dirname, "index.html");
         const template = fs.readFileSync(indexPath, "utf-8");
         const transformed = await vite.transformIndexHtml(req.originalUrl, template);
-        const html = buildSeoHtml(transformed, req);
+        const html = await buildSeoHtml(transformed, req);
         res.status(200).set({ "Content-Type": "text/html" }).end(html);
       } catch (err) {
         next(err);

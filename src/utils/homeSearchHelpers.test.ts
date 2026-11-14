@@ -51,6 +51,39 @@ describe("homeSearchHelpers", () => {
 
     assert.ok(res.categories.some((c) => c.title.toLowerCase().includes("roof")));
     assert.ok(res.solutions.some((s) => s.title.toLowerCase().includes("roofing")));
+    const roofingSolution = res.solutions.find((s) =>
+      s.title.toLowerCase().includes("roofing")
+    );
+    assert.ok(roofingSolution?.subtitle && roofingSolution.subtitle.length > 10);
+  });
+
+  it("includes architectural solutions on empty query and scopes solutions by selected category", () => {
+    const emptyRes = searchHomeCatalog({
+      query: "",
+      categorySlug: "all",
+      designs: DEFAULT_DESIGNS_CATALOG,
+      categories: DEFAULT_PRODUCT_CATEGORIES,
+      services: DEFAULT_HOME_SERVICES_CMS.items,
+      maxCategories: 4,
+      maxProducts: 4,
+      maxSolutions: 2,
+    });
+    assert.equal(emptyRes.solutions.length, 2);
+
+    const scopedRes = searchHomeCatalog({
+      query: "",
+      categorySlug: "roof-skylights",
+      designs: DEFAULT_DESIGNS_CATALOG,
+      categories: DEFAULT_PRODUCT_CATEGORIES,
+      services: DEFAULT_HOME_SERVICES_CMS.items,
+      maxSolutions: 4,
+    });
+    assert.ok(
+      scopedRes.solutions.some((s) => s.title.toLowerCase().includes("roofing"))
+    );
+    assert.ok(
+      !scopedRes.solutions.some((s) => s.title.toLowerCase().includes("doors"))
+    );
   });
 
   it("builds clean search submit routes for global queries and scoped categories", () => {

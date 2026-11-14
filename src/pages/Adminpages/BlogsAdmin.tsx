@@ -26,7 +26,7 @@ import {
 } from "@ant-design/icons";
 import AxiosConfig from "../../Context/AxiosConfig";
 import AdminPortalShell from "../../components/AdminPortalShell";
-import { moveArrayItem } from "../../utils/pageAdsHelpers";
+import { moveArrayItemToIndex } from "../../utils/pageAdsHelpers";
 import {
   BLOGGER_COVER_FALLBACKS,
   DEFAULT_BLOGGER_CONFIG,
@@ -230,7 +230,7 @@ export default function BlogsAdmin() {
   };
 
   const handleMoveHomeOrder = async (fromIdx: number, toIdx: number) => {
-    const reordered = moveArrayItem(homePosts, fromIdx, toIdx);
+    const reordered = moveArrayItemToIndex(homePosts, fromIdx, toIdx);
     await persistHomeIds(
       reordered.map((p) => p.id),
       "Updated Home page blog order!"

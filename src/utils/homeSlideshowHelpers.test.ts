@@ -52,6 +52,8 @@ test("normalizeHomeSlideshowCms preserves default stats, CTA buttons, mixed vide
         mediaType: "video",
         mediaUrl: "/uploads/facade-tour.mp4",
         headline: "Architectural Glazing Film",
+        description: "Architectural walkthrough preview.",
+        active: true,
       },
     ],
   });

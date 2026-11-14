@@ -23,6 +23,7 @@ test("normalizeHomeServicesCms preserves defaults and clamps duration bounds", (
         title: "Skylight Canopies",
         description1: "Structural laminated glass roofs.",
         description2: "Weather-sealed aluminium rafters.",
+        active: true,
       },
     ],
   });

@@ -26,9 +26,11 @@ import {
 import { buildSmsHref, buildWhatsAppChatUrl } from "../utils/chatbotHelpers";
 import {
   computeAvailableSlotsForDate,
-  getUpcomingSiteVisitDates,
+  createDefaultSiteVisitSchedule,
+  getManagedSiteVisitDates,
   validateSiteVisitBooking,
   type CalendarBusyRange,
+  type ManagedDateSummary,
   type SiteVisitBooking,
   type SlotAvailabilityItem,
 } from "../utils/siteVisitSchedulerHelpers";
@@ -55,8 +57,17 @@ export default function SiteVisitBookingCard({
   const { user } = useAuth();
   const { contactSettings } = useSiteSettings();
 
-  const dates = getUpcomingSiteVisitDates(compact ? 6 : 8);
-  const [selectedDate, setSelectedDate] = useState(dates[0]?.date || "");
+  const [dates, setDates] = useState<ManagedDateSummary[]>(() =>
+    getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], compact ? 6 : 8)
+  );
+  const [selectedDate, setSelectedDate] = useState(
+    () =>
+      getManagedSiteVisitDates(
+        createDefaultSiteVisitSchedule(),
+        [],
+        compact ? 6 : 8
+      )[0]?.date || ""
+  );
   const [slots, setSlots] = useState<SlotAvailabilityItem[]>([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -108,9 +119,13 @@ export default function SiteVisitBookingCard({
       if (!date) return;
       setLoadingSlots(true);
       try {
-        const res = await AxiosConfig.get<{ slots?: SlotAvailabilityItem[] }>(
-          `/api/site-visits/slots?date=${encodeURIComponent(date)}`
-        );
+        const res = await AxiosConfig.get<{
+          dates?: ManagedDateSummary[];
+          slots?: SlotAvailabilityItem[];
+        }>(`/api/site-visits/slots?date=${encodeURIComponent(date)}`);
+        if (Array.isArray(res.data?.dates) && res.data.dates.length > 0) {
+          setDates(res.data.dates);
+        }
         let nextSlots = res.data?.slots || computeAvailableSlotsForDate(date, []);
 
         if (withCalendarBusy && getWorkspaceAccessToken()) {
@@ -518,8 +533,11 @@ export default function SiteVisitBookingCard({
           </span>
         </div>
         <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
-          {dates.map((d) => {
+          {dates
+            .filter((d, idx) => idx < (compact ? 8 : 12) || d.isCustom)
+            .map((d) => {
             const active = d.date === selectedDate;
+            const dateClosed = d.available === false;
             return (
               <button
                 key={d.date}
@@ -529,7 +547,9 @@ export default function SiteVisitBookingCard({
                 className={`relative py-2 px-1 rounded-xl border text-center cursor-pointer transition-all ${
                   active
                     ? "bg-[#22577A] border-[#22577A] text-white shadow-xs"
-                    : "bg-white border-slate-200 text-[#14171A] hover:border-[#3393B8]"
+                    : dateClosed
+                      ? "bg-slate-100 border-slate-200 text-slate-400"
+                      : "bg-white border-slate-200 text-[#14171A] hover:border-[#3393B8]"
                 }`}
               >
                 <div
@@ -544,10 +564,10 @@ export default function SiteVisitBookingCard({
                 </div>
                 <div
                   className={`text-[10px] ${
-                    active ? "text-sky-100" : "text-slate-400"
+                    active ? "text-sky-100" : dateClosed ? "text-[#E60000]" : "text-slate-400"
                   }`}
                 >
-                  {d.monthShort}
+                  {dateClosed ? "Closed" : d.monthShort}
                 </div>
               </button>
             );

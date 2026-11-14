@@ -199,42 +199,45 @@
   position: relative;
   overflow: hidden;
   isolation: isolate;
+  border-radius: 12px !important;
   background: linear-gradient(
-    125deg,
-    #18415c 0%,
-    #22577a 22%,
-    #0ea5e9 48%,
-    #3393b8 72%,
-    #06b6d4 100%
+    180deg,
+    rgba(56, 189, 248, 0.92) 0%,
+    rgba(2, 132, 199, 0.94) 52%,
+    rgba(3, 95, 168, 0.98) 100%
   );
-  background-size: 240% 240%;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  backdrop-filter: blur(12px) saturate(150%);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  background-size: 100% 100%;
+  border: 1.5px solid rgba(186, 230, 253, 0.85);
+  backdrop-filter: blur(12px) saturate(165%);
+  -webkit-backdrop-filter: blur(12px) saturate(165%);
   color: #ffffff;
-  text-shadow: 0 1px 2px rgba(10, 25, 41, 0.35);
-  animation:
-    rqFloat 3.4s ease-in-out infinite,
-    rqGradientShift 5s ease infinite,
-    rqNeonBreath 2.8s ease-in-out infinite;
+  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.35);
+  box-shadow:
+    inset 0 2px 2px rgba(255, 255, 255, 0.82),
+    inset 0 -4px 8px rgba(14, 165, 233, 0.65),
+    0 8px 20px -4px rgba(2, 132, 199, 0.58),
+    0 0 18px rgba(56, 189, 248, 0.55);
+  animation: rqFloat 3.4s ease-in-out infinite;
   transition:
-    transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
-    filter 0.24s ease,
-    border-color 0.24s ease,
-    box-shadow 0.24s ease;
+    transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.22s ease,
+    color 0.18s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
-/* Frosted top glass highlight layer */
+/* Frosted domed top glass highlight layer */
 .request-quote-fx::before {
   content: "";
   position: absolute;
-  inset: 0;
-  border-radius: inherit;
+  inset: 2px 6px auto 6px;
+  height: 46%;
+  border-radius: 9px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.34) 0%,
-    rgba(255, 255, 255, 0.08) 48%,
-    rgba(15, 23, 42, 0.14) 100%
+    rgba(255, 255, 255, 0.68) 0%,
+    rgba(255, 255, 255, 0.14) 68%,
+    rgba(255, 255, 255, 0) 100%
   );
   pointer-events: none;
   z-index: 0;
@@ -251,7 +254,7 @@
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0.55) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   pointer-events: none;
@@ -261,18 +264,45 @@
 
 .request-quote-fx:hover {
   animation-play-state: paused;
-  transform: translateY(-3px) scale(1.02);
-  border-color: rgba(186, 230, 253, 0.85);
-  filter: brightness(1.08);
+  transform: translateY(-2px) scale(1.02);
+  border-color: rgba(254, 240, 138, 0.95);
+  background: linear-gradient(
+    180deg,
+    rgba(254, 215, 170, 0.96) 0%,
+    rgba(251, 146, 60, 0.95) 50%,
+    rgba(234, 88, 12, 0.98) 100%
+  );
+  color: #111827;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
   box-shadow:
-    0 14px 32px -6px rgba(14, 165, 233, 0.55),
-    0 0 22px rgba(56, 189, 248, 0.8),
-    0 0 44px rgba(6, 182, 212, 0.48),
-    inset 0 1px 2px rgba(255, 255, 255, 0.85);
+    inset 0 2px 3px rgba(255, 255, 255, 0.92),
+    inset 0 -4px 8px rgba(251, 191, 36, 0.58),
+    0 12px 28px -4px rgba(249, 115, 22, 0.68),
+    0 0 26px rgba(251, 191, 36, 0.72);
+}
+
+.request-quote-fx:focus-visible {
+  outline: none;
+  border-color: #60a5fa;
+  background: linear-gradient(180deg, #0f2f66 0%, #091d42 56%, #050f26 100%);
+  color: #ffffff;
+  text-shadow: none;
+  box-shadow:
+    inset 0 2px 2px rgba(191, 219, 254, 0.45),
+    inset 0 -4px 8px rgba(37, 99, 235, 0.72),
+    0 10px 24px -4px rgba(37, 99, 235, 0.68);
 }
 
 .request-quote-fx:active {
-  transform: translateY(0px) scale(0.98);
+  transform: translateY(1px) scale(0.975);
+  border-color: rgba(226, 232, 240, 0.96);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 60%, #e2e8f0 100%);
+  color: #0f172a;
+  text-shadow: none;
+  box-shadow:
+    inset 0 2px 3px rgba(255, 255, 255, 0.95),
+    inset 0 -3px 6px rgba(56, 189, 248, 0.35),
+    0 4px 12px -4px rgba(15, 23, 42, 0.26);
 }
 
 .request-quote-fx:disabled {
@@ -376,7 +406,354 @@
   .request-quote-fx,
   .request-quote-fx::after,
   .silent-ring-wave,
-  .silent-ring-handset {
+  .silent-ring-handset,
+  .tactile-pill-btn::after,
+  .contact-card-sheen {
     animation: none !important;
+    transition-duration: 0.01ms !important;
   }
 }
+
+/* =========================================================
+   Glossy Translucent Neon Capsule Buttons (Multi-Tone + Outer Halo Ring)
+   ========================================================= */
+@keyframes tactileSweep {
+  0% {
+    transform: translateX(-160%) skewX(-22deg);
+  }
+  55%,
+  100% {
+    transform: translateX(260%) skewX(-22deg);
+  }
+}
+
+.tactile-pill-frame {
+  position: relative;
+  display: inline-flex;
+  padding: 0;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tactile-pill-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  border-radius: 12px;
+  backdrop-filter: blur(12px) saturate(165%);
+  -webkit-backdrop-filter: blur(12px) saturate(165%);
+  border: 1.5px solid rgba(186, 230, 253, 0.82);
+  background: linear-gradient(
+    180deg,
+    rgba(56, 189, 248, 0.92) 0%,
+    rgba(14, 142, 233, 0.94) 52%,
+    rgba(2, 102, 212, 0.97) 100%
+  );
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.34);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.86),
+    inset 0 -4px 8px rgba(56, 189, 248, 0.65),
+    0 10px 22px -6px rgba(2, 132, 199, 0.62),
+    0 0 18px rgba(56, 189, 248, 0.52);
+  transition:
+    transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    background 0.2s ease,
+    color 0.16s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Specular glossy top dome */
+.tactile-pill-btn::before {
+  content: "";
+  position: absolute;
+  inset: 2px 6px auto 6px;
+  height: 46%;
+  border-radius: 9px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(255, 255, 255, 0.16) 62%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Neon diagonal corner light sweep */
+.tactile-pill-btn::after {
+  content: "";
+  position: absolute;
+  top: -15%;
+  left: 0;
+  width: 38%;
+  height: 130%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.56) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Tone: Amber-Gold Neon Glass */
+.tactile-pill-btn[data-tone="amber"] {
+  border-color: rgba(254, 243, 199, 0.92);
+  background: linear-gradient(
+    180deg,
+    rgba(254, 215, 170, 0.95) 0%,
+    rgba(251, 146, 60, 0.94) 50%,
+    rgba(234, 88, 12, 0.97) 100%
+  );
+  color: #111827;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.92),
+    inset 0 -4px 8px rgba(253, 186, 116, 0.62),
+    0 10px 24px -6px rgba(249, 115, 22, 0.65),
+    0 0 20px rgba(251, 191, 36, 0.56);
+}
+
+/* Tone: Midnight Navy Cobalt Neon Glass */
+.tactile-pill-btn[data-tone="navy"] {
+  border-color: rgba(96, 165, 250, 0.78);
+  background: linear-gradient(
+    180deg,
+    rgba(23, 55, 114, 0.92) 0%,
+    rgba(10, 30, 72, 0.94) 56%,
+    rgba(5, 16, 42, 0.97) 100%
+  );
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(2, 6, 23, 0.5);
+  box-shadow:
+    inset 0 2.5px 2px rgba(191, 219, 254, 0.52),
+    inset 0 -4px 8px rgba(37, 99, 235, 0.72),
+    0 10px 24px -6px rgba(29, 78, 216, 0.65),
+    0 0 18px rgba(59, 130, 246, 0.52);
+}
+
+/* Tone: Frosted Ice Pearl Glass */
+.tactile-pill-btn[data-tone="pearl"] {
+  border-color: rgba(255, 255, 255, 0.95);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(241, 245, 249, 0.88) 58%,
+    rgba(226, 232, 240, 0.92) 100%
+  );
+  color: #0f172a;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.98),
+    inset 0 -4px 7px rgba(56, 189, 248, 0.34),
+    0 10px 22px -6px rgba(15, 23, 42, 0.25),
+    0 0 16px rgba(125, 211, 252, 0.45);
+}
+
+/* Tone: Ruby-Ember Neon Glass */
+.tactile-pill-btn[data-tone="crimson"] {
+  border-color: rgba(254, 202, 202, 0.88);
+  background: linear-gradient(
+    180deg,
+    rgba(252, 114, 102, 0.94) 0%,
+    rgba(225, 29, 72, 0.94) 54%,
+    rgba(185, 28, 28, 0.97) 100%
+  );
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(69, 10, 10, 0.4);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.72),
+    inset 0 -4px 8px rgba(251, 146, 60, 0.62),
+    0 10px 24px -6px rgba(220, 38, 38, 0.65),
+    0 0 20px rgba(249, 115, 22, 0.56);
+}
+
+/* Tone: Jewel Emerald-Teal Neon Glass */
+.tactile-pill-btn[data-tone="emerald"] {
+  border-color: rgba(167, 243, 208, 0.88);
+  background: linear-gradient(
+    180deg,
+    rgba(52, 211, 153, 0.92) 0%,
+    rgba(16, 185, 129, 0.94) 54%,
+    rgba(4, 120, 87, 0.97) 100%
+  );
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(4, 47, 46, 0.4);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.78),
+    inset 0 -4px 8px rgba(45, 212, 191, 0.58),
+    0 10px 24px -6px rgba(5, 150, 105, 0.62),
+    0 0 18px rgba(52, 211, 153, 0.48);
+}
+
+/* Hover state: luminous amber-orange flare (or azure flip for amber buttons so hover is always unmistakable!) */
+.tactile-pill-btn:hover:not(:disabled):not([data-loading="true"]) {
+  transform: translateY(-2px);
+  border-color: rgba(254, 243, 199, 0.96);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 232, 194, 0.97) 0%,
+    rgba(251, 146, 60, 0.96) 48%,
+    rgba(234, 88, 12, 0.98) 100%
+  );
+  color: #111827;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.96),
+    inset 0 -4px 8px rgba(254, 240, 138, 0.7),
+    0 12px 26px -5px rgba(249, 115, 22, 0.68),
+    0 0 24px rgba(251, 191, 36, 0.72);
+}
+
+.tactile-pill-btn[data-tone="amber"]:hover:not(:disabled):not([data-loading="true"]) {
+  border-color: rgba(186, 230, 253, 0.95);
+  background: linear-gradient(
+    180deg,
+    rgba(56, 189, 248, 0.95) 0%,
+    rgba(14, 142, 233, 0.96) 52%,
+    rgba(2, 102, 212, 0.98) 100%
+  );
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.35);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.9),
+    inset 0 -4px 8px rgba(125, 211, 252, 0.7),
+    0 12px 26px -5px rgba(14, 165, 233, 0.68),
+    0 0 24px rgba(56, 189, 248, 0.75);
+}
+
+.tactile-pill-btn:hover:not(:disabled)::after {
+  opacity: 1;
+  animation: tactileSweep 1.2s ease-in-out;
+}
+
+/* Focus-visible state: deep midnight navy with electric blue neon rim */
+.tactile-pill-btn:focus-visible {
+  outline: none;
+  border-color: #60a5fa;
+  background: linear-gradient(180deg, #153775 0%, #091d42 58%, #040d21 100%);
+  color: #ffffff;
+  text-shadow: none;
+  box-shadow:
+    inset 0 2.5px 2px rgba(147, 197, 253, 0.45),
+    inset 0 -4px 8px rgba(59, 130, 246, 0.72),
+    0 10px 24px -4px rgba(37, 99, 235, 0.72),
+    0 0 20px rgba(59, 130, 246, 0.56);
+}
+
+/* Pressed state: crisp translucent ceramic-white */
+.tactile-pill-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.975);
+  border-color: rgba(255, 255, 255, 0.98);
+  background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 62%, #e2e8f0 100%);
+  color: #0f172a;
+  text-shadow: none;
+  box-shadow:
+    inset 0 2.5px 3px rgba(255, 255, 255, 0.96),
+    inset 0 -3px 6px rgba(56, 189, 248, 0.36),
+    0 4px 12px -4px rgba(15, 23, 42, 0.28);
+}
+
+/* Loading / active feedback state: fiery crimson-coral neon glow */
+.tactile-pill-btn[data-loading="true"] {
+  border-color: rgba(254, 202, 202, 0.9);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 110, 96, 0.95) 0%,
+    rgba(225, 29, 72, 0.95) 54%,
+    rgba(185, 28, 28, 0.98) 100%
+  );
+  color: #ffffff;
+  text-shadow: 0 1px 1px rgba(69, 10, 10, 0.4);
+  box-shadow:
+    inset 0 2.5px 2px rgba(255, 255, 255, 0.65),
+    inset 0 -4px 8px rgba(251, 146, 60, 0.68),
+    0 10px 24px -5px rgba(220, 38, 38, 0.66),
+    0 0 22px rgba(249, 115, 22, 0.6);
+}
+
+.tactile-pill-btn[data-loading="true"]::after {
+  opacity: 1;
+  animation: tactileSweep 1.35s ease-in-out infinite;
+}
+
+.tactile-pill-btn:disabled:not([data-loading="true"]) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Soft diagonal sheen on gradient cards */
+.contact-card-sheen {
+  background: linear-gradient(
+    115deg,
+    rgba(255, 255, 255, 0) 20%,
+    rgba(255, 255, 255, 0.14) 44%,
+    rgba(255, 255, 255, 0.04) 56%,
+    rgba(255, 255, 255, 0) 78%
+  );
+}
+
+/* =========================================================
+   Universal Interactive Button Micro-Animations Across All Pages
+   (Uses independent scale & translate CSS properties so Tailwind
+    -translate-y-1/2 or transforms never collide)
+   ========================================================= */
+button:not(:disabled):not(.no-btn-fx),
+[role="button"]:not([aria-disabled="true"]):not(.no-btn-fx),
+a.btn-anim-fx {
+  transition:
+    translate 0.18s cubic-bezier(0.16, 1, 0.3, 1),
+    scale 0.16s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.18s ease,
+    box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 0.18s ease,
+    border-color 0.18s ease,
+    color 0.18s ease,
+    opacity 0.18s ease;
+}
+
+button:not(:disabled):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):not([data-testid="floating-chatbot-ball"]):hover,
+[role="button"]:not([aria-disabled="true"]):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):hover,
+a.btn-anim-fx:hover {
+  translate: 0 -1.5px;
+  scale: 1.018;
+  filter: brightness(1.03);
+}
+
+button:not(:disabled):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):not([data-testid="floating-chatbot-ball"]):active,
+[role="button"]:not([aria-disabled="true"]):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):active,
+a.btn-anim-fx:active {
+  translate: 0 0.5px;
+  scale: 0.968;
+  filter: brightness(0.98);
+}
+
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid rgba(51, 147, 184, 0.55);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button,
+  [role="button"],
+  a.btn-anim-fx {
+    transition-duration: 0.01ms !important;
+  }
+  button:hover,
+  button:active,
+  [role="button"]:hover,
+  [role="button"]:active,
+  a.btn-anim-fx:hover,
+  a.btn-anim-fx:active {
+    translate: none !important;
+    scale: 1 !important;
+  }
+}
+

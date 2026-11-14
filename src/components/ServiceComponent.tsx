@@ -170,28 +170,34 @@ function ServiceComponent({
         </div>
 
         <div className={styles.buttonContainer}>
-          <button
-            type="button"
-            aria-label="Previous service"
-            className={`${styles.prevButton} cursor-target`}
-            onClick={() =>
-              setIndex(
-                (prevIndex) => (prevIndex - 1 + items.length) % items.length
-              )
-            }
-          >
-            <FaArrowLeft />
-          </button>
-          <button
-            type="button"
-            aria-label="Next service"
-            className={`${styles.nextButton} cursor-target`}
-            onClick={() =>
-              setIndex((prevIndex) => (prevIndex + 1) % items.length)
-            }
-          >
-            <FaArrowRight />
-          </button>
+          <span className="tactile-pill-frame" data-tone="navy">
+            <button
+              type="button"
+              aria-label="Previous service"
+              data-tone="navy"
+              className="tactile-pill-btn cursor-target"
+              onClick={() =>
+                setIndex(
+                  (prevIndex) => (prevIndex - 1 + items.length) % items.length
+                )
+              }
+            >
+              <FaArrowLeft className="relative z-10" />
+            </button>
+          </span>
+          <span className="tactile-pill-frame" data-tone="azure">
+            <button
+              type="button"
+              aria-label="Next service"
+              data-tone="azure"
+              className="tactile-pill-btn cursor-target"
+              onClick={() =>
+                setIndex((prevIndex) => (prevIndex + 1) % items.length)
+              }
+            >
+              <FaArrowRight className="relative z-10" />
+            </button>
+          </span>
         </div>
 
         <div className={styles.mobileIndicators}>

@@ -505,6 +505,22 @@ export function moveArrayItem<T>(items: T[], index: number, direction: -1 | 1): 
   return copy;
 }
 
+export function moveArrayItemToIndex<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  if (
+    fromIndex < 0 ||
+    fromIndex >= items.length ||
+    toIndex < 0 ||
+    toIndex >= items.length ||
+    fromIndex === toIndex
+  ) {
+    return items;
+  }
+  const copy = [...items];
+  const [picked] = copy.splice(fromIndex, 1);
+  copy.splice(toIndex, 0, picked);
+  return copy;
+}
+
 /**
  * Normalizes hero slideshow slides from CMS payloads with guaranteed non-empty output.
  */

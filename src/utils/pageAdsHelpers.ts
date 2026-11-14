@@ -3,6 +3,7 @@ import {
   getNextSlideIndex,
   getPrevSlideIndex,
   moveArrayItem,
+  moveArrayItemToIndex,
   sanitizeAboutImage,
 } from "./aboutContentHelpers";
 
@@ -519,4 +520,5 @@ export {
   getNextSlideIndex,
   getPrevSlideIndex,
   moveArrayItem,
+  moveArrayItemToIndex,
 };

@@ -84,65 +84,11 @@
 
 .buttonContainer {
   display: flex;
-  gap: 12px;
-  padding: 0 24px 24px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 20px 22px;
   position: relative;
   z-index: 2;
-}
-
-.quoteBtn,
-.viewMoreBtn {
-  flex: 1;
-  padding: 14px 20px;
-  border: none;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
-  position: relative;
-  overflow: hidden;
-}
-
-.quoteBtn::before,
-.viewMoreBtn::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0;
-  height: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.3);
-  transform: translate(-50%, -50%);
-  transition: width 0.6s, height 0.6s;
-}
-
-.quoteBtn:hover::before,
-.viewMoreBtn:hover::before {
-  width: 300px;
-  height: 300px;
-}
-
-.quoteBtn {
-  color: white;
-}
-
-.viewMoreBtn {
-  background: white;
-  color: var(--color-primary);
-  border: 2px solid var(--color-primary);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-
-.viewMoreBtn:hover {
-  color: var(--color-primary);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.3);
-}
-
-.viewMoreBtn:active {
-  transform: translateY(0);
 }
 
 @media (max-width: 768px) {
@@ -164,10 +110,6 @@
 
   .buttonContainer {
     flex-direction: column;
-  }
-
-  .quoteBtn,
-  .viewMoreBtn {
-    width: 100%;
+    align-items: stretch;
   }
 }

@@ -1,14 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import {
-  FiCalendar,
-  FiMessageCircle,
-  FiMessageSquare,
-  FiSend,
-  FiSmartphone,
-  FiX,
-} from "react-icons/fi";
+import { FiSend, FiSmartphone, FiX } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
@@ -16,17 +9,22 @@ import {
   DEFAULT_CHATBOT_CONFIG,
   buildSmsHref,
   buildWhatsAppChatUrl,
+  formatChatTimestamp,
   type ChatbotConfig,
 } from "../utils/chatbotHelpers";
 import {
-  getUpcomingSiteVisitDates,
+  createDefaultSiteVisitSchedule,
+  getManagedSiteVisitDates,
+  type ManagedDateSummary,
   type SlotAvailabilityItem,
 } from "../utils/siteVisitSchedulerHelpers";
+import Chatbot3DReceptionistAvatar from "./Chatbot3DReceptionistAvatar";
 
 interface ChatMessageItem {
   id: string;
   role: "assistant" | "user";
   text: string;
+  timestamp: string;
   intent?: string;
   whatsappUrl?: string;
   smsUrl?: string;
@@ -35,26 +33,38 @@ interface ChatMessageItem {
 export default function FloatingChatbotWidget() {
   const { contactSettings } = useSiteSettings();
   const [isOpen, setIsOpen] = useState(false);
+  const [launcherHovered, setLauncherHovered] = useState(false);
+  const [panelHovered, setPanelHovered] = useState(false);
   const [tab, setTab] = useState<"chat" | "visit">("chat");
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestDraft, setRequestDraft] = useState("");
   const [config, setConfig] = useState<ChatbotConfig>(DEFAULT_CHATBOT_CONFIG);
-  const [messages, setMessages] = useState<ChatMessageItem[]>([
+  const [messages, setMessages] = useState<ChatMessageItem[]>(() => [
     {
       id: "welcome-1",
       role: "assistant",
       text: DEFAULT_CHATBOT_CONFIG.welcomeMessage,
+      timestamp: formatChatTimestamp(new Date()),
     },
   ]);
   const [inputValue, setInputValue] = useState("");
   const [sending, setSending] = useState(false);
 
-  // Quick Site Visit Tab State
-  const upcomingDates = getUpcomingSiteVisitDates(4);
-  const [quickDate, setQuickDate] = useState(upcomingDates[0]?.date || "");
+  // Dynamic Site Visit Tab State synced with Admin Schedule
+  const [managedDates, setManagedDates] = useState<ManagedDateSummary[]>(() =>
+    getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], 4)
+  );
+  const [quickDate, setQuickDate] = useState(
+    () =>
+      getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], 4)[0]?.date ||
+      ""
+  );
   const [quickSlots, setQuickSlots] = useState<SlotAvailabilityItem[]>([]);
   const [quickSlot, setQuickSlot] = useState("");
   const [quickName, setQuickName] = useState("");
   const [quickEmail, setQuickEmail] = useState("");
   const [quickPhone, setQuickPhone] = useState("");
+  const [quickNote, setQuickNote] = useState("");
   const [quickError, setQuickError] = useState("");
   const [quickBookingDone, setQuickBookingDone] = useState<string | null>(null);
   const [quickSubmitting, setQuickSubmitting] = useState(false);
@@ -74,7 +84,7 @@ export default function FloatingChatbotWidget() {
         );
       })
       .catch(() => {
-        // Keep clean defaults
+        // Keep defaults on transient network issues
       });
     return () => {
       active = false;
@@ -87,12 +97,17 @@ export default function FloatingChatbotWidget() {
     }
   }, [messages, isOpen, tab]);
 
+  // Fetch initial open slot count when chat panel opens & update whenever quickDate changes
   useEffect(() => {
-    if (!isOpen || tab !== "visit" || !quickDate) return;
-    AxiosConfig.get<{ slots?: SlotAvailabilityItem[] }>(
-      `/api/site-visits/slots?date=${encodeURIComponent(quickDate)}`
-    )
+    if (!isOpen || !quickDate) return;
+    AxiosConfig.get<{
+      dates?: ManagedDateSummary[];
+      slots?: SlotAvailabilityItem[];
+    }>(`/api/site-visits/slots?date=${encodeURIComponent(quickDate)}`)
       .then((res) => {
+        if (Array.isArray(res.data?.dates) && res.data.dates.length > 0) {
+          setManagedDates(res.data.dates);
+        }
         const list = res.data?.slots || [];
         setQuickSlots(list);
         const firstOpen = list.find((s) => s.available)?.time || "";
@@ -103,6 +118,11 @@ export default function FloatingChatbotWidget() {
       .catch(() => {});
   }, [isOpen, tab, quickDate]);
 
+  const openSlotCount = useMemo(
+    () => quickSlots.filter((s) => s.available).length,
+    [quickSlots]
+  );
+
   if (!config.enabled) return null;
 
   const latestUserMessage =
@@ -112,7 +132,8 @@ export default function FloatingChatbotWidget() {
     latestUserMessage,
     config.defaultWhatsappPrefix
   );
-  const globalSmsUrl = buildSmsHref(contactSettings.phone, latestUserMessage);
+
+  const visibleQuickDates = managedDates.filter((d, idx) => idx < 6 || d.isCustom);
 
   const sendMessage = async (textToSend: string) => {
     const trimmed = textToSend.trim();
@@ -122,6 +143,7 @@ export default function FloatingChatbotWidget() {
       id: `user-${Date.now()}`,
       role: "user",
       text: trimmed,
+      timestamp: formatChatTimestamp(new Date()),
     };
     const nextHistory = [...messages, userMsg];
     setMessages(nextHistory);
@@ -143,6 +165,7 @@ export default function FloatingChatbotWidget() {
         id: `bot-${Date.now()}`,
         role: "assistant",
         text: res.data.reply,
+        timestamp: formatChatTimestamp(new Date()),
         intent: res.data.intent,
         whatsappUrl: res.data.whatsappUrl,
         smsUrl: res.data.smsUrl,
@@ -155,6 +178,7 @@ export default function FloatingChatbotWidget() {
           id: `bot-err-${Date.now()}`,
           role: "assistant",
           text: `Reach us directly on WhatsApp (${contactSettings.phone}) for immediate assistance.`,
+          timestamp: formatChatTimestamp(new Date()),
           whatsappUrl: buildWhatsAppChatUrl(
             contactSettings.whatsapp,
             trimmed,
@@ -173,32 +197,66 @@ export default function FloatingChatbotWidget() {
     sendMessage(inputValue);
   };
 
+  const openRequestOverlay = () => {
+    const seedText =
+      inputValue.trim() ||
+      latestUserMessage.trim() ||
+      "Please share quotation & fabrication details";
+    setRequestDraft(seedText);
+    setShowRequestModal(true);
+  };
+
+  const handleConfirmSendRequest = () => {
+    const text = requestDraft.trim();
+    setShowRequestModal(false);
+    setTab("chat");
+    if (!text) return;
+    setInputValue("");
+    sendMessage(text);
+  };
+
+  const handleAssignSiteVisitFromRequest = () => {
+    const text = requestDraft.trim();
+    setShowRequestModal(false);
+    if (text) {
+      setQuickNote(text);
+    }
+    setTab("visit");
+  };
+
   const handleQuickVisitBook = async (e: FormEvent) => {
     e.preventDefault();
     setQuickError("");
-    if (!quickDate || !quickSlot || !quickName.trim() || !quickEmail.trim() || !quickPhone.trim()) {
+    if (
+      !quickDate ||
+      !quickSlot ||
+      !quickName.trim() ||
+      !quickEmail.trim() ||
+      !quickPhone.trim()
+    ) {
       setQuickError("Fill name, email, phone & slot.");
       return;
     }
     setQuickSubmitting(true);
     try {
-      const res = await AxiosConfig.post<{ data: { id: string; slotLabel: string } }>(
-        "/api/site-visits",
-        {
-          date: quickDate,
-          slotTime: quickSlot,
-          visitorName: quickName,
-          visitorEmail: quickEmail,
-          visitorPhone: quickPhone,
-          locationName: "Nawala Showroom / Client Site",
-          notes: "Booked via Chatbot",
-        }
+      const res = await AxiosConfig.post<{
+        data: { id: string; slotLabel: string };
+      }>("/api/site-visits", {
+        date: quickDate,
+        slotTime: quickSlot,
+        visitorName: quickName,
+        visitorEmail: quickEmail,
+        visitorPhone: quickPhone,
+        locationName: "Nawala Showroom / Client Site",
+        notes: quickNote.trim() || "Booked via Receptionist Desk",
+      });
+      setQuickBookingDone(
+        `${res.data.data.id} · ${quickDate} (${res.data.data.slotLabel})`
       );
-      setQuickBookingDone(`${res.data.data.id} · ${quickDate} (${res.data.data.slotLabel})`);
     } catch (err: unknown) {
       const msg =
-        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
-        "Slot unavailable. Pick another.";
+        (err as { response?: { data?: { message?: string } } })?.response?.data
+          ?.message || "Slot unavailable. Pick another.";
       setQuickError(msg);
     } finally {
       setQuickSubmitting(false);
@@ -216,24 +274,36 @@ export default function FloatingChatbotWidget() {
             <motion.section
               aria-label={config.assistantName}
               data-testid="floating-chatbot-panel"
+              onMouseEnter={() => setPanelHovered(true)}
+              onMouseLeave={() => setPanelHovered(false)}
               initial={{ opacity: 0, y: 18, scale: 0.94 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.94 }}
               transition={{ type: "spring", stiffness: 360, damping: 28 }}
-              className="pointer-events-auto w-[min(360px,calc(100vw-2rem))] rounded-[24px] bg-white border border-slate-200/90 shadow-[0_24px_60px_-15px_rgba(20,23,26,0.34)] overflow-hidden flex flex-col max-h-[min(540px,calc(100vh-8rem))]"
+              className="pointer-events-auto relative w-[min(372px,calc(100vw-2rem))] rounded-[22px] bg-white border border-slate-200/90 shadow-[0_24px_60px_-14px_rgba(15,23,42,0.26)] overflow-hidden flex flex-col max-h-[min(560px,calc(100vh-8rem))]"
             >
-              {/* Header */}
-              <div className="bg-gradient-to-r from-[#18415C] via-[#22577A] to-[#3393B8] px-4 py-3 text-white flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-8 h-8 rounded-full bg-white/15 border border-white/30 flex items-center justify-center shrink-0">
-                    <FiMessageSquare className="text-sm text-white" />
+              {/* Crisp White Header Bar matching reference chat card */}
+              <div className="px-4 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between gap-2.5 shrink-0">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="relative w-11 h-11 rounded-full bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 border border-slate-200/80 shrink-0">
+                    <Chatbot3DReceptionistAvatar
+                      variant="concierge"
+                      isHovered={panelHovered}
+                      isSpeaking={sending}
+                    />
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
+                    />
                   </div>
                   <div className="min-w-0">
-                    <div className="text-xs sm:text-sm font-bold truncate leading-tight">
+                    <div className="text-[15px] font-bold text-[#111827] truncate leading-tight">
                       {config.assistantName}
                     </div>
-                    <div className="text-[10px] text-sky-100/90 truncate">
-                      Innovista · WhatsApp &amp; Booking
+                    <div className="text-[12px] text-[#64748B] truncate mt-0.5">
+                      {sending
+                        ? "Typing reply..."
+                        : contactSettings.email || "innovistametal@gmail.com"}
                     </div>
                   </div>
                 </div>
@@ -245,53 +315,28 @@ export default function FloatingChatbotWidget() {
                     rel="noopener noreferrer"
                     aria-label="Open WhatsApp chat"
                     title={config.whatsappTriggerLabel}
-                    className="w-8 h-8 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white flex items-center justify-center no-underline transition-colors shadow-xs"
+                    className="btn-anim-fx w-8 h-8 rounded-full bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/70 flex items-center justify-center no-underline transition-colors"
                   >
                     <FaWhatsapp className="text-sm" />
                   </a>
                   <button
                     type="button"
-                    onClick={() => setIsOpen(false)}
+                    onClick={() => {
+                      setShowRequestModal(false);
+                      setIsOpen(false);
+                    }}
                     aria-label="Close chatbot"
-                    className="w-8 h-8 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center cursor-pointer border-0 transition-colors"
+                    className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer border-0 transition-colors"
                   >
                     <FiX className="text-sm" />
                   </button>
                 </div>
               </div>
 
-              {/* Compact Tab Switcher */}
-              <div className="grid grid-cols-2 gap-1 p-1.5 bg-[#F8FAFC] border-b border-slate-200/80">
-                <button
-                  type="button"
-                  onClick={() => setTab("chat")}
-                  className={`py-1.5 rounded-xl text-xs font-bold cursor-pointer border-0 transition-colors flex items-center justify-center gap-1.5 ${
-                    tab === "chat"
-                      ? "bg-white text-[#22577A] shadow-xs"
-                      : "bg-transparent text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <FiMessageCircle className="text-xs" />
-                  <span>Ask Assistant</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setTab("visit")}
-                  className={`py-1.5 rounded-xl text-xs font-bold cursor-pointer border-0 transition-colors flex items-center justify-center gap-1.5 ${
-                    tab === "visit"
-                      ? "bg-white text-[#22577A] shadow-xs"
-                      : "bg-transparent text-slate-500 hover:text-slate-800"
-                  }`}
-                >
-                  <FiCalendar className="text-xs" />
-                  <span>Site Visit Slots</span>
-                </button>
-              </div>
-
               {tab === "chat" ? (
                 <>
                   {/* Messages Scroll Container */}
-                  <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-white">
+                  <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-3 bg-white">
                     {messages.map((msg) => {
                       const isUser = msg.role === "user";
                       return (
@@ -305,14 +350,17 @@ export default function FloatingChatbotWidget() {
                           }`}
                         >
                           <div
-                            className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                            className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug ${
                               isUser
-                                ? "bg-gradient-to-r from-[#22577A] to-[#3393B8] text-white rounded-br-xs"
-                                : "bg-[#F4F7FA] text-[#14171A] border border-slate-200/70 rounded-bl-xs"
+                                ? "bg-[#0A74C9] text-white rounded-br-md shadow-xs"
+                                : "bg-[#EEF2F6] text-[#14171A] rounded-tl-md"
                             }`}
                           >
                             {msg.text}
                           </div>
+                          <span className="text-[11px] text-slate-400 mt-1 px-0.5 tabular-nums">
+                            {msg.timestamp}
+                          </span>
 
                           {/* Contextual Action Pills */}
                           {!isUser &&
@@ -327,7 +375,7 @@ export default function FloatingChatbotWidget() {
                                   <button
                                     type="button"
                                     onClick={() => setTab("visit")}
-                                    className="px-2.5 py-1 rounded-lg bg-sky-50 border border-sky-200 text-[#22577A] text-[11px] font-semibold cursor-pointer"
+                                    className="px-2.5 py-1 rounded-lg bg-[#F0F9FF] border border-[#7DD3FC] text-[#0A74C9] text-[11px] font-semibold cursor-pointer"
                                   >
                                     Pick Slot
                                   </button>
@@ -336,7 +384,7 @@ export default function FloatingChatbotWidget() {
                                   <Link
                                     to="/request-quote"
                                     onClick={() => setIsOpen(false)}
-                                    className="px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200 text-[#EA580C] text-[11px] font-semibold no-underline"
+                                    className="btn-anim-fx px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200 text-[#EA580C] text-[11px] font-semibold no-underline"
                                   >
                                     Request Quote
                                   </Link>
@@ -346,7 +394,7 @@ export default function FloatingChatbotWidget() {
                                     href={msg.whatsappUrl}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold no-underline"
+                                    className="btn-anim-fx inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold no-underline"
                                   >
                                     <FaWhatsapp className="text-xs" />
                                     <span>{config.whatsappTriggerLabel}</span>
@@ -355,7 +403,7 @@ export default function FloatingChatbotWidget() {
                                 {msg.smsUrl && (
                                   <a
                                     href={msg.smsUrl}
-                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold no-underline"
+                                    className="btn-anim-fx inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 text-[11px] font-semibold no-underline"
                                   >
                                     <FiSmartphone className="text-[11px]" />
                                     <span>SMS</span>
@@ -367,23 +415,49 @@ export default function FloatingChatbotWidget() {
                       );
                     })}
 
+                    {/* Quick starter prompts shown cleanly when only welcome message is present */}
+                    {messages.length <= 1 && !sending && (
+                      <div className="pt-1 flex flex-wrap gap-1.5">
+                        {config.quickPrompts.map((prompt) => (
+                          <button
+                            key={prompt}
+                            type="button"
+                            onClick={() => {
+                              if (prompt.toLowerCase().includes("whatsapp")) {
+                                window.open(
+                                  globalWhatsappUrl,
+                                  "_blank",
+                                  "noopener,noreferrer"
+                                );
+                              } else {
+                                sendMessage(prompt);
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-[#0A74C9] text-[11px] font-semibold text-[#0A74C9] cursor-pointer transition-colors"
+                          >
+                            {prompt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
                     {sending && (
                       <div className="flex items-start">
-                        <div className="px-3.5 py-2.5 rounded-2xl rounded-bl-xs bg-[#F4F7FA] border border-slate-200/70 flex items-center gap-1">
+                        <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-md bg-[#EEF2F6] flex items-center gap-1">
                           <motion.span
                             animate={{ opacity: [0.3, 1, 0.3] }}
                             transition={{ repeat: Infinity, duration: 0.9, delay: 0 }}
-                            className="w-1.5 h-1.5 rounded-full bg-[#22577A]"
+                            className="w-1.5 h-1.5 rounded-full bg-[#0A74C9]"
                           />
                           <motion.span
                             animate={{ opacity: [0.3, 1, 0.3] }}
                             transition={{ repeat: Infinity, duration: 0.9, delay: 0.2 }}
-                            className="w-1.5 h-1.5 rounded-full bg-[#22577A]"
+                            className="w-1.5 h-1.5 rounded-full bg-[#0A74C9]"
                           />
                           <motion.span
                             animate={{ opacity: [0.3, 1, 0.3] }}
                             transition={{ repeat: Infinity, duration: 0.9, delay: 0.4 }}
-                            className="w-1.5 h-1.5 rounded-full bg-[#22577A]"
+                            className="w-1.5 h-1.5 rounded-full bg-[#0A74C9]"
                           />
                         </div>
                       </div>
@@ -391,29 +465,50 @@ export default function FloatingChatbotWidget() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  {/* Quick Prompts */}
-                  <div className="px-3.5 py-2 border-t border-slate-100 bg-[#FAFCFE] flex items-center gap-1.5 overflow-x-auto">
-                    {config.quickPrompts.map((prompt) => (
+                  {/* Clean Mode Pills + Rounded Composer matching reference UI */}
+                  <div className="px-4 pt-2.5 pb-3.5 border-t border-slate-100 bg-white space-y-2.5 shrink-0">
+                    <div className="flex items-center gap-2 overflow-x-auto">
                       <button
-                        key={prompt}
                         type="button"
                         onClick={() => {
-                          if (prompt.toLowerCase().includes("whatsapp")) {
-                            window.open(globalWhatsappUrl, "_blank", "noopener,noreferrer");
-                          } else {
-                            sendMessage(prompt);
-                          }
+                          setShowRequestModal(false);
+                          setTab("chat");
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-[#3393B8] text-[11px] font-semibold text-[#22577A] whitespace-nowrap shrink-0 cursor-pointer transition-colors"
+                        className={`px-3 py-1 rounded-lg text-[12px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                          tab === "chat" && !showRequestModal
+                            ? "bg-[#F0F9FF] border border-[#7DD3FC] text-[#0A74C9]"
+                            : "bg-[#F1F5F9] border border-transparent text-[#475569] hover:text-[#111827]"
+                        }`}
                       >
-                        {prompt}
+                        Message
                       </button>
-                    ))}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={openRequestOverlay}
+                        className={`px-3 py-1 rounded-lg text-[12px] font-semibold whitespace-nowrap cursor-pointer transition-colors ${
+                          showRequestModal
+                            ? "bg-[#F0F9FF] border border-[#7DD3FC] text-[#0A74C9]"
+                            : "bg-[#F1F5F9] border border-transparent text-[#475569] hover:text-[#111827]"
+                        }`}
+                      >
+                        Request
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowRequestModal(false);
+                          setTab("visit");
+                        }}
+                        className="px-3 py-1 rounded-lg text-[12px] font-semibold whitespace-nowrap cursor-pointer bg-[#F1F5F9] border border-transparent text-[#475569] hover:text-[#111827] transition-colors"
+                      >
+                        Site Visits ({openSlotCount > 0 ? openSlotCount : "Open"})
+                      </button>
+                    </div>
 
-                  {/* Input & Direct Company WhatsApp + SMS Bar */}
-                  <div className="p-3 border-t border-slate-200/80 bg-white space-y-2">
-                    <form onSubmit={handleChatSubmit} className="flex items-center gap-1.5">
+                    <form
+                      onSubmit={handleChatSubmit}
+                      className="flex items-center gap-2"
+                    >
                       <label htmlFor="floating-chatbot-input" className="sr-only">
                         Ask a question
                       </label>
@@ -422,42 +517,49 @@ export default function FloatingChatbotWidget() {
                         type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder="Ask a question..."
-                        className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-slate-200 bg-[#F8FAFC] focus:bg-white focus:border-[#22577A] focus:outline-none text-xs text-[#14171A]"
+                        placeholder="Please review your request or ask..."
+                        className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-[#0A74C9] focus:outline-none text-[13px] text-[#14171A] placeholder:text-slate-400"
                       />
                       <button
                         type="submit"
                         disabled={sending || !inputValue.trim()}
                         aria-label="Send message"
-                        className="w-9 h-9 rounded-xl bg-gradient-to-r from-[#22577A] to-[#3393B8] text-white flex items-center justify-center cursor-pointer border-0 disabled:opacity-50 shrink-0"
+                        className="w-10 h-10 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white flex items-center justify-center cursor-pointer border-0 disabled:opacity-50 shrink-0 transition-colors"
                       >
-                        <FiSend className="text-xs" />
+                        <FiSend className="text-sm" />
                       </button>
                     </form>
-
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <a
-                        href={globalWhatsappUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold no-underline transition-colors"
-                      >
-                        <FaWhatsapp className="text-xs shrink-0" />
-                        <span className="truncate">{config.whatsappTriggerLabel}</span>
-                      </a>
-                      <a
-                        href={globalSmsUrl}
-                        className="inline-flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-[#14171A] text-[11px] font-bold no-underline transition-colors"
-                      >
-                        <FiSmartphone className="text-xs text-[#22577A] shrink-0" />
-                        <span className="truncate">Direct SMS</span>
-                      </a>
-                    </div>
                   </div>
                 </>
               ) : (
                 /* Quick Site Visit Slot Booking Inside Chatbot */
-                <div className="flex-1 overflow-y-auto p-3.5 space-y-3 bg-white">
+                <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
+                  <div className="flex items-center justify-between gap-2 pb-1">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setTab("chat")}
+                        className="px-3 py-1 rounded-lg text-[12px] font-semibold bg-[#F1F5F9] border border-transparent text-[#475569] hover:text-[#111827] cursor-pointer"
+                      >
+                        Message
+                      </button>
+                      <button
+                        type="button"
+                        onClick={openRequestOverlay}
+                        className="px-3 py-1 rounded-lg text-[12px] font-semibold bg-[#F1F5F9] border border-transparent text-[#475569] hover:text-[#111827] cursor-pointer"
+                      >
+                        Request
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTab("visit")}
+                        className="px-3 py-1 rounded-lg text-[12px] font-semibold bg-[#F0F9FF] border border-[#7DD3FC] text-[#0A74C9] cursor-pointer"
+                      >
+                        Site Visits ({openSlotCount})
+                      </button>
+                    </div>
+                  </div>
+
                   {quickBookingDone ? (
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-center space-y-2">
                       <div className="text-xs font-bold text-emerald-800">
@@ -472,14 +574,14 @@ export default function FloatingChatbotWidget() {
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold no-underline"
+                          className="btn-anim-fx inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-emerald-600 text-white text-xs font-bold no-underline"
                         >
                           <FaWhatsapp /> <span>Share on WhatsApp</span>
                         </a>
                         <Link
                           to="/contact"
                           onClick={() => setIsOpen(false)}
-                          className="py-2 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-[#22577A] no-underline"
+                          className="btn-anim-fx py-2 px-3 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-[#0A74C9] no-underline"
                         >
                           Sync with Google Calendar
                         </Link>
@@ -487,40 +589,52 @@ export default function FloatingChatbotWidget() {
                     </div>
                   ) : (
                     <form onSubmit={handleQuickVisitBook} className="space-y-2.5">
-                      <div className="grid grid-cols-4 gap-1">
-                        {upcomingDates.map((d) => (
-                          <button
-                            key={d.date}
-                            type="button"
-                            onClick={() => setQuickDate(d.date)}
-                            className={`py-1.5 rounded-lg border text-center cursor-pointer text-[11px] font-bold ${
-                              quickDate === d.date
-                                ? "bg-[#22577A] border-[#22577A] text-white"
-                                : "bg-white border-slate-200 text-slate-700"
-                            }`}
-                          >
-                            <div>{d.dayShort}</div>
-                            <div className="tabular-nums">{d.dayNum}</div>
-                          </button>
-                        ))}
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {visibleQuickDates.map((d) => {
+                          const dateDisabled = !d.available;
+                          return (
+                            <button
+                              key={d.date}
+                              type="button"
+                              onClick={() => setQuickDate(d.date)}
+                              className={`py-1.5 px-1 rounded-lg border text-center cursor-pointer text-[11px] font-bold ${
+                                quickDate === d.date
+                                  ? "bg-[#0A74C9] border-[#0A74C9] text-white"
+                                  : dateDisabled
+                                    ? "bg-slate-100 border-slate-200 text-slate-400"
+                                    : "bg-white border-slate-200 text-slate-700"
+                              }`}
+                            >
+                              <div>{d.dayShort}</div>
+                              <div className="tabular-nums">
+                                {d.dayNum} {d.monthShort}
+                              </div>
+                            </button>
+                          );
+                        })}
                       </div>
 
                       <div className="grid grid-cols-2 gap-1.5">
                         {quickSlots.map((slot) => (
                           <button
-                            key={slot.time}
+                            key={slot.id || slot.time}
                             type="button"
                             disabled={!slot.available}
                             onClick={() => setQuickSlot(slot.time)}
-                            className={`py-1.5 px-2 rounded-lg border text-xs font-semibold tabular-nums ${
+                            className={`py-1.5 px-2 rounded-lg border text-xs font-semibold tabular-nums text-left ${
                               !slot.available
                                 ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
                                 : quickSlot === slot.time
-                                  ? "bg-[#3393B8] border-[#3393B8] text-white cursor-pointer"
+                                  ? "bg-[#0A74C9] border-[#0A74C9] text-white cursor-pointer"
                                   : "bg-white border-slate-200 text-slate-800 cursor-pointer"
                             }`}
                           >
-                            {slot.label}
+                            <div className="truncate">{slot.label}</div>
+                            {!slot.available && (
+                              <div className="text-[10px] font-normal text-slate-400">
+                                {slot.reason || "Unavailable"}
+                              </div>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -546,6 +660,15 @@ export default function FloatingChatbotWidget() {
                         onChange={(e) => setQuickPhone(e.target.value)}
                         className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs"
                       />
+                      {quickNote && (
+                        <input
+                          type="text"
+                          placeholder="Visit note"
+                          value={quickNote}
+                          onChange={(e) => setQuickNote(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 bg-[#F8FAFC] text-xs"
+                        />
+                      )}
 
                       {quickError && (
                         <div className="text-[11px] font-medium text-[#e60000]">
@@ -556,7 +679,7 @@ export default function FloatingChatbotWidget() {
                       <button
                         type="submit"
                         disabled={quickSubmitting || !quickSlot}
-                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#F59E0B] via-[#EA580C] to-[#F97316] text-white text-xs font-bold cursor-pointer border-0 disabled:opacity-50"
+                        className="w-full py-2.5 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white text-xs font-bold cursor-pointer border-0 disabled:opacity-50"
                       >
                         {quickSubmitting ? "Booking..." : "Book Slot Now"}
                       </button>
@@ -564,7 +687,7 @@ export default function FloatingChatbotWidget() {
                       <Link
                         to="/contact"
                         onClick={() => setIsOpen(false)}
-                        className="block text-center text-[11px] font-semibold text-[#22577A] no-underline pt-1"
+                        className="block text-center text-[11px] font-semibold text-[#0A74C9] no-underline pt-1"
                       >
                         Open Full Google Calendar &amp; Gmail Scheduler →
                       </Link>
@@ -572,45 +695,118 @@ export default function FloatingChatbotWidget() {
                   )}
                 </div>
               )}
+
+              {/* In-Card Centered "Send request" Confirmation Modal (Screenshot 3) */}
+              <AnimatePresence>
+                {showRequestModal && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.16 }}
+                    className="absolute inset-0 z-30 bg-slate-900/30 backdrop-blur-[1.5px] flex items-center justify-center p-4"
+                  >
+                    <motion.div
+                      role="dialog"
+                      aria-modal="true"
+                      aria-labelledby="chatbot-send-request-title"
+                      data-testid="chatbot-request-modal"
+                      initial={{ opacity: 0, scale: 0.94, y: 8 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.94, y: 8 }}
+                      transition={{ duration: 0.18 }}
+                      className="w-full max-w-[316px] rounded-[18px] bg-white p-4 shadow-[0_20px_48px_-12px_rgba(15,23,42,0.35)] border border-slate-100 space-y-3"
+                    >
+                      <div className="space-y-1">
+                        <h3
+                          id="chatbot-send-request-title"
+                          className="text-[16px] font-bold text-[#111827] leading-tight m-0"
+                        >
+                          Send request
+                        </h3>
+                        <p className="text-[12px] text-[#64748B] leading-snug m-0">
+                          Send this as a request to{" "}
+                          <strong className="font-semibold text-[#111827]">
+                            {config.assistantName}
+                          </strong>
+                          , or turn it into a scheduled site visit.
+                        </p>
+                      </div>
+
+                      <input
+                        type="text"
+                        aria-label="Request message"
+                        value={requestDraft}
+                        onChange={(e) => setRequestDraft(e.target.value)}
+                        className="w-full rounded-xl bg-[#F1F5F9] border border-slate-200/80 px-3 py-2.5 text-[12.5px] text-[#14171A] focus:bg-white focus:border-[#0A74C9] focus:outline-none"
+                      />
+
+                      <div className="flex items-center gap-1.5 pt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => setShowRequestModal(false)}
+                          className="px-2.5 py-2 rounded-xl border border-[#0A74C9]/45 bg-white hover:bg-slate-50 text-[#111827] text-[11.5px] font-semibold cursor-pointer whitespace-nowrap shrink-0"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleConfirmSendRequest}
+                          className="flex-1 min-w-0 px-2 py-2 rounded-xl bg-[#9DB0FF] hover:bg-[#8BA0FB] text-[#111827] text-[11.5px] font-semibold cursor-pointer border-0 whitespace-nowrap"
+                        >
+                          Send as request
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAssignSiteVisitFromRequest}
+                          className="flex-1 min-w-0 px-2 py-2 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white text-[11.5px] font-semibold cursor-pointer border-0 whitespace-nowrap"
+                        >
+                          Book Visit
+                        </button>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.section>
           )}
         </AnimatePresence>
 
-        {/* Pinned Floating Right-Side Animated Chatbot Ball (hit target stays fixed for reliable clicks) */}
+        {/* Pinned Floating 3D Speech-Bubble Bot Trigger (unclipped, borderless glow + cursor eyes + turn hover) */}
         <motion.button
           type="button"
           data-testid="floating-chatbot-ball"
-          aria-label={isOpen ? "Close chatbot" : "Open Innovista chatbot"}
+          aria-label={
+            isOpen ? "Close chatbot" : "Open Innovista 3D assistant"
+          }
           aria-expanded={isOpen}
+          onMouseEnter={() => setLauncherHovered(true)}
+          onMouseLeave={() => setLauncherHovered(false)}
           onClick={() => setIsOpen((prev) => !prev)}
-          whileHover={{ scale: 1.07 }}
+          whileHover={isOpen ? { scale: 1.07 } : { scale: 1.09, y: -4 }}
           whileTap={{ scale: 0.94 }}
-          className="pointer-events-auto relative w-14 h-14 rounded-full bg-gradient-to-br from-[#18415C] via-[#22577A] to-[#0EA5E9] text-white border-2 border-white/85 shadow-[0_14px_30px_-6px_rgba(34,87,122,0.65)] flex items-center justify-center cursor-pointer"
+          className={`pointer-events-auto relative flex items-center justify-center cursor-pointer transition-all ${
+            isOpen
+              ? "w-12 h-12 rounded-full bg-white text-slate-700 border border-slate-200/90 shadow-[0_12px_28px_-6px_rgba(15,23,42,0.28)]"
+              : "w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-full bg-transparent border-0 p-0 overflow-visible"
+          }`}
         >
-          {/* Ambient orbital halo */}
-          {!isOpen && (
-            <motion.span
-              aria-hidden="true"
-              animate={{ scale: [1, 1.32, 1], opacity: [0.55, 0, 0.55] }}
-              transition={{ repeat: Infinity, duration: 2.6, ease: "easeOut" }}
-              className="absolute inset-0 rounded-full border-2 border-[#38BDF8] pointer-events-none"
-            />
+          {isOpen ? (
+            <FiX className="text-lg relative z-10" />
+          ) : (
+            <>
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none absolute inset-1 rounded-full blur-md transition-opacity duration-300 bg-[radial-gradient(circle,rgba(56,189,248,0.34)_0%,rgba(192,38,211,0.26)_55%,transparent_75%)] ${
+                  launcherHovered ? "opacity-100 scale-110" : "opacity-60"
+                }`}
+              />
+              <Chatbot3DReceptionistAvatar
+                variant="launcher"
+                isHovered={launcherHovered}
+              />
+            </>
           )}
-          <motion.span
-            animate={isOpen ? { y: 0 } : { y: [0, -2.5, 0] }}
-            transition={
-              isOpen
-                ? { duration: 0.2 }
-                : { repeat: Infinity, duration: 2.8, ease: "easeInOut" }
-            }
-            className="relative z-10 flex items-center justify-center"
-          >
-            {isOpen ? (
-              <FiX className="text-xl" />
-            ) : (
-              <FiMessageSquare className="text-xl" />
-            )}
-          </motion.span>
         </motion.button>
       </div>
     </MotionConfig>

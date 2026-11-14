@@ -207,3 +207,61 @@ export function getContactIntentMeta(
     CONTACT_INTENT_OPTIONS[0]
   );
 }
+
+export interface ContactCardThemeMeta {
+  kind: ContactShuffleCardItem["kind"];
+  gradient: string;
+  backplateTint: string;
+  accentGlow: string;
+  kickerColor: string;
+  ctaLabel: string;
+}
+
+export const CONTACT_CARD_THEMES: Record<
+  ContactShuffleCardItem["kind"],
+  ContactCardThemeMeta
+> = {
+  hotline: {
+    kind: "hotline",
+    gradient:
+      "linear-gradient(125deg, #0D4B6A 0%, #146E94 52%, #2B8FB5 100%)",
+    backplateTint: "#135D7F",
+    accentGlow: "rgba(14, 165, 233, 0.36)",
+    kickerColor: "#BAE6FD",
+    ctaLabel: "Request Callback",
+  },
+  sales: {
+    kind: "sales",
+    gradient:
+      "linear-gradient(125deg, #0B5D4F 0%, #0E826E 54%, #1AA38B 100%)",
+    backplateTint: "#0D6E5D",
+    accentGlow: "rgba(16, 185, 129, 0.34)",
+    kickerColor: "#A7F3D0",
+    ctaLabel: "Select Sales Desk",
+  },
+  engineering: {
+    kind: "engineering",
+    gradient:
+      "linear-gradient(125deg, #9A3412 0%, #C84B0E 52%, #EA6A15 100%)",
+    backplateTint: "#B23F0D",
+    accentGlow: "rgba(234, 88, 12, 0.38)",
+    kickerColor: "#FED7AA",
+    ctaLabel: "Book Site / CAD Review",
+  },
+  social: {
+    kind: "social",
+    gradient:
+      "linear-gradient(125deg, #1E3A8A 0%, #1D4ED8 54%, #3B82F6 100%)",
+    backplateTint: "#1E40AF",
+    accentGlow: "rgba(37, 99, 235, 0.36)",
+    kickerColor: "#BFDBFE",
+    ctaLabel: "Start Project Inquiry",
+  },
+};
+
+export function getContactCardTheme(
+  kind: ContactShuffleCardItem["kind"]
+): ContactCardThemeMeta {
+  return CONTACT_CARD_THEMES[kind] || CONTACT_CARD_THEMES.hotline;
+}
+

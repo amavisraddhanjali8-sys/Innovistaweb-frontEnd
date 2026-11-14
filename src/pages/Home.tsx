@@ -71,17 +71,17 @@ function Home() {
           ].filter(Boolean),
         })}
       />
-      <HomeSearchBar />
       <div
         style={{
           position: "relative",
           display: "flex",
-          marginBottom: "50px",
+          marginBottom: "24px",
           justifyContent: "center",
         }}
       >
         <ImageSlider />
       </div>
+      <HomeSearchBar />
       <PageAdBannerSlideshow pageKey="home" />
       <ServicesCarousel />
       <FeaturedProducts />

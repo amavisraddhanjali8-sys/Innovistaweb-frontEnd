@@ -2117,6 +2117,37 @@ export function createInitialFilterState(categorySlug = "all"): ProductFilterSta
   };
 }
 
+function stemSearchToken(word: string): string {
+  const clean = word.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (clean.length > 5 && clean.endsWith("ing")) return clean.slice(0, -3);
+  if (clean.length > 4 && clean.endsWith("es")) return clean.slice(0, -2);
+  if (clean.length > 3 && clean.endsWith("s")) return clean.slice(0, -1);
+  return clean;
+}
+
+export function matchesQueryWithStems(haystack: string, rawQuery: string): boolean {
+  const cleanNeedle = rawQuery.trim().toLowerCase();
+  if (!cleanNeedle) return true;
+
+  const cleanHay = haystack.toLowerCase();
+  if (cleanHay.includes(cleanNeedle)) return true;
+
+  const hayWords = cleanHay.split(/[\s/&,-]+/).filter(Boolean);
+  const stemmedHayWords = hayWords.map(stemSearchToken).filter((w) => w.length >= 3);
+  const needleTokens = cleanNeedle.split(/[\s/&,-]+/).filter(Boolean);
+  if (needleTokens.length === 0) return true;
+
+  return needleTokens.every((tok) => {
+    if (cleanHay.includes(tok)) return true;
+    const sTok = stemSearchToken(tok);
+    if (sTok.length < 3) return cleanHay.includes(tok);
+    return (
+      cleanHay.includes(sTok) ||
+      stemmedHayWords.some((hw) => hw === sTok || hw.startsWith(sTok) || sTok.startsWith(hw))
+    );
+  });
+}
+
 export function filterAndSortDesigns(
   designs: DesignItem[],
   categories: ProductCategory[],
@@ -2139,10 +2170,10 @@ export function filterAndSortDesigns(
         item.Design_Description,
         ...(item.Categories || []),
         ...(item.Design_Sizes || []),
-      ]
-        .join(" ")
-        .toLowerCase();
-      if (!searchable.includes(query)) return false;
+        ...(item.features || []),
+        item.performance?.productType || "",
+      ].join(" ");
+      if (!matchesQueryWithStems(searchable, query)) return false;
     }
 
     if (filter.colorFamily !== "all") {

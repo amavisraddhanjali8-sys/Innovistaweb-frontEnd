@@ -36,7 +36,7 @@ import {
   clampSlideshowSpeedMs,
   countActiveAndPausedAds,
   isValidAdPageKey,
-  moveArrayItem,
+  moveArrayItemToIndex,
   normalizePageAdButtons,
   normalizePageAdsCms,
   normalizeSinglePageAdsConfig,
@@ -471,7 +471,7 @@ export default function PageAdsAdmin() {
   const handleMoveAd = (fromIdx: number, toIdx: number) => {
     updateActivePageConfig((prev) => ({
       ...prev,
-      ads: moveArrayItem(prev.ads, fromIdx, toIdx),
+      ads: moveArrayItemToIndex(prev.ads, fromIdx, toIdx),
     }));
   };
 

@@ -35,7 +35,6 @@ import {
 
 type SourceFilter = "all" | "blogger" | "local";
 
-const SERIF_FONT = { fontFamily: "'Newsreader', Georgia, serif" };
 const SANS_FONT = { fontFamily: "'Plus Jakarta Sans', sans-serif" };
 
 function BlogImageWithFallback({
@@ -238,8 +237,8 @@ export default function Blogs() {
                 </span>
               </div>
               <h1
-                style={SERIF_FONT}
-                className="text-3xl sm:text-4xl lg:text-[2.65rem] font-bold tracking-tight text-[#181715] leading-[1.08] mt-1.5 mb-0"
+                style={SANS_FONT}
+                className="text-2xl sm:text-3xl lg:text-[2.25rem] font-extrabold tracking-tight text-[#14171A] leading-[1.12] mt-1.5 mb-0"
               >
                 Essays, Facade Notes &amp; Craft Studies
               </h1>
@@ -377,8 +376,8 @@ export default function Blogs() {
         ) : visiblePosts.length === 0 ? (
           <div className="border border-[#E4DDD0] bg-white py-16 px-6 text-center max-w-lg mx-auto">
             <h2
-              style={SERIF_FONT}
-              className="text-2xl font-bold text-[#181715] m-0"
+              style={SANS_FONT}
+              className="text-xl font-bold tracking-tight text-[#14171A] m-0"
             >
               No matching essays found
             </h2>
@@ -451,8 +450,8 @@ export default function Blogs() {
                     </div>
 
                     <h3
-                      style={SERIF_FONT}
-                      className="mt-1.5 text-[18px] font-bold text-[#181715] leading-[1.24] m-0"
+                      style={SANS_FONT}
+                      className="mt-1.5 text-[16px] font-bold text-[#14171A] leading-snug tracking-tight m-0"
                     >
                       <button
                         type="button"
@@ -544,8 +543,8 @@ export default function Blogs() {
                       </div>
 
                       <h2
-                        style={SERIF_FONT}
-                        className="mt-1 text-[17.5px] font-bold text-[#181715] leading-[1.24] m-0"
+                        style={SANS_FONT}
+                        className="mt-1 text-[16.5px] font-bold text-[#14171A] leading-snug tracking-tight m-0"
                       >
                         <button
                           type="button"
@@ -595,8 +594,8 @@ export default function Blogs() {
                       </div>
 
                       <h2
-                        style={SERIF_FONT}
-                        className="mt-2 text-2xl sm:text-3xl lg:text-[2.2rem] font-bold text-[#181715] leading-[1.15] tracking-tight m-0 text-balance"
+                        style={SANS_FONT}
+                        className="mt-2 text-2xl sm:text-3xl lg:text-[2.1rem] font-extrabold text-[#14171A] leading-[1.14] tracking-tight m-0 text-balance"
                       >
                         <button
                           type="button"
@@ -696,8 +695,8 @@ export default function Blogs() {
                       >
                         <div className="min-w-0 flex-1">
                           <h3
-                            style={SERIF_FONT}
-                            className="text-[14px] font-bold text-[#181715] group-hover:text-[#22577A] leading-[1.28] m-0 transition-colors"
+                            style={SANS_FONT}
+                            className="text-[13.5px] font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug tracking-tight m-0 transition-colors"
                           >
                             {post.title}
                           </h3>
@@ -788,8 +787,8 @@ export default function Blogs() {
                         </div>
 
                         <h3
-                          style={SERIF_FONT}
-                          className="mt-1.5 text-[17.5px] font-bold text-[#181715] leading-[1.24] m-0"
+                          style={SANS_FONT}
+                          className="mt-1.5 text-[16px] font-bold text-[#14171A] leading-snug tracking-tight m-0"
                         >
                           <button
                             type="button"
@@ -858,8 +857,8 @@ export default function Blogs() {
                 : "Blogger.com Auto-Share Ready"}
             </div>
             <h2
-              style={SERIF_FONT}
-              className="mt-1 text-xl font-bold text-[#181715] m-0"
+              style={SANS_FONT}
+              className="mt-1 text-xl font-extrabold tracking-tight text-[#14171A] m-0"
             >
               Publish on Blogger.com, Curate for the Home Showcase
             </h2>
@@ -905,8 +904,8 @@ export default function Blogs() {
                 )}
               </div>
               <div
-                style={SERIF_FONT}
-                className="text-xl sm:text-2xl font-bold text-[#181715] mt-1 leading-snug"
+                style={SANS_FONT}
+                className="text-xl sm:text-2xl font-extrabold tracking-tight text-[#14171A] mt-1 leading-snug"
               >
                 {activeArticle.title}
               </div>

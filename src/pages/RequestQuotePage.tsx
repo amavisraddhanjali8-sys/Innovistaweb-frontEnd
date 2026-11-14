@@ -249,7 +249,7 @@ export default function RequestQuotePage() {
         formData.append("attachments", file);
       });
 
-      const response = await fetch("https://dummy-api.com/rfq", {
+      const response = await fetch("/api/rfq", {
         method: "POST",
         body: formData,
       });

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { Swiper, SwiperSlide } from "swiper/react";
 import { Autoplay, Pagination } from "swiper/modules";
 import { FiArrowRight } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import MainHeading from "./MainHeading";
 import BlogCard from "./BlogCard";
+import TactileActionButton from "./TactileActionButton";
 import {
   DEFAULT_BLOG_POSTS,
   getHomePageBlogs,
@@ -88,13 +88,15 @@ function BlogSection() {
         </div>
 
         <div className="mt-6 flex justify-center">
-          <Link
+          <TactileActionButton
+            as="link"
             to="/blogs"
-            className="min-h-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs sm:text-sm font-semibold text-[#22577A] no-underline transition-colors shadow-xs"
+            tone="navy"
+            size="md"
+            trailingIcon={<FiArrowRight className="text-sm" />}
           >
-            <span>Explore Full Architectural Journal</span>
-            <FiArrowRight className="text-sm" />
-          </Link>
+            Explore Full Architectural Journal
+          </TactileActionButton>
         </div>
       </div>
     </section>

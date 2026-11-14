@@ -6,6 +6,7 @@ import AxiosConfig from "../Context/AxiosConfig";
 import styles from "../cssModules/CustomerFeedback.module.css";
 import SimpleScrollStack, { ScrollStackItem } from "./SimpleScrollStack";
 import MainHeading from "./MainHeading";
+import TactileActionButton from "./TactileActionButton";
 import {
   DEFAULT_CUSTOMER_FEEDBACKS,
   DEFAULT_FEEDBACK_AVATAR,
@@ -192,14 +193,14 @@ function CustomerFeedback() {
         </SimpleScrollStack>
 
         <div className="mt-4 flex justify-center">
-          <button
-            type="button"
+          <TactileActionButton
+            tone="emerald"
+            size="md"
+            icon={<FiEdit3 className="w-3.5 h-3.5" />}
             onClick={() => setReviewModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-[#22577A] shadow-xs transition-colors cursor-pointer"
           >
-            <FiEdit3 className="w-3.5 h-3.5" />
-            <span>Share Your Feedback</span>
-          </button>
+            Share Your Feedback
+          </TactileActionButton>
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import {
   buildContactDeckOrder,
   buildContactShuffleCards,
   composeSplitFullName,
+  getContactCardTheme,
   getContactIntentMeta,
   getNextPose,
   splitFullName,
@@ -65,4 +66,15 @@ test("getContactIntentMeta returns valid department & preset for each toggle", (
   assert.equal(visit.department, "Technical & CAD Desk");
   assert.equal(callback.department, "After-Sales & Warranty");
   assert.ok(quote.subjectPreset.length > 5);
+});
+
+test("getContactCardTheme provides distinct gradients and labels per card kind", () => {
+  const kinds = ["hotline", "sales", "engineering", "social"] as const;
+  const gradients = new Set(kinds.map((k) => getContactCardTheme(k).gradient));
+  assert.equal(gradients.size, 4);
+  for (const kind of kinds) {
+    const theme = getContactCardTheme(kind);
+    assert.ok(theme.gradient.includes("linear-gradient"));
+    assert.ok(theme.ctaLabel.length > 4);
+  }
 });

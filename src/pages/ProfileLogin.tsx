@@ -13,6 +13,9 @@ import { useAuth } from "../Context/AuthContext";
 import PageMetadata from "../components/PageMetadata";
 import loginCharacters from "../assets/images/login_dashboard_characters_1794509717439.jpg";
 import brandIcon from "../assets/Images/logo/titleImage.png";
+import { signInWithPopup } from "firebase/auth";
+import { auth, googleAuthProvider } from "../lib/firebase";
+import GoogleSignInButton from "../components/GoogleSignInButton";
 import {
   getDemoAccountCredentials,
   isAdminEmail,
@@ -113,6 +116,55 @@ export default function ProfileLogin() {
     setEmail(creds.email);
     setPassword(creds.password);
     await performLogin(creds.email, creds.password);
+  };
+
+  const handleGoogleSignIn = async () => {
+    setErrorMessage(null);
+    setLoading(true);
+    try {
+      const cred = await signInWithPopup(auth, googleAuthProvider);
+      const idToken = await cred.user.getIdToken();
+      const res = await axios.post(
+        "/api/auth/firebase-session",
+        {},
+        { headers: { Authorization: `Bearer ${idToken}` } }
+      );
+      const dbUser = res.data?.user;
+      if (dbUser?.role === "admin" || dbUser?.role === "staff") {
+        loginAdmin(
+          {
+            AdminId: dbUser.id,
+            Admin_Name: dbUser.name,
+            Admin_Email: dbUser.email,
+            Admin_Phone: dbUser.phone,
+            Admin_Profile: dbUser.avatarUrl,
+          },
+          idToken
+        );
+        message.success("Signed in with Google");
+        navigate(resolvePostAuthRoute("admin"));
+      } else {
+        loginCustomer(
+          {
+            CustomerId: dbUser?.id || cred.user.uid,
+            Cus_Name: dbUser?.name || cred.user.displayName || "Client",
+            Cus_Email: dbUser?.email || cred.user.email || "",
+            Cus_PhoneNumber: dbUser?.phone || "",
+            Cus_CompanyName: dbUser?.company || "Google Workspace Client",
+            Cus_Logo: dbUser?.avatarUrl || cred.user.photoURL || "",
+            Verify_State: true,
+          },
+          idToken
+        );
+        message.success("Signed in with Google");
+        navigate(resolvePostAuthRoute("customer"));
+      }
+    } catch (err) {
+      console.error("Google Sign-In failed:", err);
+      setErrorMessage("Google Sign-In was cancelled or failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignupSubmit = async (e: FormEvent<HTMLFormElement>) => {
@@ -387,26 +439,33 @@ export default function ProfileLogin() {
                 </div>
 
                 {/* Secondary Quick Auth Actions */}
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => handleQuickDemo("client")}
-                    className="h-11 rounded-xl border border-neutral-200 bg-white hover:border-[#FF6B1E]/45 hover:bg-orange-50/40 flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-800 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
-                  >
-                    <UserOutlined className="text-[#FF6B1E]" />
-                    <span>Client Demo</span>
-                  </button>
+                <div className="space-y-2.5">
+                  <GoogleSignInButton
+                    onClick={handleGoogleSignIn}
+                    loading={loading}
+                    className="w-full h-11"
+                  />
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleQuickDemo("client")}
+                      className="h-11 rounded-xl border border-neutral-200 bg-white hover:border-[#FF6B1E]/45 hover:bg-orange-50/40 flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-800 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
+                    >
+                      <UserOutlined className="text-[#FF6B1E]" />
+                      <span>Client Demo</span>
+                    </button>
 
-                  <button
-                    type="button"
-                    disabled={loading}
-                    onClick={() => handleQuickDemo("admin")}
-                    className="h-11 rounded-xl border border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-800 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
-                  >
-                    <SafetyCertificateOutlined className="text-[#22577a]" />
-                    <span>Admin Demo</span>
-                  </button>
+                    <button
+                      type="button"
+                      disabled={loading}
+                      onClick={() => handleQuickDemo("admin")}
+                      className="h-11 rounded-xl border border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-800 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
+                    >
+                      <SafetyCertificateOutlined className="text-[#22577a]" />
+                      <span>Admin Demo</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Footer Toggle */}

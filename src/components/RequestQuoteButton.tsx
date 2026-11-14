@@ -42,7 +42,6 @@ export default function RequestQuoteButton(props: RequestQuoteButtonProps) {
   const baseClasses = [
     "request-quote-fx",
     "inline-flex items-center justify-center gap-2 font-semibold text-white whitespace-nowrap shrink-0 cursor-pointer select-none no-underline",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#38bdf8]",
     SIZE_CLASSES[size],
     fullWidth ? "w-full" : "",
     className,

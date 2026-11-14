@@ -1,10 +1,18 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  addScheduleSlot,
   buildGmailRawMessage,
   buildGoogleCalendarEventPayload,
   computeAvailableSlotsForDate,
+  createDefaultSiteVisitSchedule,
+  deleteScheduleDate,
+  deleteScheduleSlot,
+  getManagedSiteVisitDates,
   getUpcomingSiteVisitDates,
+  toggleScheduleSlotAvailability,
+  updateScheduleSlot,
+  upsertScheduleDate,
   validateSiteVisitBooking,
   type SiteVisitBooking,
 } from "./siteVisitSchedulerHelpers";
@@ -61,6 +69,94 @@ test("computeAvailableSlotsForDate marks booked, blocked, and Google Calendar bu
   assert.equal(slots[2].available, false);
   assert.equal(slots[2].reason, "Calendar Busy");
   assert.equal(slots[3].available, true); // CANCELLED booking does not block slot
+});
+
+test("admin schedule helpers support adding/toggling/deleting dates and adding/editing/toggling/deleting slots", () => {
+  let schedule = createDefaultSiteVisitSchedule();
+
+  // Add a custom future date marked unavailable first, then toggle available
+  schedule = upsertScheduleDate(schedule, {
+    date: "2026-12-20",
+    available: false,
+    note: "Showroom Holiday",
+    isCustom: true,
+  });
+
+  const closedSlots = computeAvailableSlotsForDate(
+    "2026-12-20",
+    [],
+    schedule.blockedKeys,
+    [],
+    schedule
+  );
+  assert.equal(closedSlots.every((s) => !s.available && s.reason === "Date Unavailable"), true);
+
+  // Mark date available and add a custom evening slot
+  schedule = upsertScheduleDate(schedule, { date: "2026-12-20", available: true });
+  schedule = addScheduleSlot(schedule, "2026-12-20", {
+    time: "17:00",
+    endTime: "18:00",
+    label: "05:00 PM Evening",
+    available: true,
+  });
+
+  let openSlots = computeAvailableSlotsForDate(
+    "2026-12-20",
+    [],
+    schedule.blockedKeys,
+    [],
+    schedule
+  );
+  assert.equal(openSlots.length, 5);
+  assert.equal(openSlots[4].time, "17:00");
+  assert.equal(openSlots[4].label, "05:00 PM Evening");
+  assert.equal(openSlots[4].available, true);
+
+  // Edit slot label & time, then toggle unavailable
+  const addedId = openSlots[4].id!;
+  schedule = updateScheduleSlot(schedule, "2026-12-20", addedId, {
+    time: "17:30",
+    endTime: "18:30",
+    label: "05:30 PM Extended",
+  });
+  schedule = toggleScheduleSlotAvailability(schedule, "2026-12-20", addedId);
+
+  openSlots = computeAvailableSlotsForDate(
+    "2026-12-20",
+    [],
+    schedule.blockedKeys,
+    [],
+    schedule
+  );
+  const edited = openSlots.find((s) => s.id === addedId);
+  assert.ok(edited);
+  if (!edited) return;
+  assert.equal(edited.time, "17:30");
+  assert.equal(edited.label, "05:30 PM Extended");
+  assert.equal(edited.available, false);
+  assert.equal(edited.reason, "Unavailable");
+
+  // Managed dates list includes custom date with accurate counts
+  const managed = getManagedSiteVisitDates(schedule, [], 4, new Date(2026, 10, 13));
+  const customEntry = managed.find((d) => d.date === "2026-12-20");
+  assert.ok(customEntry);
+  if (!customEntry) return;
+  assert.equal(customEntry.openSlotCount, 4);
+  assert.equal(customEntry.totalSlotCount, 5);
+
+  // Delete slot & delete custom date
+  schedule = deleteScheduleSlot(schedule, "2026-12-20", addedId);
+  openSlots = computeAvailableSlotsForDate(
+    "2026-12-20",
+    [],
+    schedule.blockedKeys,
+    [],
+    schedule
+  );
+  assert.equal(openSlots.length, 4);
+
+  schedule = deleteScheduleDate(schedule, "2026-12-20");
+  assert.equal(Boolean(schedule.dates["2026-12-20"]), false);
 });
 
 test("validateSiteVisitBooking checks required fields", () => {
