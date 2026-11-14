@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Table, Tag, Select, Input, message } from "antd";
+import { App as AntdApp, Table, Tag, Select, Input } from "antd";
 import { FiSearch } from "react-icons/fi";
 import AxiosConfig from "../../Context/AxiosConfig";
 import XlfileGenerate from "./XlfileGenerate";
@@ -40,6 +40,7 @@ interface ViewAllorderProps {
 }
 
 function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
+  const { message } = AntdApp.useApp();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");

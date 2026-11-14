@@ -18,6 +18,7 @@ import {
   deleteChatbotFaqRecordMem,
   deleteFeedbackRecordMem,
   deleteMediaAssetRecordMem,
+  deleteMonthlyTemplateRecordMem,
   deleteProductRecordMem,
   deleteProjectRecordMem,
   deleteUserAccountMem,
@@ -44,6 +45,7 @@ import {
   replaceRelatedPortalsMem,
   resetSeedDataCheckMem,
   setCmsDocMem,
+  updateAppointmentMetadataRecordMem,
   updateAppointmentSlotRecordMem,
   updateAppointmentStatusRecordMem,
   updateCategoryRecordMem,
@@ -55,6 +57,7 @@ import {
   upsertAppointmentDateRecordMem,
   upsertBlogPostRecordMem,
   upsertChatbotFaqRecordMem,
+  upsertMonthlyTemplateRecordMem,
 } from "./memoryRepositories.ts";
 import {
   appointmentDates,
@@ -87,7 +90,9 @@ import {
   type ProductCategory,
 } from "../utils/productCatalogHelpers.ts";
 import {
+  applyMonthlyTemplateToSchedule,
   computeDefaultEndTime,
+  deleteMonthlyTemplateFromSchedule,
   formatTime24ToLabel,
   normalizeManagedSlot,
   normalizeSiteVisitScheduleConfig,
@@ -95,6 +100,7 @@ import {
   sortManagedSlots,
   type ManagedSiteVisitDateConfig,
   type ManagedSiteVisitSlot,
+  type MonthlySlotTemplate,
   type SiteVisitBooking,
   type SiteVisitScheduleConfig,
   type SiteVisitStatus,
@@ -875,10 +881,11 @@ export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleC
   if (isMemoryFallbackActive()) return getAppointmentScheduleConfigMem();
   try {
     await ensureDatabaseSeeded();
-    const [slotRows, dateRows, blockedDoc] = await Promise.all([
+    const [slotRows, dateRows, blockedDoc, monthlyDoc] = await Promise.all([
       db.select().from(appointmentSlots).orderBy(asc(appointmentSlots.sortOrder), asc(appointmentSlots.slotTime)),
       db.select().from(appointmentDates).orderBy(asc(appointmentDates.visitDate)),
       db.select().from(cmsDocuments).where(eq(cmsDocuments.key, "site_visit_blocked_keys")).limit(1),
+      db.select().from(cmsDocuments).where(eq(cmsDocuments.key, "site_visit_monthly_templates")).limit(1),
     ]);
 
     const defaultSlots: ManagedSiteVisitSlot[] = slotRows.map((s) => ({
@@ -906,10 +913,18 @@ export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleC
       ? (blockedDoc[0].payload.blockedKeys as string[])
       : [];
 
+    const monthlyTemplates =
+      monthlyDoc[0]?.payload &&
+      typeof monthlyDoc[0].payload === "object" &&
+      "monthlyTemplates" in monthlyDoc[0].payload
+        ? (monthlyDoc[0].payload.monthlyTemplates as Record<string, MonthlySlotTemplate>)
+        : {};
+
     return normalizeSiteVisitScheduleConfig({
       defaultSlots,
       dates,
       blockedKeys,
+      monthlyTemplates,
     });
   } catch (error) {
     markDatabaseOffline(error);
@@ -1003,6 +1018,49 @@ export async function updateAppointmentStatusRecord(
   }
 }
 
+export async function updateAppointmentMetadataRecord(
+  idOrCode: string,
+  patch: { status?: SiteVisitStatus; calendarEventId?: string; emailSent?: boolean }
+): Promise<SiteVisitBooking | null> {
+  if (isMemoryFallbackActive()) return updateAppointmentMetadataRecordMem(idOrCode, patch);
+  try {
+    await ensureDatabaseSeeded();
+    const rows = await db.select().from(appointments);
+    const match = rows.find(
+      (a) => a.bookingCode === idOrCode || String(a.id) === String(idOrCode)
+    );
+    if (!match) return null;
+
+    const [updated] = await db
+      .update(appointments)
+      .set({
+        ...(patch.status ? { status: patch.status } : {}),
+        ...(typeof patch.calendarEventId === "string"
+          ? { calendarEventId: patch.calendarEventId }
+          : {}),
+        ...(typeof patch.emailSent === "boolean" ? { emailSent: patch.emailSent } : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(appointments.id, match.id))
+      .returning();
+    return mapAppointmentRow(updated);
+  } catch (error) {
+    markDatabaseOffline(error);
+    return updateAppointmentMetadataRecordMem(idOrCode, patch);
+  }
+}
+
+async function resolveBaseSlotsForDateDb(targetDate: string): Promise<ManagedSiteVisitSlot[]> {
+  const schedule = await getAppointmentScheduleConfig();
+  const existing = schedule.dates[targetDate];
+  if (existing?.slots && existing.slots.length > 0) return existing.slots;
+  const monthCfg = /^\d{4}-\d{2}/.test(targetDate)
+    ? schedule.monthlyTemplates?.[targetDate.slice(0, 7)]
+    : undefined;
+  if (monthCfg?.slots && monthCfg.slots.length > 0) return monthCfg.slots;
+  return schedule.defaultSlots;
+}
+
 export async function addAppointmentSlotRecord(
   date: string | undefined,
   slotInput: { time: string; endTime?: string; label?: string; available?: boolean }
@@ -1027,21 +1085,7 @@ export async function addAppointmentSlotRecord(
         .where(eq(appointmentDates.visitDate, targetDate))
         .limit(1);
 
-      const defaultRows = await db
-        .select()
-        .from(appointmentSlots)
-        .orderBy(asc(appointmentSlots.sortOrder));
-      const baseSlots: ManagedSiteVisitSlot[] =
-        existing[0]?.customSlots && existing[0].customSlots.length > 0
-          ? existing[0].customSlots
-          : defaultRows.map((s) => ({
-              id: s.slotKey,
-              time: s.slotTime,
-              endTime: s.endTime,
-              label: s.label,
-              available: s.available,
-            }));
-
+      const baseSlots = await resolveBaseSlotsForDateDb(targetDate);
       const nextSlots = sortManagedSlots([
         ...baseSlots.filter((s) => s.time !== normalized.time),
         normalized,
@@ -1106,20 +1150,7 @@ export async function updateAppointmentSlotRecord(
         .from(appointmentDates)
         .where(eq(appointmentDates.visitDate, targetDate))
         .limit(1);
-      const defaultRows = await db
-        .select()
-        .from(appointmentSlots)
-        .orderBy(asc(appointmentSlots.sortOrder));
-      const baseSlots: ManagedSiteVisitSlot[] =
-        existing[0]?.customSlots && existing[0].customSlots.length > 0
-          ? existing[0].customSlots
-          : defaultRows.map((s) => ({
-              id: s.slotKey,
-              time: s.slotTime,
-              endTime: s.endTime,
-              label: s.label,
-              available: s.available,
-            }));
+      const baseSlots = await resolveBaseSlotsForDateDb(targetDate);
 
       const nextSlots = sortManagedSlots(
         baseSlots.map((s) =>
@@ -1185,20 +1216,7 @@ export async function deleteAppointmentSlotRecord(slotId: string, date?: string)
         .from(appointmentDates)
         .where(eq(appointmentDates.visitDate, targetDate))
         .limit(1);
-      const defaultRows = await db
-        .select()
-        .from(appointmentSlots)
-        .orderBy(asc(appointmentSlots.sortOrder));
-      const baseSlots: ManagedSiteVisitSlot[] =
-        existing[0]?.customSlots && existing[0].customSlots.length > 0
-          ? existing[0].customSlots
-          : defaultRows.map((s) => ({
-              id: s.slotKey,
-              time: s.slotTime,
-              endTime: s.endTime,
-              label: s.label,
-              available: s.available,
-            }));
+      const baseSlots = await resolveBaseSlotsForDateDb(targetDate);
 
       const nextSlots = baseSlots.filter((s) => s.id !== slotId && s.time !== slotId);
       await db
@@ -1235,6 +1253,7 @@ export async function upsertAppointmentDateRecord(input: {
   available?: boolean;
   note?: string;
   isCustom?: boolean;
+  resetSlots?: boolean;
 }) {
   if (isMemoryFallbackActive()) return upsertAppointmentDateRecordMem(input);
   try {
@@ -1253,7 +1272,7 @@ export async function upsertAppointmentDateRecord(input: {
         available: typeof input.available === "boolean" ? input.available : true,
         note: input.note !== undefined ? input.note : existing[0]?.note || "",
         isCustom: input.isCustom !== undefined ? input.isCustom : true,
-        customSlots: existing[0]?.customSlots || [],
+        customSlots: input.resetSlots ? [] : existing[0]?.customSlots || [],
       })
       .onConflictDoUpdate({
         target: appointmentDates.visitDate,
@@ -1265,6 +1284,7 @@ export async function upsertAppointmentDateRecord(input: {
           note: input.note !== undefined ? input.note : existing[0]?.note || "",
           isCustom:
             input.isCustom !== undefined ? input.isCustom : existing[0]?.isCustom ?? false,
+          ...(input.resetSlots ? { customSlots: [] } : {}),
           updatedAt: new Date(),
         },
       });
@@ -1284,6 +1304,61 @@ export async function deleteAppointmentDateRecord(date: string) {
   } catch (error) {
     markDatabaseOffline(error);
     return deleteAppointmentDateRecordMem(date);
+  }
+}
+
+export async function upsertMonthlyTemplateRecord(input: {
+  monthKey: string;
+  slots: Partial<ManagedSiteVisitSlot>[];
+  activeWeekdays?: number[];
+  closedDates?: string[];
+  note?: string;
+  clearPerDateCustomSlots?: boolean;
+}): Promise<SiteVisitScheduleConfig> {
+  if (isMemoryFallbackActive()) return upsertMonthlyTemplateRecordMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const current = await getAppointmentScheduleConfig();
+    const updated = applyMonthlyTemplateToSchedule(current, input);
+
+    if (input.clearPerDateCustomSlots) {
+      const monthRows = await db.select().from(appointmentDates);
+      const matchingDates = monthRows
+        .filter((r) => r.visitDate.startsWith(`${input.monthKey}-`))
+        .map((r) => r.visitDate);
+      if (matchingDates.length > 0) {
+        await db
+          .update(appointmentDates)
+          .set({ customSlots: [], updatedAt: new Date() })
+          .where(inArray(appointmentDates.visitDate, matchingDates));
+      }
+    }
+
+    await setCmsDoc("site_visit_monthly_templates", {
+      monthlyTemplates: updated.monthlyTemplates || {},
+    });
+    return await getAppointmentScheduleConfig();
+  } catch (error) {
+    markDatabaseOffline(error);
+    return upsertMonthlyTemplateRecordMem(input);
+  }
+}
+
+export async function deleteMonthlyTemplateRecord(
+  monthKey: string
+): Promise<SiteVisitScheduleConfig> {
+  if (isMemoryFallbackActive()) return deleteMonthlyTemplateRecordMem(monthKey);
+  try {
+    await ensureDatabaseSeeded();
+    const current = await getAppointmentScheduleConfig();
+    const updated = deleteMonthlyTemplateFromSchedule(current, monthKey);
+    await setCmsDoc("site_visit_monthly_templates", {
+      monthlyTemplates: updated.monthlyTemplates || {},
+    });
+    return await getAppointmentScheduleConfig();
+  } catch (error) {
+    markDatabaseOffline(error);
+    return deleteMonthlyTemplateRecordMem(monthKey);
   }
 }
 

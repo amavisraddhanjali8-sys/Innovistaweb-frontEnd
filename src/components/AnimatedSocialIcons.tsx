@@ -10,6 +10,7 @@ export interface AnimatedSocialIconsProps {
   size?: "sm" | "md";
   align?: "start" | "end";
   keyPrefix?: string;
+  variant?: "tile" | "simple";
 }
 
 function LinkedInBrandLogo({ className }: { className: string }) {
@@ -90,6 +91,7 @@ export default function AnimatedSocialIcons({
   size = "md",
   align = "start",
   keyPrefix = "social",
+  variant = "tile",
 }: AnimatedSocialIconsProps) {
   const items = [
     {
@@ -136,6 +138,36 @@ export default function AnimatedSocialIcons({
 
   const boxSize = size === "sm" ? "w-10 h-10 rounded-xl" : "w-12 h-12 rounded-2xl";
   const logoSize = size === "sm" ? "w-6 h-6" : "w-7 h-7";
+
+  if (variant === "simple") {
+    return (
+      <div
+        className={`flex flex-wrap items-center gap-3.5 ${
+          align === "end" ? "lg:justify-end" : "justify-start"
+        }`}
+      >
+        {items.map(({ id, label, href, Logo }) => (
+          <a
+            key={`${keyPrefix}-${id}`}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Connect on ${label}`}
+            data-testid={`social-3d-${id}`}
+            className="group relative inline-flex items-center justify-center p-0.5 rounded-full transition-transform duration-200 hover:-translate-y-0.5 hover:scale-110 no-underline shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3393B8]"
+          >
+            <Logo className={`${logoSize}`} />
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded bg-slate-900/95 text-white text-[10px] font-semibold tracking-wide whitespace-nowrap opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 group-focus-visible:opacity-100 group-focus-visible:translate-y-0 transition-all duration-150 shadow-sm z-20"
+            >
+              {label}
+            </span>
+          </a>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div

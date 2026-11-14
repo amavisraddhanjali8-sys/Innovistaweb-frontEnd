@@ -26,14 +26,17 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
     []
   );
 
+  const xToRef = useRef<((value: number) => void) | null>(null);
+  const yToRef = useRef<((value: number) => void) | null>(null);
+
   const moveCursor = useCallback((x: number, y: number) => {
+    if (xToRef.current && yToRef.current) {
+      xToRef.current(x);
+      yToRef.current(y);
+      return;
+    }
     if (!cursorRef.current) return;
-    gsap.to(cursorRef.current, {
-      x,
-      y,
-      duration: 0.1,
-      ease: 'power3.out'
-    });
+    gsap.set(cursorRef.current, { x, y });
   }, []);
 
   const [isDesktopCursor, setIsDesktopCursor] = React.useState<boolean>(() => {
@@ -90,6 +93,8 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
       x: window.innerWidth / 2,
       y: window.innerHeight / 2
     });
+    xToRef.current = gsap.quickTo(cursor, 'x', { duration: 0.1, ease: 'power3.out' });
+    yToRef.current = gsap.quickTo(cursor, 'y', { duration: 0.1, ease: 'power3.out' });
 
     const createSpinTimeline = () => {
       if (spinTl.current) {
@@ -103,28 +108,32 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
     createSpinTimeline();
 
     const moveHandler = (e: MouseEvent) => moveCursor(e.clientX, e.clientY);
-    window.addEventListener('mousemove', moveHandler);
+    window.addEventListener('mousemove', moveHandler, { passive: true });
 
+    let scrollRafId: number | null = null;
     const scrollHandler = () => {
-      if (!activeTarget || !cursorRef.current) return;
+      if (!activeTarget || !cursorRef.current || scrollRafId !== null) return;
+      scrollRafId = requestAnimationFrame(() => {
+        scrollRafId = null;
+        if (!activeTarget || !cursorRef.current) return;
 
-      const mouseX = gsap.getProperty(cursorRef.current, 'x') as number;
-      const mouseY = gsap.getProperty(cursorRef.current, 'y') as number;
+        const mouseX = gsap.getProperty(cursorRef.current, 'x') as number;
+        const mouseY = gsap.getProperty(cursorRef.current, 'y') as number;
 
-      const elementUnderMouse = document.elementFromPoint(mouseX, mouseY);
-      const isStillOverTarget =
-        elementUnderMouse &&
-        (elementUnderMouse === activeTarget || elementUnderMouse.closest(targetSelector) === activeTarget);
+        const elementUnderMouse = document.elementFromPoint(mouseX, mouseY);
+        const isStillOverTarget =
+          elementUnderMouse &&
+          (elementUnderMouse === activeTarget || elementUnderMouse.closest(targetSelector) === activeTarget);
 
-      if (!isStillOverTarget) {
-        if (currentLeaveHandler) {
-          currentLeaveHandler();
+        if (!isStillOverTarget) {
+          if (currentLeaveHandler) {
+            currentLeaveHandler();
+          }
         }
-      }
+      });
     };
 
     window.addEventListener('scroll', scrollHandler, { passive: true });
-    window.addEventListener('mousemove', moveHandler);
 
     const mouseDownHandler = (): void => {
       if (!dotRef.current) return;
@@ -322,9 +331,19 @@ const TargetCursor: React.FC<TargetCursorProps> = ({
     window.addEventListener('mouseover', enterHandler, { passive: true });
 
     return () => {
+      if (scrollRafId !== null) {
+        cancelAnimationFrame(scrollRafId);
+      }
+      if (resumeTimeout) {
+        clearTimeout(resumeTimeout);
+      }
       window.removeEventListener('mousemove', moveHandler);
       window.removeEventListener('mouseover', enterHandler);
       window.removeEventListener('scroll', scrollHandler);
+      window.removeEventListener('mousedown', mouseDownHandler);
+      window.removeEventListener('mouseup', mouseUpHandler);
+      xToRef.current = null;
+      yToRef.current = null;
 
       if (activeTarget) {
         cleanupTarget(activeTarget);

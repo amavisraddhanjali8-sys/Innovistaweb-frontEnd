@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  App as AntdApp,
   Tabs,
   Button,
   Tag,
   Avatar,
   Form,
   Input,
-  message,
   Upload,
   Spin,
 } from "antd";
@@ -50,6 +50,7 @@ interface ProfileFormValues {
 }
 
 export default function UserProfile() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, isLoggedIn, logout, updateUser } = useAuth();
@@ -129,9 +130,15 @@ export default function UserProfile() {
           `/customer/profile?customerId=${encodeURIComponent(String(user.id || ""))}&email=${encodeURIComponent(user.email || "")}`
         );
         const filtered = filterCustomerPortalRecords({
-          orders: Array.isArray(res.data?.orders) ? res.data.orders : [],
-          rfqs: Array.isArray(res.data?.rfqs) ? res.data.rfqs : [],
-          siteVisits: Array.isArray(res.data?.siteVisits) ? res.data.siteVisits : [],
+          orders: (Array.isArray(res.data?.orders)
+            ? res.data.orders
+            : []) as CustomerOrderItem[],
+          rfqs: (Array.isArray(res.data?.rfqs)
+            ? res.data.rfqs
+            : []) as CustomerRfqItem[],
+          siteVisits: (Array.isArray(res.data?.siteVisits)
+            ? res.data.siteVisits
+            : []) as CustomerSiteVisitItem[],
           email: user.email,
           userId: user.id,
           isAdmin: false,

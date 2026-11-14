@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Table, Avatar, message, Popconfirm, Button } from "antd";
+import { App as AntdApp, Table, Avatar, Popconfirm, Button } from "antd";
 import type { TableProps } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
 import { DeleteOutlined } from "@ant-design/icons";
@@ -22,6 +22,7 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
   refreshTrigger = 0,
   onCountChange,
 }) => {
+  const { message } = AntdApp.useApp();
   const [data, setData] = useState<AdminType[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -51,7 +52,7 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [message]);
 
   const handleDelete = async (adminId: number) => {
     try {

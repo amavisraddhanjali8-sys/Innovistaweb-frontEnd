@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { message } from "antd";
+import { App as AntdApp } from "antd";
 import { motion } from "framer-motion";
 import {
   FiArrowRight,
@@ -81,6 +81,7 @@ export default function WhyChooseUsInfographic({
   heading = "Why Choose Us",
   items,
 }: WhyChooseUsInfographicProps) {
+  const { message } = AntdApp.useApp();
   const { user, isLoggedIn } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Form, Input, Button, message } from "antd";
+import { App as AntdApp, Form, Input, Button } from "antd";
 import AxiosConfig from "../Context/AxiosConfig";
 
 interface PasswordResetFormValues {
@@ -12,6 +12,7 @@ interface PasswordResetProps {
 }
 
 function PasswordReset({ onSuccess }: PasswordResetProps) {
+  const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
   const [submitting, setSubmitting] = useState(false);
 

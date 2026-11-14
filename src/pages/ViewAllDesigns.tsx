@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  App as AntdApp,
   Table,
   Button,
   Tag,
@@ -8,7 +9,6 @@ import {
   Modal,
   Input,
   Popconfirm,
-  message,
 } from "antd";
 import {
   FiExternalLink,
@@ -31,6 +31,7 @@ import {
 } from "../utils/productCatalogHelpers";
 
 function ViewAllDesigns() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [designs, setDesigns] = useState<DesignItem[]>([]);
   const [allDesignsForLinking, setAllDesignsForLinking] = useState<DesignItem[]>([]);
@@ -73,7 +74,7 @@ function ViewAllDesigns() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     fetchDesigns(1, 10);

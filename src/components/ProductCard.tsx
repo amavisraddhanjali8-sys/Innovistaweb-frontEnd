@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { message } from "antd";
+import { App as AntdApp } from "antd";
 import gsap from "gsap";
 import { useAuth } from "../Context/AuthContext";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
@@ -16,6 +16,7 @@ type Props = {
 };
 
 function ProductCard({ id, image, title, description }: Props) {
+  const { message } = AntdApp.useApp();
   const { isLoggedIn } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -137,6 +138,8 @@ function ProductCard({ id, image, title, description }: Props) {
         ref={imageRef}
         src={image}
         alt={title}
+        loading="lazy"
+        decoding="async"
         referrerPolicy="no-referrer"
         className={styles.image}
       />

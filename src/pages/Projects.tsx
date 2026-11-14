@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Pagination, Spin, message } from "antd";
+import { App as AntdApp, Pagination, Spin } from "antd";
 import {
   FiArrowRight,
   FiBriefcase,
@@ -41,6 +41,7 @@ const STATUS_TABS: Array<{ key: ProjectStatusFilter; label: string }> = [
 ];
 
 function Projects() {
+  const { message } = AntdApp.useApp();
   const { isLoggedIn } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

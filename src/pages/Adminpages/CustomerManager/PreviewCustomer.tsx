@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  App as AntdApp,
   Table,
   Tag,
   Space,
@@ -8,7 +9,6 @@ import {
   Form,
   Input,
   Popconfirm,
-  message,
 } from "antd";
 import AxiosConfig from "../../../Context/AxiosConfig";
 import SafeImage from "../../../components/SafeImage";
@@ -35,6 +35,7 @@ function PreviewCustomer({
   refreshTrigger = 0,
   onMetricsChange,
 }: PreviewCustomerProps) {
+  const { message } = AntdApp.useApp();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 

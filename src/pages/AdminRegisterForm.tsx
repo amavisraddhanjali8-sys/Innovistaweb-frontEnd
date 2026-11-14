@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Button, Form, Input, Upload, message } from "antd";
+import { App as AntdApp, Button, Form, Input, Upload } from "antd";
 import { UploadOutlined } from "@ant-design/icons";
 import AxiosConfig from "../Context/AxiosConfig";
 
@@ -8,6 +8,7 @@ interface AdminRegisterFormProps {
 }
 
 const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
+  const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);

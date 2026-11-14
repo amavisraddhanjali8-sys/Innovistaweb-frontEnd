@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Modal, message } from "antd";
+import { App as AntdApp, Modal } from "antd";
 import {
   EyeOutlined,
   EyeInvisibleOutlined,
@@ -28,6 +28,7 @@ import {
 } from "../utils/authHelpers";
 
 export default function ProfileLogin() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const { loginCustomer, loginAdmin, user } = useAuth();

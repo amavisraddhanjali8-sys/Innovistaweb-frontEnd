@@ -68,7 +68,8 @@ export default function PageAdBannerSlideshow({
           params: { pageKey },
         });
         if (!active) return;
-        const rawPage = res.data?.page || res.data?.pages?.[pageKey];
+        const rawPage =
+          res.data?.page || res.data?.pages?.[pageKey] || res.data?.data;
         if (rawPage) {
           setFetchedConfig(normalizeSinglePageAdsConfig(rawPage, pageKey));
         } else {

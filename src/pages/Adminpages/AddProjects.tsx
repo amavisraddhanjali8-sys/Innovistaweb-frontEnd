@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  App as AntdApp,
   Button,
   Input,
   Form,
   Space,
   DatePicker,
   InputNumber,
-  message,
 } from "antd";
 import { DeleteOutlined } from "@ant-design/icons";
 import { FiBriefcase, FiEye, FiPlus, FiSliders, FiUpload } from "react-icons/fi";
@@ -19,6 +19,7 @@ import { formatCurrencyLkr } from "../../utils/adminPortalHelpers";
 const { TextArea } = Input;
 
 function AddProjects() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [form] = Form.useForm();
   const [images, setImages] = useState<string[]>([]);

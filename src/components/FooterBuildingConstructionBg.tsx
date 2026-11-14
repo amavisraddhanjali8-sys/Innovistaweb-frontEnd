@@ -81,6 +81,8 @@ export default function FooterBuildingConstructionBg({
 
     let disposed = false;
     let rafId = 0;
+    let isIntersecting = false;
+    let isTabVisible = typeof document === "undefined" || document.visibilityState !== "hidden";
     let smoothNx = 0;
     let smoothNy = 0;
     const startSec = performance.now() / 1000;
@@ -336,17 +338,61 @@ export default function FooterBuildingConstructionBg({
       ctx.lineTo(width, baseY + frame.parallaxY * 0.5);
       ctx.stroke();
 
-      if (!reducedMotion) {
+      if (!reducedMotion && isIntersecting && isTabVisible) {
         rafId = requestAnimationFrame(renderFrame);
+      } else {
+        rafId = 0;
       }
     };
 
+    const scheduleRender = () => {
+      if (disposed || rafId || reducedMotion || !isIntersecting || !isTabVisible) return;
+      rafId = requestAnimationFrame(renderFrame);
+    };
+
+    const observerTarget = host || canvas;
+    const intersectionObserver =
+      typeof IntersectionObserver !== "undefined" && observerTarget
+        ? new IntersectionObserver(
+            (entries) => {
+              isIntersecting = entries.some((entry) => entry.isIntersecting);
+              if (isIntersecting) {
+                scheduleRender();
+              } else if (rafId) {
+                cancelAnimationFrame(rafId);
+                rafId = 0;
+              }
+            },
+            { rootMargin: "120px" }
+          )
+        : null;
+
+    if (intersectionObserver && observerTarget) {
+      intersectionObserver.observe(observerTarget);
+    } else {
+      isIntersecting = true;
+    }
+
+    const onVisibilityChange = () => {
+      isTabVisible = document.visibilityState !== "hidden";
+      if (isTabVisible) {
+        scheduleRender();
+      } else if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = 0;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Draw one crisp static frame immediately, then loop only when visible
     renderFrame();
 
     return () => {
       disposed = true;
       cancelAnimationFrame(rafId);
       resizeObserver.disconnect();
+      intersectionObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       mq?.removeEventListener("change", onMotionChange);
       host?.removeEventListener("pointermove", onPointerMove);
       host?.removeEventListener("pointerleave", onPointerLeave);

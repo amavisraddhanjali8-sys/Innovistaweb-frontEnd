@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import {
   FiCalendar,
   FiCheckCircle,
+  FiChevronLeft,
+  FiChevronRight,
   FiClock,
   FiMail,
   FiMapPin,
@@ -14,6 +16,7 @@ import {
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
+import { useSiteVisitSlots } from "../Context/SiteVisitSlotContext";
 import {
   createGoogleCalendarEvent,
   fetchCalendarBusyEventsForDate,
@@ -25,13 +28,25 @@ import {
 } from "../services/googleWorkspaceService";
 import { buildSmsHref, buildWhatsAppChatUrl } from "../utils/chatbotHelpers";
 import {
+  computeNextOpenSlot,
+  evaluateBookingSubmitState,
+  mergeCalendarCellsWithLocalState,
+  mergeSlotsWithLocalState,
+} from "../utils/siteVisitLocalStoreHelpers";
+import {
+  buildMonthlySiteVisitCalendar,
   computeAvailableSlotsForDate,
   createDefaultSiteVisitSchedule,
+  formatIsoDateLocal,
+  formatMonthHeading,
   getManagedSiteVisitDates,
+  getMonthKeyFromDate,
+  shiftMonthKey,
   validateSiteVisitBooking,
   type CalendarBusyRange,
-  type ManagedDateSummary,
+  type MonthlyCalendarCell,
   type SiteVisitBooking,
+  type SiteVisitScheduleConfig,
   type SlotAvailabilityItem,
 } from "../utils/siteVisitSchedulerHelpers";
 import GoogleSignInButton from "./GoogleSignInButton";
@@ -56,18 +71,37 @@ export default function SiteVisitBookingCard({
 }: SiteVisitBookingCardProps) {
   const { user } = useAuth();
   const { contactSettings } = useSiteSettings();
+  const {
+    state: localSlotState,
+    setWidgetSelection,
+    clearWidgetSelection,
+    reserveSlotAndNotify,
+  } = useSiteVisitSlots();
+  const todayIso = formatIsoDateLocal(new Date());
+  const currentMonthKey = getMonthKeyFromDate(todayIso);
 
-  const [dates, setDates] = useState<ManagedDateSummary[]>(() =>
-    getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], compact ? 6 : 8)
+  const initialDate =
+    getManagedSiteVisitDates(
+      createDefaultSiteVisitSchedule(),
+      [],
+      compact ? 6 : 8
+    )[0]?.date || todayIso;
+
+  const [schedule, setSchedule] = useState<SiteVisitScheduleConfig>(() =>
+    createDefaultSiteVisitSchedule()
   );
-  const [selectedDate, setSelectedDate] = useState(
-    () =>
-      getManagedSiteVisitDates(
-        createDefaultSiteVisitSchedule(),
-        [],
-        compact ? 6 : 8
-      )[0]?.date || ""
+  const [viewMonth, setViewMonth] = useState<string>(() =>
+    getMonthKeyFromDate(initialDate)
   );
+  const [calendarDays, setCalendarDays] = useState<MonthlyCalendarCell[]>(() =>
+    buildMonthlySiteVisitCalendar(
+      getMonthKeyFromDate(initialDate),
+      createDefaultSiteVisitSchedule(),
+      [],
+      todayIso
+    )
+  );
+  const [selectedDate, setSelectedDate] = useState(initialDate);
   const [slots, setSlots] = useState<SlotAvailabilityItem[]>([]);
   const [selectedSlot, setSelectedSlot] = useState("");
   const [loadingSlots, setLoadingSlots] = useState(false);
@@ -115,31 +149,53 @@ export default function SiteVisitBookingCard({
   }, []);
 
   const loadSlots = useCallback(
-    async (date: string, withCalendarBusy = Boolean(getWorkspaceAccessToken())) => {
-      if (!date) return;
+    async (
+      date: string,
+      withCalendarBusy = Boolean(getWorkspaceAccessToken()),
+      explicitMonth?: string
+    ) => {
+      if (!date && !explicitMonth) return;
       setLoadingSlots(true);
       try {
+        const params = new URLSearchParams();
+        if (date) params.set("date", date);
+        if (explicitMonth) params.set("month", explicitMonth);
         const res = await AxiosConfig.get<{
-          dates?: ManagedDateSummary[];
+          monthKey?: string;
+          calendarDays?: MonthlyCalendarCell[];
+          selectedDate?: string;
+          schedule?: SiteVisitScheduleConfig;
           slots?: SlotAvailabilityItem[];
-        }>(`/api/site-visits/slots?date=${encodeURIComponent(date)}`);
-        if (Array.isArray(res.data?.dates) && res.data.dates.length > 0) {
-          setDates(res.data.dates);
-        }
-        let nextSlots = res.data?.slots || computeAvailableSlotsForDate(date, []);
+        }>(`/api/site-visits/slots?${params.toString()}`);
 
-        if (withCalendarBusy && getWorkspaceAccessToken()) {
+        if (res.data?.schedule) {
+          setSchedule(res.data.schedule);
+        }
+        if (Array.isArray(res.data?.calendarDays) && res.data.calendarDays.length > 0) {
+          setCalendarDays(res.data.calendarDays);
+        }
+        if (!date && res.data?.selectedDate) {
+          setSelectedDate(res.data.selectedDate);
+        }
+
+        const effectiveDate = date || res.data?.selectedDate || "";
+        const serverSchedule = res.data?.schedule || schedule;
+        let nextSlots =
+          res.data?.slots ||
+          computeAvailableSlotsForDate(effectiveDate, [], [], [], serverSchedule);
+
+        if (withCalendarBusy && getWorkspaceAccessToken() && effectiveDate) {
           try {
-            const busy = await fetchCalendarBusyEventsForDate(date);
+            const busy = await fetchCalendarBusyEventsForDate(effectiveDate);
             setCalendarBusy(busy);
             const blockedFromServer = nextSlots
               .filter((s) => !s.available && s.reason === "Blocked")
-              .map((s) => `${date}|${s.time}`);
+              .map((s) => `${effectiveDate}|${s.time}`);
             const bookedFromServer: SiteVisitBooking[] = nextSlots
               .filter((s) => !s.available && s.reason === "Booked")
               .map((s) => ({
                 id: s.time,
-                date,
+                date: effectiveDate,
                 slotTime: s.time,
                 slotLabel: s.label,
                 locationName: "",
@@ -151,10 +207,11 @@ export default function SiteVisitBookingCard({
                 createdAt: "",
               }));
             nextSlots = computeAvailableSlotsForDate(
-              date,
+              effectiveDate,
               bookedFromServer,
               blockedFromServer,
-              busy
+              busy,
+              serverSchedule
             );
           } catch (calErr) {
             setWorkspaceError(
@@ -170,19 +227,100 @@ export default function SiteVisitBookingCard({
           return nextSlots.find((s) => s.available)?.time || "";
         });
       } catch {
-        const fallbackSlots = computeAvailableSlotsForDate(date, []);
-        setSlots(fallbackSlots);
-        setSelectedSlot(fallbackSlots[0]?.time || "");
+        if (date) {
+          const fallbackSlots = computeAvailableSlotsForDate(date, [], [], [], schedule);
+          setSlots(fallbackSlots);
+          setSelectedSlot(fallbackSlots.find((s) => s.available)?.time || "");
+        }
       } finally {
         setLoadingSlots(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
 
+  const mergedCalendarDays = useMemo(
+    () => mergeCalendarCellsWithLocalState(calendarDays, localSlotState),
+    [calendarDays, localSlotState]
+  );
+
+  const mergedSlots = useMemo(
+    () =>
+      mergeSlotsWithLocalState(
+        slots,
+        selectedDate,
+        localSlotState,
+        idPrefix,
+        selectedSlot
+      ),
+    [slots, selectedDate, localSlotState, idPrefix, selectedSlot]
+  );
+
   useEffect(() => {
-    loadSlots(selectedDate);
-  }, [selectedDate, loadSlots]);
+    const nextOpen = computeNextOpenSlot(mergedSlots, selectedSlot);
+    if (nextOpen !== selectedSlot) {
+      setSelectedSlot(nextOpen);
+    }
+  }, [mergedSlots, selectedSlot]);
+
+  useEffect(() => {
+    return () => {
+      clearWidgetSelection(idPrefix);
+    };
+  }, [idPrefix, clearWidgetSelection]);
+
+  useEffect(() => {
+    loadSlots(selectedDate, Boolean(getWorkspaceAccessToken()), viewMonth);
+  }, [selectedDate, viewMonth, loadSlots]);
+
+  const handleSelectDate = (isoDate: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return;
+    clearWidgetSelection(idPrefix);
+    setSelectedDate(isoDate);
+    setViewMonth(getMonthKeyFromDate(isoDate));
+  };
+
+  const handleSelectTimeSlot = (slotTime: string) => {
+    setSelectedSlot(slotTime);
+    setWidgetSelection(idPrefix, selectedDate, slotTime);
+  };
+
+  const handleShiftMonth = async (delta: number) => {
+    const nextMonth = shiftMonthKey(viewMonth, delta);
+    if (nextMonth < currentMonthKey) return;
+    setViewMonth(nextMonth);
+    setLoadingSlots(true);
+    try {
+      const res = await AxiosConfig.get<{
+        calendarDays?: MonthlyCalendarCell[];
+        selectedDate?: string;
+        schedule?: SiteVisitScheduleConfig;
+        slots?: SlotAvailabilityItem[];
+      }>(`/api/site-visits/slots?month=${encodeURIComponent(nextMonth)}`);
+      if (res.data?.schedule) setSchedule(res.data.schedule);
+      if (Array.isArray(res.data?.calendarDays) && res.data.calendarDays.length > 0) {
+        setCalendarDays(res.data.calendarDays);
+      }
+      if (res.data?.selectedDate) {
+        setSelectedDate(res.data.selectedDate);
+      }
+      if (Array.isArray(res.data?.slots)) {
+        setSlots(res.data.slots);
+        setSelectedSlot(res.data.slots.find((s) => s.available)?.time || "");
+      }
+    } catch {
+      const fallbackDays = buildMonthlySiteVisitCalendar(nextMonth, schedule, [], todayIso);
+      setCalendarDays(fallbackDays);
+      const firstValid =
+        fallbackDays.find((c) => c.isCurrentMonth && !c.isPast && c.available)?.isoDate ||
+        fallbackDays.find((c) => c.isCurrentMonth && !c.isPast)?.isoDate ||
+        `${nextMonth}-01`;
+      setSelectedDate(firstValid);
+    } finally {
+      setLoadingSlots(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -212,6 +350,12 @@ export default function SiteVisitBookingCard({
     await loadSlots(selectedDate, false);
   };
 
+  const submitState = evaluateBookingSubmitState(
+    mergedSlots,
+    selectedSlot,
+    submitting
+  );
+
   const validationErrors = validateSiteVisitBooking({
     date: selectedDate,
     slotTime: selectedSlot,
@@ -225,13 +369,14 @@ export default function SiteVisitBookingCard({
     e.preventDefault();
     setAttempted(true);
     setSubmitError("");
-    if (!isValid) return;
+    if (!isValid || !submitState.canBook) return;
 
     setSubmitting(true);
     try {
       const res = await AxiosConfig.post<{
         data: SiteVisitBooking;
         slots?: SlotAvailabilityItem[];
+        calendarDays?: MonthlyCalendarCell[];
       }>("/api/site-visits", {
         date: selectedDate,
         slotTime: selectedSlot,
@@ -244,10 +389,15 @@ export default function SiteVisitBookingCard({
 
       const created = res.data.data;
       setBookedRecord(created);
+      reserveSlotAndNotify(created, { showToast: true });
+      clearWidgetSelection(idPrefix);
+      if (Array.isArray(res.data.calendarDays)) {
+        setCalendarDays(res.data.calendarDays);
+      }
       if (res.data.slots) {
         setSlots(res.data.slots);
       } else {
-        await loadSlots(selectedDate);
+        await loadSlots(selectedDate, Boolean(getWorkspaceAccessToken()), viewMonth);
       }
       onBookingComplete?.(created);
 
@@ -522,53 +672,123 @@ export default function SiteVisitBookingCard({
         </div>
       </div>
 
-      {/* Date Strip */}
-      <div>
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            Select Date
-          </span>
-          <span className="text-[11px] font-medium text-slate-400 tabular-nums">
-            {selectedDate}
-          </span>
+      {/* Monthly Calendar Date Picker */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-3 space-y-2.5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => handleShiftMonth(-1)}
+              disabled={viewMonth <= currentMonthKey}
+              aria-label="Previous month"
+              className="w-7 h-7 rounded-lg border border-slate-200 bg-[#F8FAFC] hover:border-[#22577A] text-slate-700 flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <FiChevronLeft className="text-sm" />
+            </button>
+            <span
+              data-testid={`${idPrefix}-month-heading`}
+              className="text-xs sm:text-sm font-bold text-[#14171A] px-1 tabular-nums"
+            >
+              {formatMonthHeading(viewMonth)}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleShiftMonth(1)}
+              aria-label="Next month"
+              className="w-7 h-7 rounded-lg border border-slate-200 bg-[#F8FAFC] hover:border-[#22577A] text-slate-700 flex items-center justify-center cursor-pointer"
+            >
+              <FiChevronRight className="text-sm" />
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <label htmlFor={`${idPrefix}-date-jump`} className="text-[11px] font-semibold text-slate-500">
+              Date:
+            </label>
+            <input
+              id={`${idPrefix}-date-jump`}
+              type="date"
+              min={todayIso}
+              value={selectedDate}
+              onChange={(e) => {
+                if (e.target.value) handleSelectDate(e.target.value);
+              }}
+              className="px-2 py-1 rounded-lg border border-slate-200 bg-[#FEF6F0] focus:bg-white focus:border-[#22577A] text-[11px] font-bold text-[#14171A] tabular-nums"
+            />
+          </div>
         </div>
-        <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-1.5">
-          {dates
-            .filter((d, idx) => idx < (compact ? 8 : 12) || d.isCustom)
-            .map((d) => {
-            const active = d.date === selectedDate;
-            const dateClosed = d.available === false;
+
+        {/* 7-Column Weekday Labels */}
+        <div className="grid grid-cols-7 gap-1 text-center">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((wd) => (
+            <div
+              key={wd}
+              className="text-[10px] font-bold uppercase tracking-wider text-slate-400 py-0.5"
+            >
+              {wd}
+            </div>
+          ))}
+        </div>
+
+        {/* Interactive Calendar Cells */}
+        <div className="grid grid-cols-7 gap-1">
+          {mergedCalendarDays.map((cell, idx) => {
+            if (!cell.isCurrentMonth || !cell.isoDate) {
+              return <div key={`pad-${idx}`} aria-hidden="true" className="h-11 sm:h-12" />;
+            }
+            const active = cell.isoDate === selectedDate;
+            const disabled = cell.isPast || !cell.available;
+            const statusHint = cell.isPast
+              ? "Past date"
+              : !cell.available
+                ? "Closed"
+                : cell.openSlotCount === 0
+                  ? "Fully reserved"
+                  : `${cell.openSlotCount} slots open`;
+
             return (
               <button
-                key={d.date}
+                key={cell.isoDate}
                 type="button"
-                onClick={() => setSelectedDate(d.date)}
+                disabled={disabled}
+                onClick={() => handleSelectDate(cell.isoDate)}
                 aria-pressed={active}
-                className={`relative py-2 px-1 rounded-xl border text-center cursor-pointer transition-all ${
+                aria-label={`${cell.isoDate}, ${statusHint}`}
+                title={`${cell.isoDate} — ${statusHint}`}
+                className={`h-11 sm:h-12 rounded-xl border px-0.5 flex flex-col items-center justify-center transition-all ${
                   active
-                    ? "bg-[#22577A] border-[#22577A] text-white shadow-xs"
-                    : dateClosed
-                      ? "bg-slate-100 border-slate-200 text-slate-400"
-                      : "bg-white border-slate-200 text-[#14171A] hover:border-[#3393B8]"
+                    ? "bg-[#22577A] border-[#22577A] text-white shadow-xs cursor-pointer"
+                    : disabled
+                      ? "bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed"
+                      : cell.openSlotCount === 0
+                        ? "bg-amber-50/70 border-amber-200 text-amber-700 hover:border-[#22577A] cursor-pointer"
+                        : "bg-white border-slate-200 text-[#14171A] hover:border-[#3393B8] hover:bg-sky-50/40 cursor-pointer"
                 }`}
               >
-                <div
-                  className={`text-[10px] font-semibold uppercase ${
-                    active ? "text-sky-100" : "text-slate-400"
+                <span className="text-xs font-bold tabular-nums leading-none">
+                  {cell.dayNum}
+                </span>
+                <span
+                  className={`text-[9px] font-semibold leading-none mt-1 tabular-nums ${
+                    active
+                      ? "text-sky-100"
+                      : cell.isPast
+                        ? "text-slate-300"
+                        : !cell.available
+                          ? "text-red-400"
+                          : cell.openSlotCount === 0
+                            ? "text-amber-600"
+                            : "text-emerald-600"
                   }`}
                 >
-                  {d.dayShort}
-                </div>
-                <div className="text-sm font-bold tabular-nums leading-tight">
-                  {d.dayNum}
-                </div>
-                <div
-                  className={`text-[10px] ${
-                    active ? "text-sky-100" : dateClosed ? "text-[#E60000]" : "text-slate-400"
-                  }`}
-                >
-                  {dateClosed ? "Closed" : d.monthShort}
-                </div>
+                  {cell.isPast
+                    ? "—"
+                    : !cell.available
+                      ? "Closed"
+                      : cell.openSlotCount === 0
+                        ? "Full"
+                        : `${cell.openSlotCount} open`}
+                </span>
               </button>
             );
           })}
@@ -582,22 +802,24 @@ export default function SiteVisitBookingCard({
             Available Slots
           </span>
           <span className="text-[11px] font-medium text-[#22577A] tabular-nums">
-            {slots.filter((s) => s.available).length} open
+            {mergedSlots.filter((s) => !s.disabled).length} open
           </span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {slots.map((slot) => {
-            const active = selectedSlot === slot.time && slot.available;
+          {mergedSlots.map((slot) => {
+            const active = slot.isSelectedByCurrent;
             return (
               <motion.button
                 key={slot.time}
                 type="button"
-                disabled={!slot.available}
-                onClick={() => setSelectedSlot(slot.time)}
-                whileTap={slot.available ? { scale: 0.97 } : undefined}
+                disabled={slot.disabled}
+                data-testid={`${idPrefix}-slot-${slot.time}`}
+                data-slot-status={slot.statusLabel}
+                onClick={() => handleSelectTimeSlot(slot.time)}
+                whileTap={!slot.disabled ? { scale: 0.97 } : undefined}
                 aria-pressed={active}
                 className={`py-2 px-2.5 rounded-xl border text-left transition-all ${
-                  !slot.available
+                  slot.disabled
                     ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
                     : active
                       ? "bg-gradient-to-r from-[#22577A] to-[#3393B8] border-[#22577A] text-white cursor-pointer shadow-xs"
@@ -609,15 +831,15 @@ export default function SiteVisitBookingCard({
                   <span>{slot.label}</span>
                 </div>
                 <div
-                  className={`text-[10px] font-medium mt-0.5 ${
-                    !slot.available
+                  className={`text-[10px] font-medium mt-0.5 truncate ${
+                    slot.disabled
                       ? "text-slate-400"
                       : active
                         ? "text-sky-100"
                         : "text-emerald-600"
                   }`}
                 >
-                  {slot.available ? "Available" : slot.reason || "Unavailable"}
+                  {slot.statusLabel}
                 </div>
               </motion.button>
             );
@@ -727,11 +949,20 @@ export default function SiteVisitBookingCard({
       <div className="flex flex-col sm:flex-row gap-2.5 pt-1">
         <button
           type="submit"
-          disabled={submitting || !selectedSlot}
+          data-testid={`${idPrefix}-submit`}
+          disabled={!submitState.canBook}
           className="flex-1 inline-flex items-center justify-center gap-2 py-3 px-5 rounded-xl bg-gradient-to-r from-[#F59E0B] via-[#EA580C] to-[#F97316] hover:brightness-105 text-white text-xs sm:text-sm font-bold shadow-[0_12px_26px_-10px_rgba(234,88,12,0.55)] cursor-pointer disabled:opacity-55 disabled:cursor-not-allowed"
         >
           <FiSend className="text-sm" />
-          <span>{submitting ? "Booking Slot..." : "Confirm Site Visit"}</span>
+          <span>
+            {submitting
+              ? "Booking Slot..."
+              : submitState.allSlotsReserved
+                ? "All Slots Reserved"
+                : !submitState.canBook && submitState.disabledReason
+                  ? submitState.disabledReason
+                  : "Confirm Site Visit"}
+          </span>
         </button>
 
         <a

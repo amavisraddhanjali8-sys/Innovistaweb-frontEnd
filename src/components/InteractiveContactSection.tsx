@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type FormEvent } from "react";
 import { MotionConfig } from "framer-motion";
 import { FiArrowRight, FiCheckCircle, FiSend } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
@@ -17,11 +17,12 @@ import {
   type ContactFormIntentId,
 } from "../utils/contactShowcaseHelpers";
 import { CONTACT_DEPARTMENTS } from "../utils/siteContentHelpers";
-import Contact3DCharacterStage from "./Contact3DCharacterStage";
 import InteractiveContactShuffleCards from "./InteractiveContactShuffleCards";
 import RequestQuoteButton from "./RequestQuoteButton";
 import SiteVisitBookingCard from "./SiteVisitBookingCard";
 import TactileActionButton from "./TactileActionButton";
+
+const Contact3DCharacterStage = lazy(() => import("./Contact3DCharacterStage"));
 
 export interface InteractiveContactSectionProps {
   variant?: "footer" | "page";
@@ -171,7 +172,13 @@ export default function InteractiveContactSection({
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
           {/* Left Column: Borderless Animated 3D Character + Shuffle Deck */}
           <div className="lg:col-span-6 space-y-4">
-            <Contact3DCharacterStage pose={pose} onChangePose={setPose} />
+            <Suspense
+              fallback={
+                <div className="w-full h-[340px] sm:h-[395px] flex items-center justify-center rounded-2xl bg-sky-50/40" />
+              }
+            >
+              <Contact3DCharacterStage pose={pose} onChangePose={setPose} />
+            </Suspense>
 
             <InteractiveContactShuffleCards
               settings={contactSettings}

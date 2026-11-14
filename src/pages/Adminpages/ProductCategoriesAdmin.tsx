@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
+  App as AntdApp,
   Button,
   Input,
   InputNumber,
@@ -10,7 +11,6 @@ import {
   Slider,
   Spin,
   Switch,
-  message,
 } from "antd";
 import {
   ArrowDownOutlined,
@@ -56,6 +56,7 @@ const SPEED_PRESETS = [
 ];
 
 export default function ProductCategoriesAdmin() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const tabParam = searchParams.get("tab");
@@ -105,8 +106,9 @@ export default function ProductCategoriesAdmin() {
     try {
       setLoading(true);
       const res = await AxiosConfig.get("/products/cms");
-      if (res.data?.landing) {
-        setLandingCms(normalizeProductLandingCms(res.data.landing));
+      const rawLanding = res.data?.landing ?? res.data?.data;
+      if (rawLanding) {
+        setLandingCms(normalizeProductLandingCms(rawLanding));
       }
       if (Array.isArray(res.data?.categories)) {
         setCategories(
@@ -120,7 +122,7 @@ export default function ProductCategoriesAdmin() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     fetchAllProductCms();

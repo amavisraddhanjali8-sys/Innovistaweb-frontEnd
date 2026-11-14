@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Input, Modal, Rate, Select, message } from "antd";
+import { App as AntdApp, Button, Input, Modal, Rate, Select } from "antd";
 import { FiArrowUpRight, FiEdit3, FiStar } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import styles from "../cssModules/CustomerFeedback.module.css";
@@ -23,6 +23,7 @@ interface CatalogDesignOption {
 }
 
 function CustomerFeedback() {
+  const { message } = AntdApp.useApp();
   const [cards, setCards] = useState<HomeFeedbackCard[]>(() =>
     resolveHomeFeedbackCards(DEFAULT_CUSTOMER_FEEDBACKS)
   );

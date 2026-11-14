@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { FiSend, FiSmartphone, FiX } from "react-icons/fi";
+import { FiChevronLeft, FiChevronRight, FiSend, FiSmartphone, FiX } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
+import { useSiteVisitSlots } from "../Context/SiteVisitSlotContext";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import {
   DEFAULT_CHATBOT_CONFIG,
@@ -15,12 +16,28 @@ import {
   type ChatbotConfig,
 } from "../utils/chatbotHelpers";
 import {
+  computeNextOpenSlot,
+  evaluateBookingSubmitState,
+  mergeCalendarCellsWithLocalState,
+  mergeSlotsWithLocalState,
+} from "../utils/siteVisitLocalStoreHelpers";
+import {
+  buildMonthlySiteVisitCalendar,
   createDefaultSiteVisitSchedule,
+  formatIsoDateLocal,
+  formatMonthHeading,
   getManagedSiteVisitDates,
-  type ManagedDateSummary,
+  getMonthKeyFromDate,
+  shiftMonthKey,
+  type MonthlyCalendarCell,
+  type SiteVisitBooking,
+  type SiteVisitScheduleConfig,
   type SlotAvailabilityItem,
 } from "../utils/siteVisitSchedulerHelpers";
-import Chatbot3DReceptionistAvatar from "./Chatbot3DReceptionistAvatar";
+
+const Chatbot3DReceptionistAvatar = lazy(
+  () => import("./Chatbot3DReceptionistAvatar")
+);
 
 interface ChatMessageItem {
   id: string;
@@ -32,9 +49,17 @@ interface ChatMessageItem {
   smsUrl?: string;
 }
 
+const CHATBOT_VISIT_WIDGET_ID = "floating-chatbot-visit";
+
 export default function FloatingChatbotWidget() {
   const { isLoggedIn } = useAuth();
   const { contactSettings } = useSiteSettings();
+  const {
+    state: localSlotState,
+    setWidgetSelection,
+    clearWidgetSelection,
+    reserveSlotAndNotify,
+  } = useSiteVisitSlots();
   const [isOpen, setIsOpen] = useState(false);
   const [launcherHovered, setLauncherHovered] = useState(false);
   const [panelHovered, setPanelHovered] = useState(false);
@@ -54,14 +79,26 @@ export default function FloatingChatbotWidget() {
   const [sending, setSending] = useState(false);
 
   // Dynamic Site Visit Tab State synced with Admin Schedule
-  const [managedDates, setManagedDates] = useState<ManagedDateSummary[]>(() =>
-    getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], 4)
+  const todayIso = formatIsoDateLocal(new Date());
+  const currentMonthKey = getMonthKeyFromDate(todayIso);
+  const initialQuickDate =
+    getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], 4)[0]?.date ||
+    todayIso;
+  const [visitSchedule, setVisitSchedule] = useState<SiteVisitScheduleConfig>(() =>
+    createDefaultSiteVisitSchedule()
   );
-  const [quickDate, setQuickDate] = useState(
-    () =>
-      getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], 4)[0]?.date ||
-      ""
+  const [quickMonth, setQuickMonth] = useState<string>(() =>
+    getMonthKeyFromDate(initialQuickDate)
   );
+  const [quickCalendarDays, setQuickCalendarDays] = useState<MonthlyCalendarCell[]>(() =>
+    buildMonthlySiteVisitCalendar(
+      getMonthKeyFromDate(initialQuickDate),
+      createDefaultSiteVisitSchedule(),
+      [],
+      todayIso
+    )
+  );
+  const [quickDate, setQuickDate] = useState(initialQuickDate);
   const [quickSlots, setQuickSlots] = useState<SlotAvailabilityItem[]>([]);
   const [quickSlot, setQuickSlot] = useState("");
   const [quickName, setQuickName] = useState("");
@@ -100,16 +137,22 @@ export default function FloatingChatbotWidget() {
     }
   }, [messages, isOpen, tab]);
 
-  // Fetch initial open slot count when chat panel opens & update whenever quickDate changes
+  // Fetch initial open slot count when chat panel opens & update whenever quickDate/quickMonth changes
   useEffect(() => {
     if (!isOpen || !quickDate) return;
     AxiosConfig.get<{
-      dates?: ManagedDateSummary[];
+      calendarDays?: MonthlyCalendarCell[];
+      schedule?: SiteVisitScheduleConfig;
       slots?: SlotAvailabilityItem[];
-    }>(`/api/site-visits/slots?date=${encodeURIComponent(quickDate)}`)
+    }>(
+      `/api/site-visits/slots?date=${encodeURIComponent(quickDate)}&month=${encodeURIComponent(quickMonth)}`
+    )
       .then((res) => {
-        if (Array.isArray(res.data?.dates) && res.data.dates.length > 0) {
-          setManagedDates(res.data.dates);
+        if (res.data?.schedule) {
+          setVisitSchedule(res.data.schedule);
+        }
+        if (Array.isArray(res.data?.calendarDays) && res.data.calendarDays.length > 0) {
+          setQuickCalendarDays(res.data.calendarDays);
         }
         const list = res.data?.slots || [];
         setQuickSlots(list);
@@ -119,11 +162,47 @@ export default function FloatingChatbotWidget() {
         );
       })
       .catch(() => {});
-  }, [isOpen, tab, quickDate]);
+  }, [isOpen, tab, quickDate, quickMonth]);
+
+  const mergedQuickCalendarDays = useMemo(
+    () => mergeCalendarCellsWithLocalState(quickCalendarDays, localSlotState),
+    [quickCalendarDays, localSlotState]
+  );
+
+  const mergedQuickSlots = useMemo(
+    () =>
+      mergeSlotsWithLocalState(
+        quickSlots,
+        quickDate,
+        localSlotState,
+        CHATBOT_VISIT_WIDGET_ID,
+        quickSlot
+      ),
+    [quickSlots, quickDate, localSlotState, quickSlot]
+  );
+
+  useEffect(() => {
+    const nextOpen = computeNextOpenSlot(mergedQuickSlots, quickSlot);
+    if (nextOpen !== quickSlot) {
+      setQuickSlot(nextOpen);
+    }
+  }, [mergedQuickSlots, quickSlot]);
+
+  useEffect(() => {
+    if (!isOpen || tab !== "visit") {
+      clearWidgetSelection(CHATBOT_VISIT_WIDGET_ID);
+    }
+  }, [isOpen, tab, clearWidgetSelection]);
 
   const openSlotCount = useMemo(
-    () => quickSlots.filter((s) => s.available).length,
-    [quickSlots]
+    () => mergedQuickSlots.filter((s) => !s.disabled).length,
+    [mergedQuickSlots]
+  );
+
+  const quickSubmitState = evaluateBookingSubmitState(
+    mergedQuickSlots,
+    quickSlot,
+    quickSubmitting
   );
 
   if (!config.enabled) return null;
@@ -136,7 +215,46 @@ export default function FloatingChatbotWidget() {
     config.defaultWhatsappPrefix
   );
 
-  const visibleQuickDates = managedDates.filter((d, idx) => idx < 6 || d.isCustom);
+  const handleQuickSelectDate = (isoDate: string) => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate)) return;
+    clearWidgetSelection(CHATBOT_VISIT_WIDGET_ID);
+    setQuickDate(isoDate);
+    setQuickMonth(getMonthKeyFromDate(isoDate));
+  };
+
+  const handleQuickSelectSlot = (slotTime: string) => {
+    setQuickSlot(slotTime);
+    setWidgetSelection(CHATBOT_VISIT_WIDGET_ID, quickDate, slotTime);
+  };
+
+  const handleQuickShiftMonth = (delta: number) => {
+    const nextMonth = shiftMonthKey(quickMonth, delta);
+    if (nextMonth < currentMonthKey) return;
+    setQuickMonth(nextMonth);
+    AxiosConfig.get<{
+      calendarDays?: MonthlyCalendarCell[];
+      selectedDate?: string;
+      schedule?: SiteVisitScheduleConfig;
+      slots?: SlotAvailabilityItem[];
+    }>(`/api/site-visits/slots?month=${encodeURIComponent(nextMonth)}`)
+      .then((res) => {
+        if (res.data?.schedule) setVisitSchedule(res.data.schedule);
+        if (Array.isArray(res.data?.calendarDays)) setQuickCalendarDays(res.data.calendarDays);
+        if (res.data?.selectedDate) setQuickDate(res.data.selectedDate);
+        if (Array.isArray(res.data?.slots)) {
+          setQuickSlots(res.data.slots);
+          setQuickSlot(res.data.slots.find((s) => s.available)?.time || "");
+        }
+      })
+      .catch(() => {
+        const fallbackDays = buildMonthlySiteVisitCalendar(nextMonth, visitSchedule, [], todayIso);
+        setQuickCalendarDays(fallbackDays);
+        const firstOpen =
+          fallbackDays.find((c) => c.isCurrentMonth && !c.isPast && c.available)?.isoDate ||
+          `${nextMonth}-01`;
+        setQuickDate(firstOpen);
+      });
+  };
 
   const sendMessage = async (textToSend: string) => {
     const trimmed = textToSend.trim();
@@ -230,6 +348,10 @@ export default function FloatingChatbotWidget() {
   const handleQuickVisitBook = async (e: FormEvent) => {
     e.preventDefault();
     setQuickError("");
+    if (!quickSubmitState.canBook) {
+      setQuickError(quickSubmitState.disabledReason || "Select an open slot.");
+      return;
+    }
     if (
       !quickDate ||
       !quickSlot ||
@@ -243,7 +365,9 @@ export default function FloatingChatbotWidget() {
     setQuickSubmitting(true);
     try {
       const res = await AxiosConfig.post<{
-        data: { id: string; slotLabel: string };
+        data: SiteVisitBooking;
+        slots?: SlotAvailabilityItem[];
+        calendarDays?: MonthlyCalendarCell[];
       }>("/api/site-visits", {
         date: quickDate,
         slotTime: quickSlot,
@@ -253,8 +377,17 @@ export default function FloatingChatbotWidget() {
         locationName: "Nawala Showroom / Client Site",
         notes: quickNote.trim() || "Booked via Receptionist Desk",
       });
+      const created = res.data.data;
+      reserveSlotAndNotify(created, { showToast: true });
+      clearWidgetSelection(CHATBOT_VISIT_WIDGET_ID);
+      if (Array.isArray(res.data.slots)) {
+        setQuickSlots(res.data.slots);
+      }
+      if (Array.isArray(res.data.calendarDays)) {
+        setQuickCalendarDays(res.data.calendarDays);
+      }
       setQuickBookingDone(
-        `${res.data.data.id} · ${quickDate} (${res.data.data.slotLabel})`
+        `${created.id} · ${quickDate} (${created.slotLabel})`
       );
     } catch (err: unknown) {
       const msg =
@@ -291,11 +424,13 @@ export default function FloatingChatbotWidget() {
               <div className="px-4 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between gap-2.5 shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 border border-slate-200/80 shrink-0">
-                    <Chatbot3DReceptionistAvatar
-                      variant="concierge"
-                      isHovered={panelHovered}
-                      isSpeaking={sending}
-                    />
+                    <Suspense fallback={<div className="w-full h-full rounded-full" />}>
+                      <Chatbot3DReceptionistAvatar
+                        variant="concierge"
+                        isHovered={panelHovered}
+                        isSpeaking={sending}
+                      />
+                    </Suspense>
                     <span
                       aria-hidden="true"
                       className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
@@ -594,56 +729,121 @@ export default function FloatingChatbotWidget() {
                         >
                           Sync with Google Calendar
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickBookingDone(null);
+                            setQuickError("");
+                          }}
+                          className="py-2 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-600 cursor-pointer"
+                        >
+                          Book Another Slot
+                        </button>
                       </div>
                     </div>
                   ) : (
                     <form onSubmit={handleQuickVisitBook} className="space-y-2.5">
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {visibleQuickDates.map((d) => {
-                          const dateDisabled = !d.available;
-                          return (
+                      {/* Compact Month & Date Picker */}
+                      <div className="rounded-xl border border-slate-200 bg-[#F8FAFC] p-2 space-y-1.5">
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1">
                             <button
-                              key={d.date}
                               type="button"
-                              onClick={() => setQuickDate(d.date)}
-                              className={`py-1.5 px-1 rounded-lg border text-center cursor-pointer text-[11px] font-bold ${
-                                quickDate === d.date
-                                  ? "bg-[#0A74C9] border-[#0A74C9] text-white"
-                                  : dateDisabled
-                                    ? "bg-slate-100 border-slate-200 text-slate-400"
-                                    : "bg-white border-slate-200 text-slate-700"
-                              }`}
+                              onClick={() => handleQuickShiftMonth(-1)}
+                              disabled={quickMonth <= currentMonthKey}
+                              aria-label="Previous month"
+                              className="w-6 h-6 rounded-md border border-slate-200 bg-white text-slate-700 flex items-center justify-center cursor-pointer disabled:opacity-40"
                             >
-                              <div>{d.dayShort}</div>
-                              <div className="tabular-nums">
-                                {d.dayNum} {d.monthShort}
-                              </div>
+                              <FiChevronLeft className="text-xs" />
                             </button>
-                          );
-                        })}
+                            <span className="text-[11px] font-bold text-[#14171A] tabular-nums px-1">
+                              {formatMonthHeading(quickMonth)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickShiftMonth(1)}
+                              aria-label="Next month"
+                              className="w-6 h-6 rounded-md border border-slate-200 bg-white text-slate-700 flex items-center justify-center cursor-pointer"
+                            >
+                              <FiChevronRight className="text-xs" />
+                            </button>
+                          </div>
+                          <input
+                            type="date"
+                            aria-label="Choose visit date"
+                            min={todayIso}
+                            value={quickDate}
+                            onChange={(e) => {
+                              if (e.target.value) handleQuickSelectDate(e.target.value);
+                            }}
+                            className="px-1.5 py-0.5 rounded-md border border-slate-200 bg-white text-[10px] font-bold text-[#14171A] tabular-nums"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-7 gap-0.5 text-center">
+                          {["S", "M", "T", "W", "T", "F", "S"].map((w, idx) => (
+                            <div key={`${w}-${idx}`} className="text-[9px] font-bold text-slate-400">
+                              {w}
+                            </div>
+                          ))}
+                          {mergedQuickCalendarDays.map((cell, idx) => {
+                            if (!cell.isCurrentMonth || !cell.isoDate) {
+                              return <div key={`qpad-${idx}`} className="h-7" />;
+                            }
+                            const active = cell.isoDate === quickDate;
+                            const disabled = cell.isPast || !cell.available;
+                            return (
+                              <button
+                                key={cell.isoDate}
+                                type="button"
+                                disabled={disabled}
+                                onClick={() => handleQuickSelectDate(cell.isoDate)}
+                                title={`${cell.isoDate}: ${cell.openSlotCount} open`}
+                                className={`h-7 rounded-md border text-[10px] font-bold tabular-nums flex items-center justify-center ${
+                                  active
+                                    ? "bg-[#0A74C9] border-[#0A74C9] text-white cursor-pointer"
+                                    : disabled
+                                      ? "bg-slate-100 border-slate-100 text-slate-300 cursor-not-allowed"
+                                      : "bg-white border-slate-200 text-slate-700 hover:border-[#0A74C9] cursor-pointer"
+                                }`}
+                              >
+                                {cell.dayNum}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-1.5">
-                        {quickSlots.map((slot) => (
+                        {mergedQuickSlots.map((slot) => (
                           <button
                             key={slot.id || slot.time}
                             type="button"
-                            disabled={!slot.available}
-                            onClick={() => setQuickSlot(slot.time)}
+                            disabled={slot.disabled}
+                            data-testid={`chatbot-slot-${slot.time}`}
+                            data-slot-status={slot.statusLabel}
+                            onClick={() => handleQuickSelectSlot(slot.time)}
+                            aria-pressed={slot.isSelectedByCurrent}
                             className={`py-1.5 px-2 rounded-lg border text-xs font-semibold tabular-nums text-left ${
-                              !slot.available
-                                ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed"
-                                : quickSlot === slot.time
+                              slot.disabled
+                                ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-75"
+                                : slot.isSelectedByCurrent
                                   ? "bg-[#0A74C9] border-[#0A74C9] text-white cursor-pointer"
                                   : "bg-white border-slate-200 text-slate-800 cursor-pointer"
                             }`}
                           >
                             <div className="truncate">{slot.label}</div>
-                            {!slot.available && (
-                              <div className="text-[10px] font-normal text-slate-400">
-                                {slot.reason || "Unavailable"}
-                              </div>
-                            )}
+                            <div
+                              className={`text-[10px] font-normal truncate ${
+                                slot.disabled
+                                  ? "text-slate-400"
+                                  : slot.isSelectedByCurrent
+                                    ? "text-sky-100"
+                                    : "text-emerald-600"
+                              }`}
+                            >
+                              {slot.statusLabel}
+                            </div>
                           </button>
                         ))}
                       </div>
@@ -687,10 +887,17 @@ export default function FloatingChatbotWidget() {
 
                       <button
                         type="submit"
-                        disabled={quickSubmitting || !quickSlot}
-                        className="w-full py-2.5 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white text-xs font-bold cursor-pointer border-0 disabled:opacity-50"
+                        data-testid="chatbot-visit-submit"
+                        disabled={!quickSubmitState.canBook}
+                        className="w-full py-2.5 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white text-xs font-bold cursor-pointer border-0 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {quickSubmitting ? "Booking..." : "Book Slot Now"}
+                        {quickSubmitting
+                          ? "Booking..."
+                          : quickSubmitState.allSlotsReserved
+                            ? "All Slots Reserved"
+                            : !quickSubmitState.canBook && quickSubmitState.disabledReason
+                              ? quickSubmitState.disabledReason
+                              : "Book Slot Now"}
                       </button>
 
                       <Link
@@ -810,10 +1017,16 @@ export default function FloatingChatbotWidget() {
                   launcherHovered ? "opacity-100 scale-110" : "opacity-60"
                 }`}
               />
-              <Chatbot3DReceptionistAvatar
-                variant="launcher"
-                isHovered={launcherHovered}
-              />
+              <Suspense
+                fallback={
+                  <span className="w-12 h-12 rounded-full bg-gradient-to-br from-sky-500 to-fuchsia-600 shadow-md" />
+                }
+              >
+                <Chatbot3DReceptionistAvatar
+                  variant="launcher"
+                  isHovered={launcherHovered}
+                />
+              </Suspense>
             </>
           )}
         </motion.button>

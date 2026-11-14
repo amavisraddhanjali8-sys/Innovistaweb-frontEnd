@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { message } from "antd";
+import { App as AntdApp } from "antd";
 import { FiArrowRight, FiLayers, FiSliders } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
@@ -24,6 +24,7 @@ import {
 } from "../utils/productCatalogHelpers";
 
 export default function CategoryLanding() {
+  const { message } = AntdApp.useApp();
   const { slug } = useParams<{ slug?: string }>();
   const location = useLocation();
   const navigate = useNavigate();

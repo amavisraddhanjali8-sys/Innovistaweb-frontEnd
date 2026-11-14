@@ -24,10 +24,19 @@ export interface ManagedSiteVisitDateConfig {
   slots?: ManagedSiteVisitSlot[];
 }
 
+export interface MonthlySlotTemplate {
+  monthKey: string; // YYYY-MM
+  slots: ManagedSiteVisitSlot[];
+  activeWeekdays: number[]; // 0=Sun..6=Sat
+  closedDates: string[]; // YYYY-MM-DD
+  note?: string;
+}
+
 export interface SiteVisitScheduleConfig {
   defaultSlots: ManagedSiteVisitSlot[];
   dates: Record<string, ManagedSiteVisitDateConfig>;
   blockedKeys: string[];
+  monthlyTemplates?: Record<string, MonthlySlotTemplate>;
 }
 
 export interface ManagedDateSummary {
@@ -42,6 +51,26 @@ export interface ManagedDateSummary {
   openSlotCount: number;
   totalSlotCount: number;
 }
+
+export interface MonthlyCalendarCell {
+  isoDate: string; // "" for leading padding cells
+  dayNum: number;
+  dayShort: string;
+  monthShort: string;
+  weekday: number; // 0=Sun..6=Sat
+  isCurrentMonth: boolean;
+  isPast: boolean;
+  available: boolean;
+  openSlotCount: number;
+  totalSlotCount: number;
+  bookedCount: number;
+  isCustom: boolean;
+  hasCustomSlots: boolean;
+  source: "date" | "month" | "default";
+  note?: string;
+}
+
+export const DEFAULT_ACTIVE_WEEKDAYS = [1, 2, 3, 4, 5, 6]; // Mon-Sat
 
 export const SITE_VISIT_SLOT_TEMPLATES: ManagedSiteVisitSlot[] = [
   { id: "slot-0930", time: "09:30", label: "09:30 AM", endTime: "10:30", available: true },
@@ -87,6 +116,45 @@ export function formatIsoDateLocal(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+export function getMonthKeyFromDate(isoDate?: string, fallbackDate: Date = new Date()): string {
+  const trimmed = (isoDate || "").trim();
+  if (/^\d{4}-\d{2}/.test(trimmed)) {
+    return trimmed.slice(0, 7);
+  }
+  const y = fallbackDate.getFullYear();
+  const m = String(fallbackDate.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
+
+export function shiftMonthKey(monthKey: string, delta: number): string {
+  const match = /^(\d{4})-(\d{2})$/.exec((monthKey || "").trim());
+  const base = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1 + delta, 1)
+    : new Date(new Date().getFullYear(), new Date().getMonth() + delta, 1);
+  return `${base.getFullYear()}-${String(base.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function formatMonthHeading(monthKey: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec((monthKey || "").trim());
+  if (!match) return monthKey;
+  const dt = new Date(Number(match[1]), Number(match[2]) - 1, 1);
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(dt);
+}
+
+export function listDaysInMonth(monthKey: string): string[] {
+  const match = /^(\d{4})-(\d{2})$/.exec((monthKey || "").trim());
+  if (!match) return [];
+  const year = Number(match[1]);
+  const monthIdx = Number(match[2]) - 1;
+  if (monthIdx < 0 || monthIdx > 11) return [];
+  const totalDays = new Date(year, monthIdx + 1, 0).getDate();
+  const out: string[] = [];
+  for (let d = 1; d <= totalDays; d += 1) {
+    out.push(`${year}-${String(monthIdx + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`);
+  }
+  return out;
 }
 
 export function formatTime24ToLabel(time24: string): string {
@@ -146,6 +214,49 @@ export function createDefaultSiteVisitSchedule(): SiteVisitScheduleConfig {
     defaultSlots: SITE_VISIT_SLOT_TEMPLATES.map((s) => ({ ...s })),
     dates: {},
     blockedKeys: [],
+    monthlyTemplates: {},
+  };
+}
+
+export function normalizeMonthlyTemplate(
+  monthKey: string,
+  raw: Partial<MonthlySlotTemplate> | null | undefined,
+  fallbackSlots: ManagedSiteVisitSlot[] = SITE_VISIT_SLOT_TEMPLATES
+): MonthlySlotTemplate | null {
+  const cleanKey = (monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(cleanKey) || !raw || typeof raw !== "object") return null;
+
+  const slots =
+    Array.isArray(raw.slots) && raw.slots.length > 0
+      ? sortManagedSlots(raw.slots.map((s, idx) => normalizeManagedSlot(s, idx)))
+      : fallbackSlots.map((s) => ({ ...s }));
+
+  const activeWeekdays = Array.isArray(raw.activeWeekdays)
+    ? Array.from(
+        new Set(
+          raw.activeWeekdays
+            .map((d) => Number(d))
+            .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+        )
+      ).sort((a, b) => a - b)
+    : [...DEFAULT_ACTIVE_WEEKDAYS];
+
+  const closedDates = Array.isArray(raw.closedDates)
+    ? Array.from(
+        new Set(
+          raw.closedDates
+            .map((d) => String(d || "").trim())
+            .filter((d) => d.startsWith(`${cleanKey}-`) && /^\d{4}-\d{2}-\d{2}$/.test(d))
+        )
+      ).sort()
+    : [];
+
+  return {
+    monthKey: cleanKey,
+    slots,
+    activeWeekdays,
+    closedDates,
+    note: typeof raw.note === "string" ? raw.note.trim() : "",
   };
 }
 
@@ -171,9 +282,10 @@ export function normalizeSiteVisitScheduleConfig(
         available: typeof cfg.available === "boolean" ? cfg.available : true,
         note: typeof cfg.note === "string" ? cfg.note.trim() : "",
         isCustom: Boolean(cfg.isCustom),
-        slots: Array.isArray(cfg.slots)
-          ? sortManagedSlots(cfg.slots.map((s, idx) => normalizeManagedSlot(s, idx)))
-          : undefined,
+        slots:
+          Array.isArray(cfg.slots) && cfg.slots.length > 0
+            ? sortManagedSlots(cfg.slots.map((s, idx) => normalizeManagedSlot(s, idx)))
+            : undefined,
       };
     }
   }
@@ -182,7 +294,17 @@ export function normalizeSiteVisitScheduleConfig(
     ? raw.blockedKeys.map((k) => String(k || "").trim()).filter(Boolean)
     : [];
 
-  return { defaultSlots, dates, blockedKeys };
+  const monthlyTemplates: Record<string, MonthlySlotTemplate> = {};
+  if (raw.monthlyTemplates && typeof raw.monthlyTemplates === "object") {
+    for (const [mKey, tpl] of Object.entries(raw.monthlyTemplates)) {
+      const normalized = normalizeMonthlyTemplate(mKey, tpl, defaultSlots);
+      if (normalized) {
+        monthlyTemplates[mKey] = normalized;
+      }
+    }
+  }
+
+  return { defaultSlots, dates, blockedKeys, monthlyTemplates };
 }
 
 export function getUpcomingSiteVisitDates(
@@ -221,10 +343,16 @@ export function getUpcomingSiteVisitDates(
   return results;
 }
 
+function parseIsoWeekday(isoDate: string): number {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(y, (m || 1) - 1, d || 1).getDay();
+}
+
 function parseDateBadge(isoDate: string): {
   dayShort: string;
   dayNum: string;
   monthShort: string;
+  weekday: number;
 } {
   const [y, m, d] = isoDate.split("-").map(Number);
   const dt = new Date(y, (m || 1) - 1, d || 1);
@@ -234,6 +362,60 @@ function parseDateBadge(isoDate: string): {
     dayShort: dayFmt.format(dt),
     dayNum: String(dt.getDate()),
     monthShort: monthFmt.format(dt),
+    weekday: dt.getDay(),
+  };
+}
+
+export function resolveEffectiveDateConfig(
+  date: string,
+  schedule?: SiteVisitScheduleConfig
+): {
+  available: boolean;
+  slots: ManagedSiteVisitSlot[];
+  source: "date" | "month" | "default";
+  note: string;
+  isCustom: boolean;
+  hasCustomSlots: boolean;
+} {
+  const dateCfg = schedule?.dates?.[date];
+  const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(0, 7) : "";
+  const monthCfg = monthKey ? schedule?.monthlyTemplates?.[monthKey] : undefined;
+  const weekday = /^\d{4}-\d{2}-\d{2}$/.test(date) ? parseIsoWeekday(date) : 1;
+
+  const baseFallbackSlots =
+    monthCfg?.slots && monthCfg.slots.length > 0
+      ? monthCfg.slots
+      : schedule?.defaultSlots?.length
+        ? schedule.defaultSlots
+        : SITE_VISIT_SLOT_TEMPLATES;
+
+  const slots =
+    dateCfg?.slots && dateCfg.slots.length > 0 ? dateCfg.slots : baseFallbackSlots;
+
+  const source: "date" | "month" | "default" =
+    dateCfg?.slots && dateCfg.slots.length > 0
+      ? "date"
+      : monthCfg
+        ? "month"
+        : "default";
+
+  let available = true;
+  if (dateCfg) {
+    available = dateCfg.available !== false;
+  } else if (monthCfg) {
+    available =
+      !monthCfg.closedDates.includes(date) && monthCfg.activeWeekdays.includes(weekday);
+  } else {
+    available = weekday !== 0;
+  }
+
+  return {
+    available,
+    slots,
+    source,
+    note: dateCfg?.note || monthCfg?.note || "",
+    isCustom: Boolean(dateCfg?.isCustom),
+    hasCustomSlots: Boolean(dateCfg?.slots && dateCfg.slots.length > 0),
   };
 }
 
@@ -261,14 +443,9 @@ export function computeAvailableSlotsForDate(
   calendarBusy: CalendarBusyRange[] = [],
   schedule?: SiteVisitScheduleConfig
 ): SlotAvailabilityItem[] {
-  const dateCfg = schedule?.dates?.[date];
-  const baseSlots: ManagedSiteVisitSlot[] = dateCfg?.slots
-    ? dateCfg.slots
-    : schedule?.defaultSlots?.length
-      ? schedule.defaultSlots
-      : SITE_VISIT_SLOT_TEMPLATES;
-
-  const isWholeDateUnavailable = dateCfg ? dateCfg.available === false : false;
+  const effective = resolveEffectiveDateConfig(date, schedule);
+  const baseSlots = effective.slots;
+  const isWholeDateUnavailable = !effective.available;
 
   const activeForDate = new Set(
     bookings
@@ -340,7 +517,7 @@ export function getManagedSiteVisitDates(
 
   const registerDate = (isoDate: string) => {
     const badge = parseDateBadge(isoDate);
-    const cfg = schedule.dates[isoDate];
+    const effective = resolveEffectiveDateConfig(isoDate, schedule);
     const computedSlots = computeAvailableSlotsForDate(
       isoDate,
       bookings,
@@ -354,10 +531,10 @@ export function getManagedSiteVisitDates(
       dayShort: badge.dayShort,
       dayNum: badge.dayNum,
       monthShort: badge.monthShort,
-      available: cfg ? cfg.available : true,
-      isCustom: Boolean(cfg?.isCustom),
-      hasCustomSlots: Boolean(cfg?.slots),
-      note: cfg?.note || "",
+      available: effective.available,
+      isCustom: effective.isCustom,
+      hasCustomSlots: effective.hasCustomSlots,
+      note: effective.note,
       openSlotCount,
       totalSlotCount: computedSlots.length,
     });
@@ -375,9 +552,148 @@ export function getManagedSiteVisitDates(
   return Array.from(dateMap.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+export function buildMonthlySiteVisitCalendar(
+  monthKey: string,
+  schedule: SiteVisitScheduleConfig,
+  bookings: SiteVisitBooking[],
+  todayIso: string = formatIsoDateLocal(new Date())
+): MonthlyCalendarCell[] {
+  const days = listDaysInMonth(monthKey);
+  if (days.length === 0) return [];
+
+  const firstWeekday = parseIsoWeekday(days[0]);
+  const cells: MonthlyCalendarCell[] = [];
+
+  for (let i = 0; i < firstWeekday; i += 1) {
+    cells.push({
+      isoDate: "",
+      dayNum: 0,
+      dayShort: "",
+      monthShort: "",
+      weekday: i,
+      isCurrentMonth: false,
+      isPast: true,
+      available: false,
+      openSlotCount: 0,
+      totalSlotCount: 0,
+      bookedCount: 0,
+      isCustom: false,
+      hasCustomSlots: false,
+      source: "default",
+    });
+  }
+
+  for (const isoDate of days) {
+    const badge = parseDateBadge(isoDate);
+    const effective = resolveEffectiveDateConfig(isoDate, schedule);
+    const computedSlots = computeAvailableSlotsForDate(
+      isoDate,
+      bookings,
+      schedule.blockedKeys,
+      [],
+      schedule
+    );
+    const openSlotCount = computedSlots.filter((s) => s.available).length;
+    const bookedCount = bookings.filter(
+      (b) => b.date === isoDate && b.status !== "CANCELLED"
+    ).length;
+
+    cells.push({
+      isoDate,
+      dayNum: Number(badge.dayNum),
+      dayShort: badge.dayShort,
+      monthShort: badge.monthShort,
+      weekday: badge.weekday,
+      isCurrentMonth: true,
+      isPast: isoDate < todayIso,
+      available: effective.available,
+      openSlotCount,
+      totalSlotCount: computedSlots.length,
+      bookedCount,
+      isCustom: effective.isCustom,
+      hasCustomSlots: effective.hasCustomSlots,
+      source: effective.source,
+      note: effective.note,
+    });
+  }
+
+  return cells;
+}
+
+export function getFirstOpenDateInMonth(
+  monthKey: string,
+  schedule: SiteVisitScheduleConfig,
+  bookings: SiteVisitBooking[],
+  todayIso: string = formatIsoDateLocal(new Date())
+): string {
+  const cells = buildMonthlySiteVisitCalendar(monthKey, schedule, bookings, todayIso).filter(
+    (c) => c.isCurrentMonth && !c.isPast
+  );
+  const firstOpen = cells.find((c) => c.available && c.openSlotCount > 0);
+  if (firstOpen) return firstOpen.isoDate;
+  return cells[0]?.isoDate || `${monthKey}-01`;
+}
+
+export function applyMonthlyTemplateToSchedule(
+  schedule: SiteVisitScheduleConfig,
+  input: {
+    monthKey: string;
+    slots: Partial<ManagedSiteVisitSlot>[];
+    activeWeekdays?: number[];
+    closedDates?: string[];
+    note?: string;
+    clearPerDateCustomSlots?: boolean;
+  }
+): SiteVisitScheduleConfig {
+  const normalized = normalizeMonthlyTemplate(
+    input.monthKey,
+    {
+      monthKey: input.monthKey,
+      slots: input.slots.map((s, idx) => normalizeManagedSlot(s, idx)),
+      activeWeekdays: input.activeWeekdays,
+      closedDates: input.closedDates,
+      note: input.note,
+    },
+    schedule.defaultSlots
+  );
+  if (!normalized) return schedule;
+
+  const nextDates: Record<string, ManagedSiteVisitDateConfig> = { ...schedule.dates };
+  if (input.clearPerDateCustomSlots) {
+    for (const [dateKey, cfg] of Object.entries(nextDates)) {
+      if (dateKey.startsWith(`${normalized.monthKey}-`) && cfg.slots) {
+        const rest = { ...cfg };
+        delete rest.slots;
+        nextDates[dateKey] = rest;
+      }
+    }
+  }
+
+  return {
+    ...schedule,
+    dates: nextDates,
+    monthlyTemplates: {
+      ...(schedule.monthlyTemplates || {}),
+      [normalized.monthKey]: normalized,
+    },
+  };
+}
+
+export function deleteMonthlyTemplateFromSchedule(
+  schedule: SiteVisitScheduleConfig,
+  monthKey: string
+): SiteVisitScheduleConfig {
+  const nextTemplates = { ...(schedule.monthlyTemplates || {}) };
+  delete nextTemplates[monthKey];
+  return {
+    ...schedule,
+    monthlyTemplates: nextTemplates,
+  };
+}
+
 export function upsertScheduleDate(
   schedule: SiteVisitScheduleConfig,
-  input: { date: string; available?: boolean; note?: string; isCustom?: boolean }
+  input: { date: string; available?: boolean; note?: string; isCustom?: boolean; resetSlots?: boolean }
 ): SiteVisitScheduleConfig {
   const date = (input.date || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return schedule;
@@ -397,7 +713,7 @@ export function upsertScheduleDate(
           typeof input.isCustom === "boolean"
             ? input.isCustom
             : prev?.isCustom ?? true,
-        slots: prev?.slots,
+        slots: input.resetSlots ? undefined : prev?.slots,
       },
     },
   };
@@ -427,8 +743,13 @@ function getEditableSlotsForScope(
   if (existingDateCfg?.slots) {
     return existingDateCfg.slots.map((s) => ({ ...s }));
   }
+  const monthKey = /^\d{4}-\d{2}-\d{2}$/.test(scope) ? scope.slice(0, 7) : "";
+  const monthCfg = monthKey ? schedule.monthlyTemplates?.[monthKey] : undefined;
+  const sourceSlots =
+    monthCfg?.slots && monthCfg.slots.length > 0 ? monthCfg.slots : schedule.defaultSlots;
+
   const blockedSet = new Set(schedule.blockedKeys);
-  return schedule.defaultSlots.map((s) => ({
+  return sourceSlots.map((s) => ({
     ...s,
     available: s.available && !blockedSet.has(`${scope}|${s.time}`),
   }));

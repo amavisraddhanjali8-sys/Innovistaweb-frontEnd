@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  App as AntdApp,
   Button,
   Input,
   Modal,
@@ -10,7 +11,6 @@ import {
   Switch,
   Table,
   Tag,
-  message,
 } from "antd";
 import {
   FiArrowDown,
@@ -42,6 +42,7 @@ interface DesignOption {
 }
 
 function AdminFeedback() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [feedbacks, setFeedbacks] = useState<CustomerFeedbackRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -91,7 +92,7 @@ function AdminFeedback() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     fetchFeedbacks(1, 10);

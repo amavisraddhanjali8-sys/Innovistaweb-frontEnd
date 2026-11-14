@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import http from "http";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -81,8 +82,12 @@ import {
   type ChatbotConfig,
 } from "./src/utils/chatbotHelpers.ts";
 import {
+  buildMonthlySiteVisitCalendar,
   computeAvailableSlotsForDate,
+  formatIsoDateLocal,
+  getFirstOpenDateInMonth,
   getManagedSiteVisitDates,
+  getMonthKeyFromDate,
   getUpcomingSiteVisitDates,
   validateSiteVisitBooking,
   type SiteVisitStatus,
@@ -137,6 +142,7 @@ import {
   deleteChatbotFaqRecord,
   deleteFeedbackRecord,
   deleteMediaAssetRecord,
+  deleteMonthlyTemplateRecord,
   deleteProductRecord,
   deleteProjectRecord,
   deleteUserAccount,
@@ -161,6 +167,7 @@ import {
   reorderFeedbackRecords,
   replaceRelatedPortals,
   setCmsDoc,
+  updateAppointmentMetadataRecord,
   updateAppointmentSlotRecord,
   updateAppointmentStatusRecord,
   updateCategoryRecord,
@@ -172,6 +179,7 @@ import {
   upsertAppointmentDateRecord,
   upsertBlogPostRecord,
   upsertChatbotFaqRecord,
+  upsertMonthlyTemplateRecord,
 } from "./src/db/repositories.ts";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -621,7 +629,12 @@ app.get("/auth/getAllAdmins", async (_req: Request, res: Response) => {
 
 app.delete("/auth/RemoveAdmin", async (req: Request, res: Response) => {
   try {
-    const adminId = Number(req.query.AdminId || req.body?.AdminId);
+    const adminId = Number(
+      req.query.AdminId ||
+        req.query.adminId ||
+        req.body?.AdminId ||
+        req.body?.adminId
+    );
     await deleteUserAccount(adminId);
     return res.json({ message: "Admin removed" });
   } catch (err) {
@@ -854,7 +867,13 @@ app.post("/designs/create", async (req: Request, res: Response) => {
 
 app.delete("/designs/deleteDesign", async (req: Request, res: Response) => {
   try {
-    const id = req.query.DesignID || req.query.id || req.body?.DesignID;
+    const id =
+      req.query.DesignID ||
+      req.query.designId ||
+      req.query.id ||
+      req.body?.DesignID ||
+      req.body?.designId ||
+      req.body?.id;
     await deleteProductRecord(String(id || ""));
     return res.json({ message: "Design deleted" });
   } catch (err) {
@@ -996,7 +1015,12 @@ app.put("/customer/updateCustomer", async (req: Request, res: Response) => {
 
 app.delete("/customer/deleteCustomer", async (req: Request, res: Response) => {
   try {
-    const id = Number(req.query.CustomerId || req.body?.CustomerId);
+    const id = Number(
+      req.query.CustomerId ||
+        req.query.customerId ||
+        req.body?.CustomerId ||
+        req.body?.customerId
+    );
     await deleteUserAccount(id);
     return res.json({ message: "Customer deleted" });
   } catch (err) {
@@ -1100,12 +1124,19 @@ app.put("/customer/updateProfile", async (req: Request, res: Response) => {
 
 app.post("/customer/verifyCustomer", async (req: Request, res: Response) => {
   try {
-    const id = Number(req.body?.CustomerId || req.query.CustomerId);
+    const id = Number(
+      req.body?.CustomerId ||
+        req.body?.customerId ||
+        req.query.CustomerId ||
+        req.query.customerId
+    );
     const nextState =
       typeof req.body?.Verify_State === "boolean" ? req.body.Verify_State : true;
     const updated = await updateUserAccount(id, { isVerified: nextState });
     return res.json({
-      message: "Verification status updated",
+      message: nextState
+        ? "Account verified successfully"
+        : "Account verification revoked",
       customer: updated ? mapCustomerUserToLegacy(updated) : null,
     });
   } catch (err) {
@@ -1153,8 +1184,22 @@ app.post("/order/createOrder", async (req: Request, res: Response) => {
 
 app.put("/order/ChangeStates", async (req: Request, res: Response) => {
   try {
-    const { OrderID, Order_Status } = req.body || {};
-    const updated = await updateOrderStatusRecord(String(OrderID || ""), String(Order_Status || "PENDING"));
+    const OrderID =
+      req.body?.OrderID ||
+      req.body?.orderId ||
+      req.query.OrderID ||
+      req.query.orderId;
+    const Order_Status =
+      req.body?.Order_Status ||
+      req.body?.Status ||
+      req.body?.status ||
+      req.query.Order_Status ||
+      req.query.Status ||
+      req.query.status;
+    const updated = await updateOrderStatusRecord(
+      String(OrderID || ""),
+      String(Order_Status || "PENDING")
+    );
     if (!updated) return res.status(404).json({ message: "Order not found" });
     return res.json({ message: "Order status updated", order: updated });
   } catch (err) {
@@ -1242,7 +1287,14 @@ app.get("/feedback/allFeedbacks", async (req: Request, res: Response) => {
 
 app.delete("/feedback/deleteFeedback", async (req: Request, res: Response) => {
   try {
-    const id = Number(req.query.Feed_backId || req.body?.Feed_backId);
+    const id = Number(
+      req.query.Feed_backId ||
+        req.query.feedbackId ||
+        req.query.id ||
+        req.body?.Feed_backId ||
+        req.body?.feedbackId ||
+        req.body?.id
+    );
     await deleteFeedbackRecord(id);
     return res.json({ message: "Feedback deleted", data: await listFeedbacks() });
   } catch (err) {
@@ -1325,8 +1377,12 @@ app.get("/Notification/getalerts", async (_req: Request, res: Response) => {
 
 app.post("/Notification/markAsRead", async (req: Request, res: Response) => {
   try {
-    const { id } = req.body || {};
-    await markNotificationRead(id ? String(id) : undefined);
+    const rawId =
+      req.body?.id ||
+      req.body?.NotificationsID ||
+      req.query.NotificationsID ||
+      req.query.id;
+    await markNotificationRead(rawId ? String(rawId) : undefined);
     return res.json({ message: "Marked as read" });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
@@ -1447,7 +1503,7 @@ app.get("/products/cms", async (_req: Request, res: Response) => {
     getCmsDoc<ProductLandingCms>("product_landing_cms", DEFAULT_PRODUCT_LANDING_CMS),
     listCategories(),
   ]);
-  return res.json({ data: cms, categories: cats });
+  return res.json({ landing: cms, data: cms, categories: cats });
 });
 
 app.put("/products/cms", async (req: Request, res: Response) => {
@@ -1455,9 +1511,10 @@ app.put("/products/cms", async (req: Request, res: Response) => {
     "product_landing_cms",
     DEFAULT_PRODUCT_LANDING_CMS
   );
-  const normalized = normalizeProductLandingCms(req.body, current);
+  const rawPayload = req.body?.landing ?? req.body;
+  const normalized = normalizeProductLandingCms(rawPayload, current);
   await setCmsDoc("product_landing_cms", normalized as unknown as Record<string, unknown>);
-  return res.json({ message: "Product landing CMS updated", data: normalized });
+  return res.json({ message: "Product landing CMS updated", landing: normalized, data: normalized });
 });
 
 app.get(["/products/categories", "/api/categories"], async (_req: Request, res: Response) => {
@@ -1545,18 +1602,28 @@ app.delete(
 // ============================================================================
 app.get("/ads/cms", async (req: Request, res: Response) => {
   const cms = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
-  const pageKey = typeof req.query.page === "string" ? req.query.page.trim() : "";
+  const pageKey =
+    typeof req.query.page === "string"
+      ? req.query.page.trim()
+      : typeof req.query.pageKey === "string"
+      ? req.query.pageKey.trim()
+      : "";
   if (pageKey && isValidAdPageKey(pageKey)) {
-    return res.json({ data: cms.pages[pageKey], allPages: cms });
+    return res.json({
+      page: cms.pages[pageKey],
+      pages: cms.pages,
+      data: cms.pages[pageKey],
+      allPages: cms,
+    });
   }
-  return res.json({ data: cms });
+  return res.json({ pages: cms.pages, data: cms });
 });
 
 app.put("/ads/cms", async (req: Request, res: Response) => {
   const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
   const next = normalizePageAdsCms(req.body, current);
   await setCmsDoc("page_ads_cms", next as unknown as Record<string, unknown>);
-  return res.json({ message: "Page advertisements updated", data: next });
+  return res.json({ message: "Page advertisements updated", pages: next.pages, data: next });
 });
 
 app.put("/ads/cms/:pageKey", async (req: Request, res: Response) => {
@@ -1579,6 +1646,8 @@ app.put("/ads/cms/:pageKey", async (req: Request, res: Response) => {
   await setCmsDoc("page_ads_cms", nextCms as unknown as Record<string, unknown>);
   return res.json({
     message: `${nextPageConfig.label} ads updated`,
+    page: nextPageConfig,
+    pages: nextCms.pages,
     data: nextPageConfig,
     allPages: nextCms,
   });
@@ -1600,6 +1669,8 @@ app.post("/ads/cms/:pageKey/ads", async (req: Request, res: Response) => {
   return res.status(201).json({
     message: "Advertisement added",
     slide,
+    page: nextPageConfig,
+    pages: nextCms.pages,
     data: nextPageConfig,
     allPages: nextCms,
   });
@@ -1628,6 +1699,8 @@ app.put("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) => {
   return res.json({
     message: "Advertisement updated",
     slide: updatedSlide,
+    page: nextPageConfig,
+    pages: nextCms.pages,
     data: nextPageConfig,
     allPages: nextCms,
   });
@@ -1651,6 +1724,8 @@ app.delete("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) =>
   await setCmsDoc("page_ads_cms", nextCms as unknown as Record<string, unknown>);
   return res.json({
     message: "Advertisement removed",
+    page: nextPageConfig,
+    pages: nextCms.pages,
     data: nextPageConfig,
     allPages: nextCms,
   });
@@ -2230,17 +2305,50 @@ Rules: Keep replies concise (1-3 crisp sentences). If they ask to book a visit, 
 // APPOINTMENTS & SITE VISIT SCHEDULING ROUTES
 // Both /api/appointments* and /api/site-visits* point to PostgreSQL
 // ============================================================================
+function buildSiteVisitSchedulePayload(
+  schedule: Awaited<ReturnType<typeof getAppointmentScheduleConfig>>,
+  bookings: Awaited<ReturnType<typeof listAppointments>>,
+  rawMonth?: unknown
+) {
+  const now = new Date();
+  const todayIso = formatIsoDateLocal(now);
+  const monthKey =
+    typeof rawMonth === "string" && /^\d{4}-\d{2}$/.test(rawMonth.trim())
+      ? rawMonth.trim()
+      : getMonthKeyFromDate(undefined, now);
+  const managedDates = getManagedSiteVisitDates(schedule, bookings, 14, now);
+  const calendarDays = buildMonthlySiteVisitCalendar(monthKey, schedule, bookings, todayIso);
+  return { monthKey, todayIso, managedDates, calendarDays };
+}
+
 app.get(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Request, res: Response) => {
   const [schedule, bookings] = await Promise.all([
     getAppointmentScheduleConfig(),
     listAppointments(),
   ]);
-  const dates = getUpcomingSiteVisitDates(14, new Date());
-  const managedDates = getManagedSiteVisitDates(schedule, bookings, 14, new Date());
+  const now = new Date();
+  const todayIso = formatIsoDateLocal(now);
+  const dates = getUpcomingSiteVisitDates(14, now);
+  const managedDates = getManagedSiteVisitDates(schedule, bookings, 14, now);
+
+  const rawDate =
+    typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date.trim())
+      ? req.query.date.trim()
+      : "";
+  const monthKey =
+    typeof req.query.month === "string" && /^\d{4}-\d{2}$/.test(req.query.month.trim())
+      ? req.query.month.trim()
+      : rawDate
+        ? getMonthKeyFromDate(rawDate, now)
+        : getMonthKeyFromDate(managedDates.find((d) => d.available)?.date, now);
+
+  const calendarDays = buildMonthlySiteVisitCalendar(monthKey, schedule, bookings, todayIso);
   const requestedDate =
-    typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
-      ? req.query.date
-      : (managedDates.find((d) => d.available)?.date || dates[0]?.date || "");
+    rawDate ||
+    getFirstOpenDateInMonth(monthKey, schedule, bookings, todayIso) ||
+    managedDates.find((d) => d.available)?.date ||
+    dates[0]?.date ||
+    "";
 
   const slots = computeAvailableSlotsForDate(
     requestedDate,
@@ -2251,7 +2359,11 @@ app.get(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Reque
   );
 
   return res.json({
-    dates,
+    monthKey,
+    todayIso,
+    calendarDays,
+    dates: managedDates,
+    upcomingDates: dates,
     managedDates,
     selectedDate: requestedDate,
     slots,
@@ -2263,27 +2375,87 @@ app.get(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Reque
   });
 });
 
-app.get(["/api/site-visits", "/api/appointments"], async (_req: Request, res: Response) => {
+app.get(["/api/site-visits", "/api/appointments"], async (req: Request, res: Response) => {
   const [bookings, schedule] = await Promise.all([
     listAppointments(),
     getAppointmentScheduleConfig(),
   ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, req.query.month);
   return res.json({
     bookings,
     data: bookings,
     schedule,
-    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
   });
 });
 
-app.get("/api/site-visits/schedule", async (_req: Request, res: Response) => {
+app.get("/api/site-visits/schedule", async (req: Request, res: Response) => {
   const [schedule, bookings] = await Promise.all([
     getAppointmentScheduleConfig(),
     listAppointments(),
   ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, req.query.month);
   return res.json({
     schedule,
-    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
+  });
+});
+
+app.put("/api/site-visits/schedule/monthly", async (req: Request, res: Response) => {
+  const { monthKey, slots, activeWeekdays, closedDates, note, clearPerDateCustomSlots } =
+    req.body || {};
+  const cleanMonth = String(monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(cleanMonth)) {
+    return res.status(400).json({ message: "Valid YYYY-MM monthKey is required." });
+  }
+  if (!Array.isArray(slots) || slots.length === 0) {
+    return res.status(400).json({ message: "At least one time slot is required for monthly setup." });
+  }
+  const [schedule, bookings] = await Promise.all([
+    upsertMonthlyTemplateRecord({
+      monthKey: cleanMonth,
+      slots,
+      activeWeekdays: Array.isArray(activeWeekdays) ? activeWeekdays : undefined,
+      closedDates: Array.isArray(closedDates) ? closedDates : undefined,
+      note: typeof note === "string" ? note : undefined,
+      clearPerDateCustomSlots: Boolean(clearPerDateCustomSlots),
+    }),
+    listAppointments(),
+  ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, cleanMonth);
+  return res.json({
+    message: `Monthly slot schedule saved for ${cleanMonth}.`,
+    schedule,
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
+  });
+});
+
+app.delete("/api/site-visits/schedule/monthly/:monthKey", async (req: Request, res: Response) => {
+  const cleanMonth = String(req.params.monthKey || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(cleanMonth)) {
+    return res.status(400).json({ message: "Valid YYYY-MM monthKey parameter required." });
+  }
+  const [schedule, bookings] = await Promise.all([
+    deleteMonthlyTemplateRecord(cleanMonth),
+    listAppointments(),
+  ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, cleanMonth);
+  return res.json({
+    message: `Reset ${cleanMonth} back to global default slots.`,
+    schedule,
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
   });
 });
 
@@ -2302,10 +2474,14 @@ app.post("/api/site-visits/dates", async (req: Request, res: Response) => {
     }),
     listAppointments(),
   ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, cleanDate.slice(0, 7));
   return res.status(201).json({
     message: `Date ${cleanDate} saved.`,
     schedule,
-    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
   });
 });
 
@@ -2314,19 +2490,26 @@ app.patch("/api/site-visits/dates/:date", async (req: Request, res: Response) =>
   if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
     return res.status(400).json({ message: "Valid YYYY-MM-DD date parameter required." });
   }
-  const { available, note } = req.body || {};
+  const { available, note, resetSlots } = req.body || {};
   const [schedule, bookings] = await Promise.all([
     upsertAppointmentDateRecord({
       date: cleanDate,
       available: typeof available === "boolean" ? available : undefined,
       note: typeof note === "string" ? note.trim() : undefined,
+      resetSlots: Boolean(resetSlots),
     }),
     listAppointments(),
   ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, cleanDate.slice(0, 7));
   return res.json({
-    message: `Availability updated for ${cleanDate}.`,
+    message: resetSlots
+      ? `Reset custom slots on ${cleanDate}.`
+      : `Availability updated for ${cleanDate}.`,
     schedule,
-    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
   });
 });
 
@@ -2336,34 +2519,40 @@ app.delete("/api/site-visits/dates/:date", async (req: Request, res: Response) =
     deleteAppointmentDateRecord(cleanDate),
     listAppointments(),
   ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, cleanDate.slice(0, 7));
   return res.json({
     message: `Removed date override for ${cleanDate}.`,
     schedule,
-    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
   });
 });
 
 app.post(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Request, res: Response) => {
-  const { date, time, endTime, label, available } = req.body || {};
+  const { scope, date, time, endTime, label, available } = req.body || {};
   if (!time || !/^\d{1,2}:\d{2}$/.test(String(time).trim())) {
     return res.status(400).json({ message: "Valid HH:mm start time is required." });
   }
+  const targetDate = scope === "default" ? undefined : date ? String(date) : undefined;
   const [schedule, bookings] = await Promise.all([
-    addAppointmentSlotRecord(
-      date ? String(date) : undefined,
-      {
-        time: String(time),
-        endTime: endTime ? String(endTime) : undefined,
-        label: label ? String(label) : undefined,
-        available: typeof available === "boolean" ? available : true,
-      }
-    ),
+    addAppointmentSlotRecord(targetDate, {
+      time: String(time),
+      endTime: endTime ? String(endTime) : undefined,
+      label: label ? String(label) : undefined,
+      available: typeof available === "boolean" ? available : true,
+    }),
     listAppointments(),
   ]);
+  const payload = buildSiteVisitSchedulePayload(schedule, bookings, targetDate?.slice(0, 7));
   return res.status(201).json({
-    message: date ? `Time slot added to ${date}.` : "Default time slot added.",
+    message: targetDate ? `Time slot added to ${targetDate}.` : "Default time slot added.",
     schedule,
-    managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    monthKey: payload.monthKey,
+    calendarDays: payload.calendarDays,
   });
 });
 
@@ -2371,24 +2560,25 @@ app.put(
   ["/api/site-visits/slots/:slotId", "/api/appointments/slots/:slotId"],
   async (req: Request, res: Response) => {
     const slotId = String(req.params.slotId || "");
-    const { date, time, endTime, label, available } = req.body || {};
+    const { scope, date, time, endTime, label, available } = req.body || {};
+    const targetDate = scope === "default" ? undefined : date ? String(date) : undefined;
     const [schedule, bookings] = await Promise.all([
-      updateAppointmentSlotRecord(
-        slotId,
-        date ? String(date) : undefined,
-        {
-          ...(time !== undefined ? { time: String(time) } : {}),
-          ...(endTime !== undefined ? { endTime: String(endTime) } : {}),
-          ...(label !== undefined ? { label: String(label) } : {}),
-          ...(typeof available === "boolean" ? { available } : {}),
-        }
-      ),
+      updateAppointmentSlotRecord(slotId, targetDate, {
+        ...(time !== undefined ? { time: String(time) } : {}),
+        ...(endTime !== undefined ? { endTime: String(endTime) } : {}),
+        ...(label !== undefined ? { label: String(label) } : {}),
+        ...(typeof available === "boolean" ? { available } : {}),
+      }),
       listAppointments(),
     ]);
+    const payload = buildSiteVisitSchedulePayload(schedule, bookings, targetDate?.slice(0, 7));
     return res.json({
       message: "Time slot updated.",
       schedule,
-      managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+      dates: payload.managedDates,
+      managedDates: payload.managedDates,
+      monthKey: payload.monthKey,
+      calendarDays: payload.calendarDays,
     });
   }
 );
@@ -2397,15 +2587,25 @@ app.delete(
   ["/api/site-visits/slots/:slotId", "/api/appointments/slots/:slotId"],
   async (req: Request, res: Response) => {
     const slotId = String(req.params.slotId || "");
-    const date = typeof req.query.date === "string" ? req.query.date : undefined;
+    const scope = typeof req.query.scope === "string" ? req.query.scope : undefined;
+    const targetDate =
+      scope === "default"
+        ? undefined
+        : typeof req.query.date === "string"
+          ? req.query.date
+          : undefined;
     const [schedule, bookings] = await Promise.all([
-      deleteAppointmentSlotRecord(slotId, date),
+      deleteAppointmentSlotRecord(slotId, targetDate),
       listAppointments(),
     ]);
+    const payload = buildSiteVisitSchedulePayload(schedule, bookings, targetDate?.slice(0, 7));
     return res.json({
       message: "Time slot deleted.",
       schedule,
-      managedDates: getManagedSiteVisitDates(schedule, bookings, 14, new Date()),
+      dates: payload.managedDates,
+      managedDates: payload.managedDates,
+      monthKey: payload.monthKey,
+      calendarDays: payload.calendarDays,
     });
   }
 );
@@ -2458,20 +2658,54 @@ app.post(["/api/site-visits", "/api/appointments"], optionalAuth, async (req: Au
     userId: req.user?.userId ?? null,
   });
 
+  const updatedBookings = [booking, ...currentBookings];
+  const updatedSlots = computeAvailableSlotsForDate(
+    booking.date,
+    updatedBookings,
+    schedule.blockedKeys,
+    [],
+    schedule
+  );
+  const payload = buildSiteVisitSchedulePayload(
+    schedule,
+    updatedBookings,
+    booking.date.slice(0, 7)
+  );
+
   return res.status(201).json({
     message: `Site visit booked for ${booking.date} at ${booking.slotLabel}.`,
     booking,
     data: booking,
+    slots: updatedSlots,
+    dates: payload.managedDates,
+    managedDates: payload.managedDates,
+    calendarDays: payload.calendarDays,
   });
 });
 
 app.patch(["/api/site-visits/:id", "/api/appointments/:id"], async (req: Request, res: Response) => {
   const bookingId = String(req.params.id || "");
-  const status = String(req.body?.status || "").toUpperCase() as SiteVisitStatus;
-  if (!["CONFIRMED", "COMPLETED", "CANCELLED"].includes(status)) {
+  const rawStatus = req.body?.status !== undefined ? String(req.body.status).toUpperCase() : undefined;
+  if (rawStatus && !["CONFIRMED", "COMPLETED", "CANCELLED"].includes(rawStatus)) {
     return res.status(400).json({ message: "Invalid booking status." });
   }
-  const updated = await updateAppointmentStatusRecord(bookingId, status);
+  const calendarEventId =
+    typeof req.body?.calendarEventId === "string" ? req.body.calendarEventId : undefined;
+  const emailSent =
+    typeof req.body?.emailSent === "boolean" ? req.body.emailSent : undefined;
+
+  if (!rawStatus && calendarEventId === undefined && emailSent === undefined) {
+    return res.status(400).json({ message: "No booking update fields provided." });
+  }
+
+  const updated =
+    rawStatus && calendarEventId === undefined && emailSent === undefined
+      ? await updateAppointmentStatusRecord(bookingId, rawStatus as SiteVisitStatus)
+      : await updateAppointmentMetadataRecord(bookingId, {
+          status: rawStatus as SiteVisitStatus | undefined,
+          calendarEventId,
+          emailSent,
+        });
   if (!updated) return res.status(404).json({ message: "Booking not found." });
   return res.json({ message: "Booking updated", booking: updated });
 });
@@ -2780,6 +3014,9 @@ async function buildSeoHtml(rawHtml: string, req: Request): Promise<string> {
 }
 
 async function startServer() {
+  const httpServer = http.createServer(app);
+  const disableHmr = process.env.DISABLE_HMR === "true";
+
   if (process.env.NODE_ENV === "production") {
     const distPath = path.resolve(__dirname, "dist");
     app.use(express.static(distPath, { index: false }));
@@ -2803,7 +3040,10 @@ async function startServer() {
     });
   } else {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: disableHmr ? false : { server: httpServer },
+      },
       appType: "spa",
     });
     app.use(async (req: Request, res: Response, next: NextFunction) => {
@@ -2835,11 +3075,12 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on http://0.0.0.0:${PORT}`);
   });
 }
 
 startServer().catch((err) => {
   console.error("Failed to start server:", err);
+  process.exit(1);
 });

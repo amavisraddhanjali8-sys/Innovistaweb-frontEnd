@@ -152,52 +152,76 @@ export default function VintagePhone3DIcon({
       return m;
     };
 
-    // Sculpted vintage materials: classic crimson-ruby or Innovista deep navy lacquer + brushed brass + ivory enamel
-    const bodyLacquerMat = trackMat(
+    // Sculpted phone material: glossy blue-and-red gradient lacquer + brushed silver hardware + ivory dial
+    const blueRedGradientMat = trackMat(
       new THREE.MeshPhysicalMaterial({
-        color: 0xc81e1e,
-        roughness: 0.22,
+        color: 0xffffff,
+        vertexColors: true,
+        roughness: 0.2,
         metalness: 0.14,
-        clearcoat: 0.92,
-        clearcoatRoughness: 0.14,
-      })
-    );
-    const plinthDarkMat = trackMat(
-      new THREE.MeshPhysicalMaterial({
-        color: 0x162436,
-        roughness: 0.34,
-        metalness: 0.28,
-        clearcoat: 0.65,
-      })
-    );
-    const brassMat = trackMat(
-      new THREE.MeshStandardMaterial({
-        color: 0xf6c453,
-        roughness: 0.24,
-        metalness: 0.88,
+        clearcoat: 0.94,
+        clearcoatRoughness: 0.12,
       })
     );
     const chromeMat = trackMat(
       new THREE.MeshStandardMaterial({
         color: 0xe2e8f0,
-        roughness: 0.18,
-        metalness: 0.92,
+        roughness: 0.2,
+        metalness: 0.9,
+      })
+    );
+    const darkTrimMat = trackMat(
+      new THREE.MeshStandardMaterial({
+        color: 0x1e293b,
+        roughness: 0.35,
+        metalness: 0.55,
       })
     );
     const ivoryDialMat = trackMat(
       new THREE.MeshStandardMaterial({
-        color: 0xfdf8ec,
-        roughness: 0.36,
-        metalness: 0.05,
+        color: 0xf8fafc,
+        roughness: 0.34,
+        metalness: 0.06,
       })
     );
-    const darkHoleMat = trackMat(
-      new THREE.MeshStandardMaterial({
-        color: 0x1e293b,
-        roughness: 0.5,
-        metalness: 0.2,
-      })
-    );
+
+    const blueStop = new THREE.Color("#0284C7");
+    const cobaltStop = new THREE.Color("#1D4ED8");
+    const crimsonStop = new THREE.Color("#B91C1C");
+    const redStop = new THREE.Color("#E60000");
+    const tmpPos = new THREE.Vector3();
+    const tmpColor = new THREE.Color();
+
+    const applyBlueRedGradient = (
+      mesh: THREE.Mesh,
+      parentOffset: THREE.Vector3 = new THREE.Vector3()
+    ) => {
+      mesh.updateMatrix();
+      const geo = mesh.geometry;
+      const posAttr = geo.attributes.position;
+      const colors = new Float32Array(posAttr.count * 3);
+
+      for (let i = 0; i < posAttr.count; i += 1) {
+        tmpPos.fromBufferAttribute(posAttr, i).applyMatrix4(mesh.matrix).add(parentOffset);
+        // Smooth diagonal sweep: vibrant blue on top-left -> crimson/red on bottom-right
+        const t = Math.max(
+          0,
+          Math.min(1, ((tmpPos.x + 0.78) / 1.56) * 0.72 + ((0.82 - tmpPos.y) / 1.3) * 0.28)
+        );
+        if (t < 0.32) {
+          tmpColor.lerpColors(blueStop, cobaltStop, t / 0.32);
+        } else if (t < 0.68) {
+          tmpColor.lerpColors(cobaltStop, crimsonStop, (t - 0.32) / 0.36);
+        } else {
+          tmpColor.lerpColors(crimsonStop, redStop, (t - 0.68) / 0.32);
+        }
+        colors[i * 3] = tmpColor.r;
+        colors[i * 3 + 1] = tmpColor.g;
+        colors[i * 3 + 2] = tmpColor.b;
+      }
+
+      geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+    };
 
     const rootPivot = new THREE.Group();
     scene.add(rootPivot);
@@ -206,32 +230,35 @@ export default function VintagePhone3DIcon({
     phonePivot.position.y = -0.14;
     rootPivot.add(phonePivot);
 
-    // 1. Tiered Rounded Plinth Base
+    // 1. Tiered Rounded Plinth Base (segmented for smooth vertex color gradient)
     const baseFoot = new THREE.Mesh(
-      trackGeo(new THREE.BoxGeometry(1.36, 0.14, 1.12)),
-      plinthDarkMat
+      trackGeo(new THREE.BoxGeometry(1.36, 0.14, 1.12, 18, 2, 12)),
+      blueRedGradientMat
     );
     baseFoot.position.y = -0.34;
+    applyBlueRedGradient(baseFoot);
     phonePivot.add(baseFoot);
 
     const lowerTier = new THREE.Mesh(
-      trackGeo(new THREE.BoxGeometry(1.24, 0.18, 0.98)),
-      bodyLacquerMat
+      trackGeo(new THREE.BoxGeometry(1.24, 0.18, 0.98, 18, 2, 12)),
+      blueRedGradientMat
     );
     lowerTier.position.y = -0.2;
+    applyBlueRedGradient(lowerTier);
     phonePivot.add(lowerTier);
 
     // 2. Sculpted Tapered Vintage Housing
     const housing = new THREE.Mesh(
-      trackGeo(new THREE.CylinderGeometry(0.46, 0.68, 0.58, 4)),
-      bodyLacquerMat
+      trackGeo(new THREE.CylinderGeometry(0.46, 0.68, 0.58, 4, 14)),
+      blueRedGradientMat
     );
     housing.rotation.y = Math.PI / 4;
     housing.scale.set(1.14, 1, 0.94);
     housing.position.y = 0.14;
+    applyBlueRedGradient(housing);
     phonePivot.add(housing);
 
-    // 3. Twin Vintage Brass Bells + Central Clapper Striker
+    // 3. Twin Chrome-Silver Bells + Central Clapper Striker
     const bellsGroup = new THREE.Group();
     bellsGroup.position.set(0, 0.48, -0.1);
     phonePivot.add(bellsGroup);
@@ -239,12 +266,12 @@ export default function VintagePhone3DIcon({
     const bellGeo = trackGeo(
       new THREE.SphereGeometry(0.22, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.58)
     );
-    const leftBell = new THREE.Mesh(bellGeo, brassMat);
+    const leftBell = new THREE.Mesh(bellGeo, chromeMat);
     leftBell.position.set(-0.27, 0, 0);
     leftBell.rotation.z = 0.28;
     bellsGroup.add(leftBell);
 
-    const rightBell = new THREE.Mesh(bellGeo, brassMat);
+    const rightBell = new THREE.Mesh(bellGeo, chromeMat);
     rightBell.position.set(0.27, 0, 0);
     rightBell.rotation.z = -0.28;
     bellsGroup.add(rightBell);
@@ -255,30 +282,30 @@ export default function VintagePhone3DIcon({
 
     const clapperStem = new THREE.Mesh(
       trackGeo(new THREE.CylinderGeometry(0.022, 0.022, 0.18, 8)),
-      chromeMat
+      darkTrimMat
     );
     clapperStem.position.y = 0.09;
     clapperPivot.add(clapperStem);
 
     const clapperBall = new THREE.Mesh(
       trackGeo(new THREE.SphereGeometry(0.055, 12, 10)),
-      brassMat
+      chromeMat
     );
     clapperBall.position.y = 0.18;
     clapperPivot.add(clapperBall);
 
-    // 4. Brass Cradle Forks supporting the Vintage Handset
+    // 4. Chrome Cradle Forks supporting the Vintage Handset
     const cradlePosts = new THREE.Group();
     cradlePosts.position.set(0, 0.44, 0.06);
     phonePivot.add(cradlePosts);
 
     const forkGeo = trackGeo(new THREE.CylinderGeometry(0.035, 0.045, 0.24, 10));
-    const leftFork = new THREE.Mesh(forkGeo, brassMat);
+    const leftFork = new THREE.Mesh(forkGeo, chromeMat);
     leftFork.position.set(-0.26, 0.08, 0);
     leftFork.rotation.z = 0.12;
     cradlePosts.add(leftFork);
 
-    const rightFork = new THREE.Mesh(forkGeo, brassMat);
+    const rightFork = new THREE.Mesh(forkGeo, chromeMat);
     rightFork.position.set(0.26, 0.08, 0);
     rightFork.rotation.z = -0.12;
     cradlePosts.add(rightFork);
@@ -291,7 +318,7 @@ export default function VintagePhone3DIcon({
 
     const dialOuterRing = new THREE.Mesh(
       trackGeo(new THREE.CylinderGeometry(0.31, 0.33, 0.05, 28)),
-      brassMat
+      chromeMat
     );
     dialOuterRing.rotation.x = Math.PI / 2;
     dialGroup.add(dialOuterRing);
@@ -305,7 +332,7 @@ export default function VintagePhone3DIcon({
 
     const dialCenterHub = new THREE.Mesh(
       trackGeo(new THREE.CylinderGeometry(0.095, 0.105, 0.068, 20)),
-      brassMat
+      chromeMat
     );
     dialCenterHub.rotation.x = Math.PI / 2;
     dialGroup.add(dialCenterHub);
@@ -314,15 +341,16 @@ export default function VintagePhone3DIcon({
     const holeGeo = trackGeo(new THREE.CylinderGeometry(0.032, 0.032, 0.062, 12));
     for (let i = 0; i < 10; i += 1) {
       const angle = -Math.PI * 0.18 + (i / 10) * Math.PI * 1.56;
-      const hole = new THREE.Mesh(holeGeo, darkHoleMat);
+      const hole = new THREE.Mesh(holeGeo, darkTrimMat);
       hole.rotation.x = Math.PI / 2;
       hole.position.set(Math.cos(angle) * 0.185, Math.sin(angle) * 0.185, 0.005);
       dialGroup.add(hole);
     }
 
-    // 6. Sculpted Vintage Curved Handset (Rattles & Lifts During Ring)
+    // 6. Sculpted Vintage Curved Handset with Blue-to-Red Gradient
     const handsetPivot = new THREE.Group();
-    handsetPivot.position.set(0, 0.62, 0.06);
+    const handsetOffset = new THREE.Vector3(0, 0.62, 0.06);
+    handsetPivot.position.copy(handsetOffset);
     phonePivot.add(handsetPivot);
 
     const archCurve = new THREE.CatmullRomCurve3([
@@ -333,35 +361,42 @@ export default function VintagePhone3DIcon({
       new THREE.Vector3(0.62, -0.08, 0.02),
     ]);
     const handleArch = new THREE.Mesh(
-      trackGeo(new THREE.TubeGeometry(archCurve, 24, 0.095, 12, false)),
-      bodyLacquerMat
+      trackGeo(new THREE.TubeGeometry(archCurve, 32, 0.095, 12, false)),
+      blueRedGradientMat
     );
+    applyBlueRedGradient(handleArch, handsetOffset);
     handsetPivot.add(handleArch);
 
-    const cupConeGeo = trackGeo(new THREE.CylinderGeometry(0.11, 0.21, 0.18, 18));
-    const cupCapGeo = trackGeo(new THREE.CylinderGeometry(0.21, 0.21, 0.035, 18));
-
-    const leftCup = new THREE.Mesh(cupConeGeo, bodyLacquerMat);
+    const leftCup = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.11, 0.21, 0.18, 18, 6)),
+      blueRedGradientMat
+    );
     leftCup.position.set(-0.65, -0.14, 0.03);
     leftCup.rotation.z = -0.35;
+    applyBlueRedGradient(leftCup, handsetOffset);
     handsetPivot.add(leftCup);
 
-    const leftCap = new THREE.Mesh(cupCapGeo, brassMat);
+    const cupCapGeo = trackGeo(new THREE.CylinderGeometry(0.21, 0.21, 0.035, 18));
+    const leftCap = new THREE.Mesh(cupCapGeo, chromeMat);
     leftCap.position.set(-0.69, -0.22, 0.03);
     leftCap.rotation.z = -0.35;
     handsetPivot.add(leftCap);
 
-    const rightCup = new THREE.Mesh(cupConeGeo, bodyLacquerMat);
+    const rightCup = new THREE.Mesh(
+      trackGeo(new THREE.CylinderGeometry(0.11, 0.21, 0.18, 18, 6)),
+      blueRedGradientMat
+    );
     rightCup.position.set(0.65, -0.14, 0.03);
     rightCup.rotation.z = 0.35;
+    applyBlueRedGradient(rightCup, handsetOffset);
     handsetPivot.add(rightCup);
 
-    const rightCap = new THREE.Mesh(cupCapGeo, brassMat);
+    const rightCap = new THREE.Mesh(cupCapGeo, chromeMat);
     rightCap.position.set(0.69, -0.22, 0.03);
     rightCap.rotation.z = 0.35;
     handsetPivot.add(rightCap);
 
-    // 7. Coiled Cord Accent Sweeping From Side
+    // 7. Coiled Cord Accent Sweeping From Left Side
     const coilPoints: THREE.Vector3[] = [];
     for (let i = 0; i <= 32; i += 1) {
       const p = i / 32;
@@ -378,8 +413,9 @@ export default function VintagePhone3DIcon({
       trackGeo(
         new THREE.TubeGeometry(new THREE.CatmullRomCurve3(coilPoints), 36, 0.022, 7, false)
       ),
-      plinthDarkMat
+      blueRedGradientMat
     );
+    applyBlueRedGradient(cordMesh);
     phonePivot.add(cordMesh);
 
     const handleResize = () => {
@@ -395,6 +431,9 @@ export default function VintagePhone3DIcon({
 
     let disposed = false;
     let frameId = 0;
+    let isIntersecting = false;
+    let isTabVisible =
+      typeof document === "undefined" || document.visibilityState !== "hidden";
     const startSec = performance.now() / 1000;
     let lastSec = startSec;
     let lastDatasetSync = 0;
@@ -476,12 +515,12 @@ export default function VintagePhone3DIcon({
       );
       phonePivot.rotation.z = ring.bodyShakeZ;
 
-      // Retro handset rattles and bounces off the brass cradle during ring burst
+      // Retro handset rattles and bounces off the cradle during ring burst
       handsetPivot.rotation.z = ring.handsetShakeZ;
       handsetPivot.position.y = 0.62 + ring.handsetLiftY;
       clapperPivot.rotation.z = ring.clapperAngleRad;
 
-      // Subtle brass bell vibration
+      // Subtle bell vibration
       bellsGroup.rotation.z = -ring.bodyShakeZ * 0.8;
 
       if (wrapper && nowSec - lastDatasetSync > 0.1) {
@@ -492,12 +531,57 @@ export default function VintagePhone3DIcon({
       }
 
       renderer.render(scene, camera);
+      if (!isIntersecting || !isTabVisible) {
+        frameId = 0;
+        return;
+      }
       if (isSoftwareGl) {
         afterDraw(tick);
       } else {
         frameId = requestAnimationFrame(tick);
       }
     };
+
+    const scheduleTick = () => {
+      if (disposed || frameId || !isIntersecting || !isTabVisible) return;
+      lastSec = performance.now() / 1000;
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const intersectionObserver =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              isIntersecting = entries.some((entry) => entry.isIntersecting);
+              if (isIntersecting) {
+                scheduleTick();
+              } else {
+                cancelAnimationFrame(frameId);
+                clearTimeout(frameId);
+                frameId = 0;
+              }
+            },
+            { rootMargin: "120px" }
+          )
+        : null;
+
+    if (intersectionObserver) {
+      intersectionObserver.observe(container);
+    } else {
+      isIntersecting = true;
+    }
+
+    const onVisibilityChange = () => {
+      isTabVisible = document.visibilityState !== "hidden";
+      if (isTabVisible) {
+        scheduleTick();
+      } else {
+        cancelAnimationFrame(frameId);
+        clearTimeout(frameId);
+        frameId = 0;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     tick();
 
@@ -506,6 +590,8 @@ export default function VintagePhone3DIcon({
       cancelAnimationFrame(frameId);
       clearTimeout(frameId);
       resizeObserver.disconnect();
+      intersectionObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       renderer.domElement.removeEventListener(
         "webglcontextrestored",
@@ -539,7 +625,7 @@ export default function VintagePhone3DIcon({
   return (
     <div
       data-testid="footer-3d-call-widget"
-      className="group relative rounded-2xl bg-white/92 border border-slate-200/90 hover:border-[#3393B8]/50 p-3.5 shadow-[0_10px_24px_-14px_rgba(34,87,122,0.3)] transition-all duration-300"
+      className="group relative"
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => {
         setIsHovered(false);
@@ -553,26 +639,16 @@ export default function VintagePhone3DIcon({
         };
       }}
     >
-      <div className="flex items-center gap-3.5">
-        {/* Interactive 3D Vintage Old Telephone Button */}
+      <div className="flex items-center gap-3">
+        {/* Unboxed Interactive 3D Blue-and-Red Gradient Telephone */}
         <button
           type="button"
           onClick={() => setIsDrawerOpen((prev) => !prev)}
-          aria-label={`Interactive 3D Call Hotline for ${phone}`}
+          aria-label={`Interactive Call Hotline for ${phone}`}
           aria-expanded={isDrawerOpen}
           data-testid="vintage-phone-3d-trigger"
-          className="no-btn-fx relative w-[78px] h-[78px] sm:w-[84px] sm:h-[84px] rounded-2xl bg-gradient-to-br from-[#F0F9FF] via-[#E0F2FE] to-[#BAE6FD] border border-white border-b-[4px] border-b-[#22577A] shadow-[0_10px_22px_-8px_rgba(34,87,122,0.45),inset_0_2px_3px_rgba(255,255,255,0.95)] flex items-center justify-center shrink-0 cursor-pointer overflow-hidden transition-shadow duration-300 group-hover:shadow-[0_14px_26px_-6px_rgba(230,0,0,0.28)]"
+          className="no-btn-fx relative w-[76px] h-[76px] sm:w-[82px] sm:h-[82px] bg-transparent border-0 p-0 shadow-none flex items-center justify-center shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#22577A]"
         >
-          {/* Expanding silent visual beacon ring around the 3D old phone */}
-          <span
-            aria-hidden="true"
-            className="silent-ring-wave silent-ring-wave-1 rounded-2xl"
-          />
-          <span
-            aria-hidden="true"
-            className="silent-ring-wave silent-ring-wave-2 rounded-2xl"
-          />
-
           <div
             ref={stageWrapperRef}
             data-testid="vintage-phone-3d-stage"
@@ -585,28 +661,28 @@ export default function VintagePhone3DIcon({
                 className="w-16 h-16 vintage-phone-fallback-anim drop-shadow-md"
               >
                 <defs>
-                  <linearGradient id="old-phone-red" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#EF4444" />
-                    <stop offset="100%" stopColor="#991B1B" />
+                  <linearGradient id="old-phone-blue-red" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#0284C7" />
+                    <stop offset="38%" stopColor="#1D4ED8" />
+                    <stop offset="72%" stopColor="#B91C1C" />
+                    <stop offset="100%" stopColor="#E60000" />
                   </linearGradient>
-                  <linearGradient id="old-phone-brass" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#FDE68A" />
-                    <stop offset="100%" stopColor="#D97706" />
+                  <linearGradient id="old-phone-silver" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0%" stopColor="#F1F5F9" />
+                    <stop offset="100%" stopColor="#94A3B8" />
                   </linearGradient>
                 </defs>
-                <rect x="14" y="57" width="52" height="10" rx="4" fill="#1E293B" />
-                <path d="M18 57 L24 34 L56 34 L62 57 Z" fill="url(#old-phone-red)" />
-                <path d="M21 25 A8 8 0 0 1 35 25 Z" fill="url(#old-phone-brass)" />
-                <path d="M45 25 A8 8 0 0 1 59 25 Z" fill="url(#old-phone-brass)" />
+                <rect x="14" y="57" width="52" height="10" rx="4" fill="url(#old-phone-blue-red)" />
+                <path d="M18 57 L24 34 L56 34 L62 57 Z" fill="url(#old-phone-blue-red)" />
+                <path d="M21 25 A8 8 0 0 1 35 25 Z" fill="url(#old-phone-silver)" />
+                <path d="M45 25 A8 8 0 0 1 59 25 Z" fill="url(#old-phone-silver)" />
                 <path
                   d="M14 27 C24 14, 56 14, 66 27 L62 32 C54 23, 26 23, 18 32 Z"
-                  fill="url(#old-phone-red)"
-                  stroke="#7F1D1D"
-                  strokeWidth="1.2"
+                  fill="url(#old-phone-blue-red)"
                 />
-                <circle cx="40" cy="46" r="10.5" fill="url(#old-phone-brass)" />
-                <circle cx="40" cy="46" r="8" fill="#FEF9C3" />
-                <circle cx="40" cy="46" r="3" fill="#B45309" />
+                <circle cx="40" cy="46" r="10.5" fill="url(#old-phone-silver)" />
+                <circle cx="40" cy="46" r="8" fill="#F8FAFC" />
+                <circle cx="40" cy="46" r="3" fill="#22577A" />
               </svg>
             )}
             <div
@@ -616,76 +692,62 @@ export default function VintagePhone3DIcon({
           </div>
         </button>
 
-        {/* Hotline Info + Attention Call Action */}
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-extrabold uppercase tracking-[0.1em] text-[#14171A]">
-              {label}
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsDrawerOpen((prev) => !prev)}
-              className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border cursor-pointer transition-colors ${
-                isDrawerOpen
-                  ? "bg-[#E60000] text-white border-[#E60000]"
-                  : "bg-sky-50 text-[#22577A] border-[#3393B8]/40 hover:bg-[#22577A] hover:text-white"
-              }`}
-            >
-              {isDrawerOpen ? "Call Options" : "Tap to Call"}
-            </button>
-          </div>
+        {/* Simple Unboxed Hotline Number & Details */}
+        <div className="min-w-0">
+          <span className="block text-[10px] font-extrabold uppercase tracking-[0.12em] text-[#3B4451]">
+            {label}
+          </span>
 
           <a
             href={telHref}
             onClick={() => setIsDrawerOpen(true)}
-            className="text-sm sm:text-[15px] font-extrabold text-[#22577A] hover:text-[#E60000] no-underline transition-colors block truncate mt-1 tabular-nums"
+            className="text-base sm:text-lg font-extrabold text-[#14171A] hover:text-[#22577A] no-underline transition-colors block truncate mt-0.5 tabular-nums"
           >
             {phone}
           </a>
-          <p className="text-[11px] text-slate-500 m-0 mt-0.5 truncate">
+          <p className="text-xs text-[#3B4451] m-0 mt-0.5">
             Direct engineering &amp; site inspection desk
           </p>
+
+          {isDrawerOpen && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold">
+              <a
+                href={telHref}
+                className="inline-flex items-center gap-1.5 text-[#22577A] hover:text-[#E60000] no-underline transition-colors"
+              >
+                <FiPhoneCall className="text-xs" />
+                <span>Call Now</span>
+              </a>
+              <a
+                href={waHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-[#15803d] hover:underline no-underline transition-colors"
+              >
+                <FaWhatsapp className="text-xs" />
+                <span>WhatsApp</span>
+              </a>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="inline-flex items-center gap-1.5 bg-transparent border-0 p-0 text-[#3B4451] hover:text-[#14171A] text-xs font-semibold cursor-pointer transition-colors"
+              >
+                {copied ? (
+                  <>
+                    <FiCheck className="text-emerald-600 text-xs" />
+                    <span className="text-emerald-700">Copied</span>
+                  </>
+                ) : (
+                  <>
+                    <FiCopy className="text-xs" />
+                    <span>Copy Number</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
-
-      {/* Interactive Quick-Call Actions Drawer */}
-      {isDrawerOpen && (
-        <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex flex-wrap items-center gap-2 animate-[fadeIn_0.18s_ease-out]">
-          <a
-            href={telHref}
-            className="tactile-pill-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold no-underline cursor-pointer"
-          >
-            <FiPhoneCall className="relative z-10 text-xs" />
-            <span className="relative z-10">Call Now</span>
-          </a>
-          <a
-            href={waHref}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-[#25D366]/12 border-[#25D366]/40 text-[#15803d] hover:bg-[#25D366]/20 text-[11px] font-bold no-underline transition-colors"
-          >
-            <FaWhatsapp className="text-xs" />
-            <span>WhatsApp</span>
-          </a>
-          <button
-            type="button"
-            onClick={handleCopy}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer transition-colors"
-          >
-            {copied ? (
-              <>
-                <FiCheck className="text-emerald-600 text-xs" />
-                <span className="text-emerald-700">Copied</span>
-              </>
-            ) : (
-              <>
-                <FiCopy className="text-xs" />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

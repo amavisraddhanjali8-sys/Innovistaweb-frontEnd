@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { Modal, message } from "antd";
+import { App as AntdApp, Modal } from "antd";
 import {
   FiCheck,
   FiChevronLeft,
@@ -74,6 +74,7 @@ function renderCustomizationIcon(category: CustomizationCategory) {
 }
 
 export default function ProductDetails() {
+  const { message } = AntdApp.useApp();
   const { designId } = useParams<{ designId?: string }>();
   const location = useLocation();
   const navigate = useNavigate();

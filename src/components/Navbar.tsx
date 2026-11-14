@@ -19,7 +19,7 @@ import {
 } from "react-icons/fi";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faCaretDown } from "@fortawesome/free-solid-svg-icons";
-import { Dropdown, Avatar, message } from "antd";
+import { App as AntdApp, Dropdown, Avatar } from "antd";
 import type { MenuProps } from "antd";
 import {
   UserOutlined,
@@ -48,6 +48,7 @@ export default function Navbar() {
   const menuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
+  const { message } = AntdApp.useApp();
   const { user, isLoggedIn, logout } = useAuth();
 
   const profileMenuItems: MenuProps["items"] = [

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { message } from "antd";
+import { App as AntdApp } from "antd";
 import { useAuth } from "../Context/AuthContext";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import RequestQuoteModal from "./RequestQuoteModal";
@@ -11,6 +11,7 @@ interface ProductSystemCardProps {
 }
 
 export default function ProductSystemCard({ design }: ProductSystemCardProps) {
+  const { message } = AntdApp.useApp();
   const { isLoggedIn } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

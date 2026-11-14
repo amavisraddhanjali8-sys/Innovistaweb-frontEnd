@@ -1,4 +1,13 @@
-import axios from "axios";
+import axios, { type AxiosRequestConfig, type AxiosResponse } from "axios";
+import {
+  DEFAULT_GET_CACHE_TTL_MS,
+  buildApiCacheKey,
+  getFreshCacheEntry,
+  isCacheableGetRequest,
+  isMutationMethod,
+  setCacheEntry,
+  type ApiCacheEntry,
+} from "../utils/apiCacheHelpers";
 
 const AxiosConfig = axios.create({
   baseURL: "",
@@ -7,6 +16,50 @@ const AxiosConfig = axios.create({
     Accept: "application/json",
   },
 });
+
+const getCache = new Map<string, ApiCacheEntry<AxiosResponse>>();
+const inFlightGets = new Map<string, Promise<AxiosResponse>>();
+
+function clearApiGetCache(): void {
+  getCache.clear();
+  inFlightGets.clear();
+}
+
+const rawGet = AxiosConfig.get.bind(AxiosConfig);
+
+AxiosConfig.get = (function cachedDeduplicatedGet<
+  T = unknown,
+  R = AxiosResponse<T>,
+  D = unknown
+>(url: string, config?: AxiosRequestConfig<D>) {
+  const headers = config?.headers as Record<string, unknown> | undefined;
+  if (!isCacheableGetRequest("GET", url, headers)) {
+    return rawGet<T, R, D>(url, config);
+  }
+
+  const key = buildApiCacheKey(url, config?.params);
+  const cached = getFreshCacheEntry(getCache, key);
+  if (cached) {
+    return Promise.resolve(cached);
+  }
+
+  const existing = inFlightGets.get(key);
+  if (existing) {
+    return existing;
+  }
+
+  const requestPromise = (rawGet<T, R, D>(url, config) as Promise<AxiosResponse>)
+    .then((response) => {
+      setCacheEntry(getCache, key, response, DEFAULT_GET_CACHE_TTL_MS);
+      return response;
+    })
+    .finally(() => {
+      inFlightGets.delete(key);
+    });
+
+  inFlightGets.set(key, requestPromise);
+  return requestPromise;
+}) as typeof AxiosConfig.get;
 
 let isRefreshing = false;
 type FailedQueueItem = {
@@ -30,6 +83,9 @@ const processQueue = (error: unknown, token: string | null = null) => {
 
 AxiosConfig.interceptors.request.use(
   (config) => {
+    if (isMutationMethod(config.method)) {
+      clearApiGetCache();
+    }
     const accessToken = sessionStorage.getItem("accessToken");
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
@@ -40,11 +96,16 @@ AxiosConfig.interceptors.request.use(
 );
 
 AxiosConfig.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (isMutationMethod(response.config?.method)) {
+      clearApiGetCache();
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && !originalRequest?._retry) {
       if (isRefreshing) {
         return new Promise(function (resolve, reject) {
           failedQueue.push({ resolve, reject });
@@ -59,16 +120,18 @@ AxiosConfig.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = sessionStorage.getItem("refreshToken");
+      const refreshToken =
+        sessionStorage.getItem("refreshToken") ||
+        localStorage.getItem("refreshToken");
 
       if (!refreshToken) {
-        window.location.href = "/admin-login";
+        window.location.hash = "#/admin-login";
         return Promise.reject(error);
       }
 
       try {
         const response = await axios.get(
-          `/auth/refresh?refreshToken=${refreshToken}`
+          `/auth/refresh?refreshToken=${encodeURIComponent(refreshToken)}`
         );
 
         const newAccessToken = response.data.accessToken;
@@ -81,7 +144,8 @@ AxiosConfig.interceptors.response.use(
       } catch (err) {
         processQueue(err, null);
         sessionStorage.clear();
-        window.location.href = "/admin-login";
+        localStorage.removeItem("refreshToken");
+        window.location.hash = "#/admin-login";
         return Promise.reject(err);
       } finally {
         isRefreshing = false;
@@ -93,3 +157,4 @@ AxiosConfig.interceptors.response.use(
 );
 
 export default AxiosConfig;
+

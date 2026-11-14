@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Table, Button, Popconfirm, message, Tooltip } from "antd";
+import { App as AntdApp, Table, Button, Popconfirm, Tooltip } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
 import SafeImage from "../../components/SafeImage";
 import { formatCurrencyLkr } from "../../utils/adminPortalHelpers";
@@ -24,6 +24,7 @@ function ViewallProjects({
   refreshTrigger = 0,
   onStatsChange,
 }: ViewallProjectsProps) {
+  const { message } = AntdApp.useApp();
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
@@ -63,7 +64,7 @@ function ViewallProjects({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     fetchProjects(pageRef.current.page, pageRef.current.limit);

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Button, Input, InputNumber, Select, Slider, Tabs, message } from "antd";
+import { App as AntdApp, Button, Input, InputNumber, Select, Slider, Tabs } from "antd";
 import {
   FiArrowDown,
   FiArrowUp,
@@ -105,6 +105,7 @@ export default function AdminProductDetailFields({
   allDesigns,
   categoryOptions,
 }: AdminProductDetailFieldsProps) {
+  const { message } = AntdApp.useApp();
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
   const perf = value.performance || createEmptyPerformanceSpec();

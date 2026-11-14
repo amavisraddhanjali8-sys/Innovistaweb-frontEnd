@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button, message } from "antd";
+import { App as AntdApp, Button } from "antd";
 import { FiCheckCircle, FiFolder, FiLayers, FiList } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import AdminPortalShell from "../components/AdminPortalShell";
@@ -15,6 +15,7 @@ import {
 } from "../utils/productCatalogHelpers";
 
 export default function DesignForm() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);

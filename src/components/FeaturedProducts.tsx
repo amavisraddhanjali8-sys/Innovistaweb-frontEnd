@@ -40,22 +40,18 @@ function FeaturedProducts() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      AxiosConfig.get<{
-        data?: Partial<HomeFeaturedProductsCmsPayload>;
-        designs?: Partial<DesignItem>[];
-      }>("/api/home-featured-products"),
-      AxiosConfig.get<{ data?: Partial<DesignItem>[] }>("/designs/all", {
-        params: { page: 1, limit: 100 },
-      }),
-    ])
-      .then(([cmsRes, designsRes]) => {
+    AxiosConfig.get<{
+      data?: Partial<HomeFeaturedProductsCmsPayload>;
+      allDesigns?: Partial<DesignItem>[];
+      designs?: Partial<DesignItem>[];
+    }>("/api/home-featured-products")
+      .then((cmsRes) => {
         if (!active) return;
         if (cmsRes.data?.data) {
           setCms(normalizeHomeFeaturedProductsCms(cmsRes.data.data));
         }
-        const rawList = Array.isArray(designsRes.data?.data)
-          ? designsRes.data.data
+        const rawList = Array.isArray(cmsRes.data?.allDesigns)
+          ? cmsRes.data.allDesigns
           : Array.isArray(cmsRes.data?.designs)
           ? cmsRes.data.designs
           : null;

@@ -2,14 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   addScheduleSlot,
+  applyMonthlyTemplateToSchedule,
   buildGmailRawMessage,
   buildGoogleCalendarEventPayload,
+  buildMonthlySiteVisitCalendar,
   computeAvailableSlotsForDate,
   createDefaultSiteVisitSchedule,
+  deleteMonthlyTemplateFromSchedule,
   deleteScheduleDate,
   deleteScheduleSlot,
+  getFirstOpenDateInMonth,
   getManagedSiteVisitDates,
   getUpcomingSiteVisitDates,
+  shiftMonthKey,
   toggleScheduleSlotAvailability,
   updateScheduleSlot,
   upsertScheduleDate,
@@ -157,6 +162,65 @@ test("admin schedule helpers support adding/toggling/deleting dates and adding/e
 
   schedule = deleteScheduleDate(schedule, "2026-12-20");
   assert.equal(Boolean(schedule.dates["2026-12-20"]), false);
+});
+
+test("monthly templates apply slot profiles across a month, respect activeWeekdays & closedDates, and build aligned calendar cells", () => {
+  assert.equal(shiftMonthKey("2026-11", 1), "2026-12");
+  assert.equal(shiftMonthKey("2026-12", 1), "2027-01");
+  assert.equal(shiftMonthKey("2026-01", -1), "2025-12");
+
+  let schedule = createDefaultSiteVisitSchedule();
+  // Configure December 2026: Mon-Fri only (weekdays 1..5), Dec 25 closed, and 2 custom slots (10:00, 16:00)
+  schedule = applyMonthlyTemplateToSchedule(schedule, {
+    monthKey: "2026-12",
+    activeWeekdays: [1, 2, 3, 4, 5],
+    closedDates: ["2026-12-25"],
+    note: "December Festive Hours",
+    slots: [
+      { time: "10:00", endTime: "11:00", label: "10:00 AM Festive", available: true },
+      { time: "16:00", endTime: "17:00", label: "04:00 PM Festive", available: true },
+    ],
+  });
+
+  // 2026-12-01 is Tuesday -> active weekday, 2 monthly slots
+  const dec1Slots = computeAvailableSlotsForDate("2026-12-01", [], [], [], schedule);
+  assert.equal(dec1Slots.length, 2);
+  assert.equal(dec1Slots[0].label, "10:00 AM Festive");
+  assert.equal(dec1Slots[1].available, true);
+
+  // 2026-12-05 is Saturday (weekday 6) -> closed by Mon-Fri monthly mask
+  const dec5Slots = computeAvailableSlotsForDate("2026-12-05", [], [], [], schedule);
+  assert.equal(dec5Slots.every((s) => !s.available && s.reason === "Date Unavailable"), true);
+
+  // 2026-12-25 is Friday -> closed by monthly closedDates
+  const dec25Slots = computeAvailableSlotsForDate("2026-12-25", [], [], [], schedule);
+  assert.equal(dec25Slots.every((s) => !s.available && s.reason === "Date Unavailable"), true);
+
+  // Calendar grid for 2026-12: Dec 1 2026 is Tuesday (weekday 2) -> 2 leading pad cells + 31 days = 33 cells
+  const cells = buildMonthlySiteVisitCalendar("2026-12", schedule, [], "2026-12-10");
+  assert.equal(cells.length, 33);
+  assert.equal(cells[0].isCurrentMonth, false);
+  assert.equal(cells[1].isCurrentMonth, false);
+  assert.equal(cells[2].isoDate, "2026-12-01");
+  assert.equal(cells[2].isPast, true);
+
+  const dec14Cell = cells.find((c) => c.isoDate === "2026-12-14");
+  assert.ok(dec14Cell);
+  assert.equal(dec14Cell?.available, true);
+  assert.equal(dec14Cell?.openSlotCount, 2);
+  assert.equal(dec14Cell?.source, "month");
+
+  // First open date on or after 2026-12-10 -> 2026-12-10 (Thursday)
+  assert.equal(getFirstOpenDateInMonth("2026-12", schedule, [], "2026-12-10"), "2026-12-10");
+
+  // Other months (2027-01) still inherit global defaults (4 slots, Mon-Sat)
+  const janSlots = computeAvailableSlotsForDate("2027-01-04", [], [], [], schedule);
+  assert.equal(janSlots.length, 4);
+
+  // Reset December back to global defaults
+  schedule = deleteMonthlyTemplateFromSchedule(schedule, "2026-12");
+  const dec1Reset = computeAvailableSlotsForDate("2026-12-01", [], [], [], schedule);
+  assert.equal(dec1Reset.length, 4);
 });
 
 test("validateSiteVisitBooking checks required fields", () => {

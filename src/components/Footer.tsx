@@ -1,19 +1,26 @@
-import { useRef } from "react";
+import { Suspense, lazy, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { FiArrowRight, FiCheckCircle } from "react-icons/fi";
+import {
+  FiArrowRight,
+  FiCheckCircle,
+  FiClock,
+  FiGlobe,
+  FiMail,
+  FiMapPin,
+} from "react-icons/fi";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
 import companyLogo from "../assets/Images/logo/CompanyLogo.png";
 import AnimatedSocialIcons from "./AnimatedSocialIcons";
-import Footer3DContactIcon from "./Footer3DContactIcon";
 import FooterBuildingConstructionBg from "./FooterBuildingConstructionBg";
 import InteractiveContactSection from "./InteractiveContactSection";
 import RequestQuoteButton from "./RequestQuoteButton";
-import VintagePhone3DIcon from "./VintagePhone3DIcon";
 import {
   DEFAULT_SITE_CONTACT_SETTINGS,
   FOOTER_LINK_COLUMNS,
   FOOTER_SERVICE_HIGHLIGHTS,
 } from "../utils/footerConsultationHelpers";
+
+const VintagePhone3DIcon = lazy(() => import("./VintagePhone3DIcon"));
 
 function Footer() {
   const location = useLocation();
@@ -73,123 +80,121 @@ function Footer() {
           <FooterBuildingConstructionBg hostRef={lowerFooterHostRef} />
 
           <div className="relative z-10 w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-            {/* All Public Pages + Complete 3D Contact Hub & Actual-Logo 3D Social Icons */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-9 border-b border-slate-300/70">
-              {/* 4 Balanced Page Link Columns (20 Public Routes) */}
-              <div className="lg:col-span-6 grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-4">
-                {FOOTER_LINK_COLUMNS.map((column) => (
-                  <div key={column.title}>
-                    <h4 className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#14171A] mb-3.5 mt-0">
-                      {column.title}
-                    </h4>
-                    <ul className="list-none p-0 m-0 space-y-2.5">
-                      {column.items.map((item) => (
-                        <li key={item.to}>
-                          <Link
-                            to={item.to}
-                            className="text-xs sm:text-[13px] font-medium text-[#3B4451] hover:text-[#22577A] transition-colors no-underline block"
-                          >
-                            {item.label}
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+            {/* Upper Row: 4 Balanced Navigation Link Columns */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-8 pb-8 border-b border-slate-300/60">
+              {FOOTER_LINK_COLUMNS.map((column) => (
+                <div key={column.title}>
+                  <h4 className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#14171A] mb-3.5 mt-0">
+                    {column.title}
+                  </h4>
+                  <ul className="list-none p-0 m-0 space-y-2.5">
+                    {column.items.map((item) => (
+                      <li key={item.to}>
+                        <Link
+                          to={item.to}
+                          className="text-xs sm:text-[13px] font-medium text-[#3B4451] hover:text-[#22577A] transition-colors no-underline block"
+                        >
+                          {item.label}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            {/* Lower Row (below links, left-anchored): Simple Unboxed Contact Details + Blue/Red Gradient Phone */}
+            <div className="py-7 border-b border-slate-300/60 grid grid-cols-1 lg:grid-cols-12 gap-7 lg:gap-8 items-start lg:items-center">
+              {/* Direct Hotline + Unboxed Blue & Red Gradient Telephone */}
+              <div className="lg:col-span-4">
+                <Suspense fallback={<div className="h-[82px]" />}>
+                  <VintagePhone3DIcon
+                    phone={contactSettings.phone}
+                    whatsapp={contactSettings.whatsapp}
+                    label="Direct Hotline"
+                  />
+                </Suspense>
               </div>
 
-              {/* Direct Contact Details with 3D Icons & Auto-Shaking/Scaling 3D Old Phone */}
-              <div className="lg:col-span-6 flex flex-col gap-3.5">
-                {/* 3D Interactive Vintage Rotary Call Phone */}
-                <VintagePhone3DIcon
-                  phone={contactSettings.phone}
-                  whatsapp={contactSettings.whatsapp}
-                  label="Direct Hotline"
+              {/* Simple Unboxed Contact Details */}
+              <div className="lg:col-span-6 grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4">
+                <a
+                  href={`mailto:${contactSettings.email}`}
+                  className="group flex items-start gap-2.5 no-underline"
+                >
+                  <FiMail className="w-4 h-4 mt-0.5 text-[#22577A] group-hover:text-[#E60000] transition-colors shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#3B4451]">
+                      Email Desk
+                    </span>
+                    <span className="block text-xs sm:text-[13px] font-semibold text-[#14171A] group-hover:text-[#22577A] leading-snug break-all mt-0.5">
+                      {contactSettings.email}
+                    </span>
+                  </div>
+                </a>
+
+                <Link
+                  to="/contact"
+                  className="group flex items-start gap-2.5 no-underline"
+                >
+                  <FiMapPin className="w-4 h-4 mt-0.5 text-[#E60000] group-hover:text-[#22577A] transition-colors shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#3B4451]">
+                      Headquarters
+                    </span>
+                    <span className="block text-xs sm:text-[13px] font-semibold text-[#14171A] group-hover:text-[#22577A] leading-snug break-words mt-0.5">
+                      {contactSettings.address}
+                    </span>
+                  </div>
+                </Link>
+
+                <a
+                  href={websiteHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group flex items-start gap-2.5 no-underline"
+                >
+                  <FiGlobe className="w-4 h-4 mt-0.5 text-[#22577A] group-hover:text-[#E60000] transition-colors shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#3B4451]">
+                      Official Portal
+                    </span>
+                    <span className="block text-xs sm:text-[13px] font-semibold text-[#14171A] group-hover:text-[#22577A] leading-snug break-all mt-0.5">
+                      {contactSettings.website}
+                    </span>
+                  </div>
+                </a>
+
+                <div className="flex items-start gap-2.5">
+                  <FiClock className="w-4 h-4 mt-0.5 text-[#22577A] shrink-0" />
+                  <div className="min-w-0">
+                    <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-[#3B4451]">
+                      Showroom Hours
+                    </span>
+                    <span className="block text-xs sm:text-[13px] font-semibold text-[#14171A] leading-snug break-words mt-0.5 tabular-nums">
+                      {showroomHours}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Simple Unboxed Social Links */}
+              <div className="lg:col-span-2 flex flex-col items-start lg:items-end gap-2">
+                <div className="lg:text-right">
+                  <h4 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#14171A] m-0">
+                    Follow Innovista
+                  </h4>
+                  <p className="text-[11px] text-[#3B4451] m-0 mt-0.5">
+                    Project updates &amp; reels
+                  </p>
+                </div>
+                <AnimatedSocialIcons
+                  settings={contactSettings}
+                  align="end"
+                  size="sm"
+                  keyPrefix="bottom"
+                  variant="simple"
                 />
-
-                {/* 3D Tactile Contact Details Grid (Email, Address, Website & Hours) */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {/* Email */}
-                  <a
-                    href={`mailto:${contactSettings.email}`}
-                    className="group flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 hover:border-[#3393B8]/50 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)] no-underline transition-all duration-200"
-                  >
-                    <Footer3DContactIcon kind="email" />
-                    <div className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                        Email Desk
-                      </span>
-                      <span className="block text-xs font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug break-all mt-0.5">
-                        {contactSettings.email}
-                      </span>
-                    </div>
-                  </a>
-
-                  {/* Showroom Address */}
-                  <Link
-                    to="/contact"
-                    className="group flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 hover:border-[#3393B8]/50 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)] no-underline transition-all duration-200"
-                  >
-                    <Footer3DContactIcon kind="address" />
-                    <div className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                        Headquarters
-                      </span>
-                      <span className="block text-xs font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug break-words mt-0.5">
-                        {contactSettings.address}
-                      </span>
-                    </div>
-                  </Link>
-
-                  {/* Website */}
-                  <a
-                    href={websiteHref}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="group flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 hover:border-[#3393B8]/50 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)] no-underline transition-all duration-200"
-                  >
-                    <Footer3DContactIcon kind="website" />
-                    <div className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                        Official Portal
-                      </span>
-                      <span className="block text-xs font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug break-all mt-0.5">
-                        {contactSettings.website}
-                      </span>
-                    </div>
-                  </a>
-
-                  {/* Showroom Hours */}
-                  <div className="flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)]">
-                    <Footer3DContactIcon kind="hours" />
-                    <div className="min-w-0 flex-1">
-                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
-                        Showroom Hours
-                      </span>
-                      <span className="block text-xs font-bold text-[#14171A] leading-snug break-words mt-0.5">
-                        {showroomHours}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actual-Logo 3D Social Media Strip */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl bg-white/85 backdrop-blur-xs border border-slate-200/90 px-4 py-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)]">
-                  <div>
-                    <h4 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#14171A] m-0">
-                      Follow Innovista
-                    </h4>
-                    <p className="text-[11px] text-slate-500 m-0 mt-0.5">
-                      Project updates &amp; showroom reels
-                    </p>
-                  </div>
-                  <AnimatedSocialIcons
-                    settings={contactSettings}
-                    align="end"
-                    size="sm"
-                    keyPrefix="bottom"
-                  />
-                </div>
               </div>
             </div>
 

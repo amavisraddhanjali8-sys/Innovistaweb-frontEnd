@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ConfigProvider, Drawer, Modal } from "antd";
+import { App as AntdApp, ConfigProvider, Drawer, Modal } from "antd";
 import {
   FiBookOpen,
   FiBriefcase,
@@ -233,7 +233,8 @@ export default function AdminPortalShell({
         },
       }}
     >
-      <div className="min-h-screen bg-[#F5F7FA] text-[#14171A] flex flex-col">
+      <AntdApp>
+        <div className="min-h-screen bg-[#F5F7FA] text-[#14171A] flex flex-col">
         {/* Top Horizontal Navigation Header */}
         <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90">
           <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
@@ -690,7 +691,8 @@ export default function AdminPortalShell({
         >
           <PasswordReset onSuccess={() => setResetOpen(false)} />
         </Modal>
-      </div>
+        </div>
+      </AntdApp>
     </ConfigProvider>
   );
 }

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
+  App as AntdApp,
   Button,
   Form,
   Input,
   InputNumber,
   Slider,
-  message,
   Row,
   Col,
   Divider,
@@ -76,6 +76,7 @@ const SPEED_PRESETS = [
 ];
 
 function EditVisionMission() {
+  const { message } = AntdApp.useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const initialTab = searchParams.get("tab") || "slideshow";
@@ -180,7 +181,8 @@ function EditVisionMission() {
           clients: DEFAULT_CLIENTS,
           clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
         };
-        const normalized = normalizeAboutCmsPayload(res.data, defaults);
+        const rawPayload = res.data?.data ?? res.data;
+        const normalized = normalizeAboutCmsPayload(rawPayload, defaults);
         setSlideshowSpeedMs(normalized.slideshowSpeedMs);
         setJourneySpeedMs(normalized.journeySpeedMs);
         setFeedbackSpeedMs(normalized.feedbackSpeedMs);
@@ -229,7 +231,7 @@ function EditVisionMission() {
     } finally {
       setLoading(false);
     }
-  }, [form]);
+  }, [form, message]);
 
   useEffect(() => {
     fetchContent();

@@ -76,8 +76,9 @@ export default function PageAdsAdmin() {
     try {
       setLoading(true);
       const res = await AxiosConfig.get("/ads/cms");
-      if (res.data?.pages) {
-        setCms(normalizePageAdsCms(res.data));
+      const rawCms = res.data?.pages ? res.data : res.data?.data;
+      if (rawCms?.pages) {
+        setCms(normalizePageAdsCms(rawCms));
       }
     } catch {
       msgApi.error("Could not load page advertisement configuration.");
@@ -211,12 +212,13 @@ export default function PageAdsAdmin() {
           )}`,
           payload
         );
-        if (res.data?.page) {
+        const updatedPage = res.data?.page || res.data?.data;
+        if (updatedPage) {
           setCms((prev) => ({
             pages: {
               ...prev.pages,
               [activePageKey]: normalizeSinglePageAdsConfig(
-                res.data.page,
+                updatedPage,
                 activePageKey
               ),
             },
@@ -228,12 +230,13 @@ export default function PageAdsAdmin() {
           `/ads/cms/${encodeURIComponent(activePageKey)}/ads`,
           payload
         );
-        if (res.data?.page) {
+        const createdPage = res.data?.page || res.data?.data;
+        if (createdPage) {
           setCms((prev) => ({
             pages: {
               ...prev.pages,
               [activePageKey]: normalizeSinglePageAdsConfig(
-                res.data.page,
+                createdPage,
                 activePageKey
               ),
             },
@@ -325,12 +328,13 @@ export default function PageAdsAdmin() {
         `/ads/cms/${encodeURIComponent(activePageKey)}`,
         normalizeSinglePageAdsConfig(nextConfig, activePageKey)
       );
-      if (res.data?.page) {
+      const bulkPage = res.data?.page || res.data?.data;
+      if (bulkPage) {
         setCms((prev) => ({
           pages: {
             ...prev.pages,
             [activePageKey]: normalizeSinglePageAdsConfig(
-              res.data.page,
+              bulkPage,
               activePageKey
             ),
           },
@@ -354,12 +358,13 @@ export default function PageAdsAdmin() {
           slideId
         )}`
       );
-      if (res.data?.page) {
+      const deletedPage = res.data?.page || res.data?.data;
+      if (deletedPage) {
         setCms((prev) => ({
           pages: {
             ...prev.pages,
             [activePageKey]: normalizeSinglePageAdsConfig(
-              res.data.page,
+              deletedPage,
               activePageKey
             ),
           },
@@ -387,12 +392,13 @@ export default function PageAdsAdmin() {
           paused: nextPaused,
         }
       );
-      if (res.data?.page) {
+      const toggledPage = res.data?.page || res.data?.data;
+      if (toggledPage) {
         setCms((prev) => ({
           pages: {
             ...prev.pages,
             [activePageKey]: normalizeSinglePageAdsConfig(
-              res.data.page,
+              toggledPage,
               activePageKey
             ),
           },
@@ -486,12 +492,13 @@ export default function PageAdsAdmin() {
         `/ads/cms/${encodeURIComponent(activePageKey)}`,
         normalized
       );
-      if (res.data?.page) {
+      const savedPage = res.data?.page || res.data?.data;
+      if (savedPage) {
         setCms((prev) => ({
           pages: {
             ...prev.pages,
             [activePageKey]: normalizeSinglePageAdsConfig(
-              res.data.page,
+              savedPage,
               activePageKey
             ),
           },

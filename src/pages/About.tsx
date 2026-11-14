@@ -55,7 +55,8 @@ function About() {
       try {
         const res = await AxiosConfig.get("/about/vision-mission");
         if (!active || !res.data) return;
-        const normalized = normalizeAboutCmsPayload(res.data, INITIAL_CMS_STATE);
+        const rawPayload = res.data?.data ?? res.data;
+        const normalized = normalizeAboutCmsPayload(rawPayload, INITIAL_CMS_STATE);
         setCmsData(normalized);
       } catch {
         // Fallback to verified local defaults

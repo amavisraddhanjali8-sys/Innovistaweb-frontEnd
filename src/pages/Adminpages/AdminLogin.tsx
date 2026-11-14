@@ -1,10 +1,10 @@
 import type { FormProps } from "antd";
 import {
+  App as AntdApp,
   Button,
   Checkbox,
   Form,
   Input,
-  message,
   Flex,
   Col,
   Row,
@@ -23,6 +23,7 @@ type FieldType = {
 };
 
 function AdminLogin() {
+  const { message, modal } = AntdApp.useApp();
   const onFinish: FormProps<FieldType>["onFinish"] = async (values) => {
     try {
       const response = await axios.post(
@@ -68,7 +69,7 @@ function AdminLogin() {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error submitting email:", error);
-      Modal.error({
+      modal.error({
         title: "Submission Failed",
         content: "Something went wrong. Please try again.",
       });

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Button, message } from "antd";
+import { App as AntdApp, Button } from "antd";
 import { useAuth } from "../Context/AuthContext";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
@@ -18,6 +18,7 @@ interface Design {
 }
 
 function DesignView() {
+  const { message } = AntdApp.useApp();
   const location = useLocation();
   const navigate = useNavigate();
   const { isLoggedIn } = useAuth();

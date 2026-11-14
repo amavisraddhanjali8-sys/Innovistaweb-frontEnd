@@ -427,6 +427,9 @@ export default function Chatbot3DReceptionistAvatar({
 
     let disposed = false;
     let frameId = 0;
+    let isIntersecting = true;
+    let isTabVisible =
+      typeof document === "undefined" || document.visibilityState !== "hidden";
     const startSec = performance.now() / 1000;
     let lastSec = startSec;
     let lastDatasetSync = 0;
@@ -568,12 +571,55 @@ export default function Chatbot3DReceptionistAvatar({
       }
 
       renderer.render(scene, camera);
+      if (!isIntersecting || !isTabVisible) {
+        frameId = 0;
+        return;
+      }
       if (isSoftwareGl) {
         afterDraw(tick);
       } else {
         frameId = requestAnimationFrame(tick);
       }
     };
+
+    const scheduleTick = () => {
+      if (disposed || frameId || !isIntersecting || !isTabVisible) return;
+      lastSec = performance.now() / 1000;
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const intersectionObserver =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              isIntersecting = entries.some((entry) => entry.isIntersecting);
+              if (isIntersecting) {
+                scheduleTick();
+              } else {
+                cancelAnimationFrame(frameId);
+                clearTimeout(frameId);
+                frameId = 0;
+              }
+            },
+            { rootMargin: "80px" }
+          )
+        : null;
+
+    if (intersectionObserver) {
+      intersectionObserver.observe(container);
+    }
+
+    const onVisibilityChange = () => {
+      isTabVisible = document.visibilityState !== "hidden";
+      if (isTabVisible) {
+        scheduleTick();
+      } else {
+        cancelAnimationFrame(frameId);
+        clearTimeout(frameId);
+        frameId = 0;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     tick();
 
@@ -584,6 +630,8 @@ export default function Chatbot3DReceptionistAvatar({
       window.removeEventListener("pointermove", handleGlobalPointerMove);
       window.removeEventListener("mousemove", handleGlobalPointerMove);
       resizeObserver.disconnect();
+      intersectionObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("webglcontextlost", handleContextLost);
       renderer.domElement.removeEventListener("webglcontextrestored", handleContextRestored);
 

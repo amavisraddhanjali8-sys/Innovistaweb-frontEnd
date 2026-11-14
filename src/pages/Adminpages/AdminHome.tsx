@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Modal, message } from "antd";
+import { App as AntdApp, Modal } from "antd";
 import {
   FiBriefcase,
   FiFilm,
@@ -30,6 +30,7 @@ import {
 } from "../../utils/footerConsultationHelpers";
 
 function AdminHome() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { contactSettings, updateContactSettings } = useSiteSettings();

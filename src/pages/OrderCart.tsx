@@ -1,9 +1,9 @@
 import {
+  App as AntdApp,
   Button,
   Modal,
   Input,
   Form,
-  message,
   Card,
   Row,
   Col,
@@ -28,6 +28,7 @@ interface DesignDetails {
 }
 
 function OrderCart() {
+  const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const { isLoggedIn } = useAuth();
   const [cart, setCart] = useState<number[]>([]);
@@ -60,7 +61,7 @@ function OrderCart() {
     } catch {
       message.error("Failed to load cart items");
     }
-  }, []);
+  }, [message]);
 
   useEffect(() => {
     loadCart();

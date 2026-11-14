@@ -116,6 +116,7 @@ export default function Contact3DCharacterStage({
   const [shakeCount, setShakeCount] = useState(0);
   const [speechBurst, setSpeechBurst] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
+  const [isStageVisible, setIsStageVisible] = useState(false);
 
   useEffect(() => {
     poseRef.current = pose;
@@ -125,9 +126,9 @@ export default function Contact3DCharacterStage({
     onChangePoseRef.current = onChangePose;
   }, [onChangePose]);
 
-  // Automatically cycle character poses ("handshake" -> "call" -> "quote")
+  // Automatically cycle character poses ("handshake" -> "call" -> "quote") only when visible
   useEffect(() => {
-    if (isHovered) return;
+    if (isHovered || !isStageVisible) return;
     if (
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
@@ -140,7 +141,7 @@ export default function Contact3DCharacterStage({
     }, 2800);
 
     return () => window.clearInterval(timer);
-  }, [isHovered, pose, shakeCount]);
+  }, [isHovered, isStageVisible, pose, shakeCount]);
 
   const triggerHandshakeInteraction = () => {
     onChangePose("handshake");
@@ -890,6 +891,9 @@ export default function Contact3DCharacterStage({
     // Animation loop using performance.now() timing & Software-WebGL afterDraw pacing
     let disposed = false;
     let frameId = 0;
+    let isIntersecting = false;
+    let isTabVisible =
+      typeof document === "undefined" || document.visibilityState !== "hidden";
     const startTimeSec = performance.now() / 1000;
     let lastTimeSec = startTimeSec;
 
@@ -1099,6 +1103,11 @@ export default function Contact3DCharacterStage({
 
       renderer.render(scene, camera);
 
+      if (!isIntersecting || !isTabVisible) {
+        frameId = 0;
+        return;
+      }
+
       if (isSoftwareGl) {
         afterDraw(tick);
       } else {
@@ -1106,6 +1115,51 @@ export default function Contact3DCharacterStage({
       }
     };
 
+    const scheduleTick = () => {
+      if (disposed || frameId || !isIntersecting || !isTabVisible) return;
+      lastTimeSec = performance.now() / 1000;
+      frameId = requestAnimationFrame(tick);
+    };
+
+    const intersectionObserver =
+      typeof IntersectionObserver !== "undefined"
+        ? new IntersectionObserver(
+            (entries) => {
+              const visible = entries.some((entry) => entry.isIntersecting);
+              isIntersecting = visible;
+              setIsStageVisible(visible);
+              if (visible) {
+                scheduleTick();
+              } else {
+                cancelAnimationFrame(frameId);
+                clearTimeout(frameId);
+                frameId = 0;
+              }
+            },
+            { rootMargin: "160px" }
+          )
+        : null;
+
+    if (intersectionObserver) {
+      intersectionObserver.observe(container);
+    } else {
+      isIntersecting = true;
+      setIsStageVisible(true);
+    }
+
+    const onVisibilityChange = () => {
+      isTabVisible = document.visibilityState !== "hidden";
+      if (isTabVisible) {
+        scheduleTick();
+      } else {
+        cancelAnimationFrame(frameId);
+        clearTimeout(frameId);
+        frameId = 0;
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    // Render initial pose frame cleanly, then animate only when visible
     tick();
 
     return () => {
@@ -1113,6 +1167,8 @@ export default function Contact3DCharacterStage({
       cancelAnimationFrame(frameId);
       clearTimeout(frameId);
       resizeObserver.disconnect();
+      intersectionObserver?.disconnect();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       renderer.domElement.removeEventListener("pointermove", handlePointerMove);
       renderer.domElement.removeEventListener("pointerleave", handlePointerLeave);
       renderer.domElement.removeEventListener("click", handleCanvasClick);

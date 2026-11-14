@@ -6,13 +6,16 @@ import {
   type ProductCategory,
 } from "../utils/productCatalogHelpers.ts";
 import {
+  applyMonthlyTemplateToSchedule,
   computeDefaultEndTime,
+  deleteMonthlyTemplateFromSchedule,
   formatTime24ToLabel,
   normalizeManagedSlot,
   normalizeSiteVisitScheduleConfig,
   normalizeSlotTime,
   sortManagedSlots,
   type ManagedSiteVisitSlot,
+  type MonthlySlotTemplate,
   type SiteVisitBooking,
   type SiteVisitScheduleConfig,
   type SiteVisitStatus,
@@ -336,10 +339,14 @@ export function getAppointmentScheduleConfigMem(): SiteVisitScheduleConfig {
   const blockedDoc = store.cmsDocs.get("site_visit_blocked_keys") as
     | { blockedKeys?: string[] }
     | undefined;
+  const monthlyDoc = store.cmsDocs.get("site_visit_monthly_templates") as
+    | { monthlyTemplates?: Record<string, MonthlySlotTemplate> }
+    | undefined;
   return normalizeSiteVisitScheduleConfig({
     defaultSlots: store.appointmentSlots,
     dates: store.appointmentDates,
     blockedKeys: Array.isArray(blockedDoc?.blockedKeys) ? blockedDoc.blockedKeys : [],
+    monthlyTemplates: monthlyDoc?.monthlyTemplates || {},
   });
 }
 
@@ -393,6 +400,30 @@ export function updateAppointmentStatusRecordMem(
   return target;
 }
 
+export function updateAppointmentMetadataRecordMem(
+  idOrCode: string,
+  patch: { status?: SiteVisitStatus; calendarEventId?: string; emailSent?: boolean }
+): SiteVisitBooking | null {
+  const store = getMemoryStore();
+  const target = store.appointments.find((a) => a.id === idOrCode);
+  if (!target) return null;
+  if (patch.status) target.status = patch.status;
+  if (typeof patch.calendarEventId === "string") target.calendarEventId = patch.calendarEventId;
+  if (typeof patch.emailSent === "boolean") target.emailSent = patch.emailSent;
+  return target;
+}
+
+function getBaseSlotsForDateMem(date: string): ManagedSiteVisitSlot[] {
+  const schedule = getAppointmentScheduleConfigMem();
+  const existing = schedule.dates[date];
+  if (existing?.slots && existing.slots.length > 0) return existing.slots;
+  const monthCfg = /^\d{4}-\d{2}/.test(date)
+    ? schedule.monthlyTemplates?.[date.slice(0, 7)]
+    : undefined;
+  if (monthCfg?.slots && monthCfg.slots.length > 0) return monthCfg.slots;
+  return schedule.defaultSlots;
+}
+
 export function addAppointmentSlotRecordMem(
   date: string | undefined,
   slotInput: { time: string; endTime?: string; label?: string; available?: boolean }
@@ -412,8 +443,7 @@ export function addAppointmentSlotRecordMem(
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
     const targetDate = date.trim();
     const existing = store.appointmentDates[targetDate];
-    const baseSlots =
-      existing?.slots && existing.slots.length > 0 ? existing.slots : store.appointmentSlots;
+    const baseSlots = getBaseSlotsForDateMem(targetDate);
     const nextSlots = sortManagedSlots([
       ...baseSlots.filter((s) => s.time !== normalized.time),
       normalized,
@@ -451,8 +481,7 @@ export function updateAppointmentSlotRecordMem(
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
     const targetDate = date.trim();
     const existing = store.appointmentDates[targetDate];
-    const baseSlots =
-      existing?.slots && existing.slots.length > 0 ? existing.slots : store.appointmentSlots;
+    const baseSlots = getBaseSlotsForDateMem(targetDate);
     const nextSlots = sortManagedSlots(
       baseSlots.map((s) =>
         s.id === slotId || s.time === slotId
@@ -500,8 +529,7 @@ export function deleteAppointmentSlotRecordMem(
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
     const targetDate = date.trim();
     const existing = store.appointmentDates[targetDate];
-    const baseSlots =
-      existing?.slots && existing.slots.length > 0 ? existing.slots : store.appointmentSlots;
+    const baseSlots = getBaseSlotsForDateMem(targetDate);
     store.appointmentDates[targetDate] = {
       date: targetDate,
       available: existing?.available ?? true,
@@ -522,6 +550,7 @@ export function upsertAppointmentDateRecordMem(input: {
   available?: boolean;
   note?: string;
   isCustom?: boolean;
+  resetSlots?: boolean;
 }): SiteVisitScheduleConfig {
   const store = getMemoryStore();
   const visitDate = input.date.trim();
@@ -531,7 +560,7 @@ export function upsertAppointmentDateRecordMem(input: {
     available: typeof input.available === "boolean" ? input.available : existing?.available ?? true,
     note: input.note !== undefined ? input.note : existing?.note || "",
     isCustom: input.isCustom !== undefined ? input.isCustom : existing?.isCustom ?? true,
-    ...(existing?.slots ? { slots: existing.slots } : {}),
+    ...(input.resetSlots ? {} : existing?.slots ? { slots: existing.slots } : {}),
   };
   return getAppointmentScheduleConfigMem();
 }
@@ -539,6 +568,34 @@ export function upsertAppointmentDateRecordMem(input: {
 export function deleteAppointmentDateRecordMem(date: string): SiteVisitScheduleConfig {
   const store = getMemoryStore();
   delete store.appointmentDates[date.trim()];
+  return getAppointmentScheduleConfigMem();
+}
+
+export function upsertMonthlyTemplateRecordMem(input: {
+  monthKey: string;
+  slots: Partial<ManagedSiteVisitSlot>[];
+  activeWeekdays?: number[];
+  closedDates?: string[];
+  note?: string;
+  clearPerDateCustomSlots?: boolean;
+}): SiteVisitScheduleConfig {
+  const store = getMemoryStore();
+  const current = getAppointmentScheduleConfigMem();
+  const updated = applyMonthlyTemplateToSchedule(current, input);
+  store.appointmentDates = updated.dates;
+  store.cmsDocs.set("site_visit_monthly_templates", {
+    monthlyTemplates: updated.monthlyTemplates || {},
+  });
+  return getAppointmentScheduleConfigMem();
+}
+
+export function deleteMonthlyTemplateRecordMem(monthKey: string): SiteVisitScheduleConfig {
+  const store = getMemoryStore();
+  const current = getAppointmentScheduleConfigMem();
+  const updated = deleteMonthlyTemplateFromSchedule(current, monthKey);
+  store.cmsDocs.set("site_visit_monthly_templates", {
+    monthlyTemplates: updated.monthlyTemplates || {},
+  });
   return getAppointmentScheduleConfigMem();
 }
 

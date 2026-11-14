@@ -1,4 +1,4 @@
-import { Form, Input, Button, message, Select } from "antd";
+import { App as AntdApp, Form, Input, Button, Select } from "antd";
 import AxiosConfig from "../../../Context/AxiosConfig";
 
 interface CreateCustomerProps {
@@ -6,6 +6,7 @@ interface CreateCustomerProps {
 }
 
 function CreateCustomer({ onSuccess }: CreateCustomerProps) {
+  const { message } = AntdApp.useApp();
   const [form] = Form.useForm();
 
   interface CustomerFormValues {

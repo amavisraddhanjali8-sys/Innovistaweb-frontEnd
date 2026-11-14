@@ -56,8 +56,9 @@ export default function Products() {
         ]);
         if (!active) return;
 
-        if (cmsRes.data?.landing) {
-          setLandingCms(normalizeProductLandingCms(cmsRes.data.landing));
+        const rawLanding = cmsRes.data?.landing ?? cmsRes.data?.data;
+        if (rawLanding) {
+          setLandingCms(normalizeProductLandingCms(rawLanding));
         }
         if (
           Array.isArray(cmsRes.data?.categories) &&
