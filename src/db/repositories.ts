@@ -1,5 +1,61 @@
 import { asc, desc, eq, inArray } from "drizzle-orm";
-import { db } from "./index.ts";
+import { db, markDatabaseOffline, isMemoryFallbackActive } from "./index.ts";
+import {
+  addAppointmentSlotRecordMem,
+  createAppointmentRecordMem,
+  createCategoryRecordMem,
+  createFeedbackRecordMem,
+  createMediaAssetRecordMem,
+  createOrderRecordMem,
+  createProductRecordMem,
+  createProjectRecordMem,
+  createRfqRecordMem,
+  createUserAccountMem,
+  deleteAppointmentDateRecordMem,
+  deleteAppointmentSlotRecordMem,
+  deleteBlogPostRecordMem,
+  deleteCategoryRecordMem,
+  deleteChatbotFaqRecordMem,
+  deleteFeedbackRecordMem,
+  deleteMediaAssetRecordMem,
+  deleteProductRecordMem,
+  deleteProjectRecordMem,
+  deleteUserAccountMem,
+  ensureMediaAssetIdForUrlMem,
+  getAppointmentScheduleConfigMem,
+  getCmsDocMem,
+  getProductByAnyIdMem,
+  listAppointmentsMem,
+  listBlogPostsMem,
+  listCategoriesMem,
+  listChatbotFaqsMem,
+  listFeedbacksMem,
+  listMediaAssetsMem,
+  listNotificationsMem,
+  listOrdersMem,
+  listProductsMem,
+  listProjectsMem,
+  listRelatedPortalsMem,
+  listRfqRecordsMem,
+  listUsersByRolesMem,
+  markNotificationReadMem,
+  reorderCategoryRecordsMem,
+  reorderFeedbackRecordsMem,
+  replaceRelatedPortalsMem,
+  resetSeedDataCheckMem,
+  setCmsDocMem,
+  updateAppointmentSlotRecordMem,
+  updateAppointmentStatusRecordMem,
+  updateCategoryRecordMem,
+  updateFeedbackRecordMem,
+  updateOrderStatusRecordMem,
+  updateProductRecordMem,
+  updateProjectRecordMem,
+  updateUserAccountMem,
+  upsertAppointmentDateRecordMem,
+  upsertBlogPostRecordMem,
+  upsertChatbotFaqRecordMem,
+} from "./memoryRepositories.ts";
 import {
   appointmentDates,
   appointments,
@@ -61,6 +117,7 @@ export async function listMediaAssets(filters?: {
   sourceType?: string;
   entityScope?: string;
 }) {
+  if (isMemoryFallbackActive()) return listMediaAssetsMem(filters);
   try {
     await ensureDatabaseSeeded();
     const rows = await db.select().from(mediaAssets).orderBy(desc(mediaAssets.id));
@@ -81,8 +138,8 @@ export async function listMediaAssets(filters?: {
       return true;
     });
   } catch (error) {
-    console.error("Error listing media assets:", error);
-    throw new Error("Database query failed while loading media assets.", { cause: error });
+    markDatabaseOffline(error);
+    return listMediaAssetsMem(filters);
   }
 }
 
@@ -93,6 +150,7 @@ export async function createMediaAssetRecord(
   if (normalized.valid === false) {
     throw new Error(normalized.error);
   }
+  if (isMemoryFallbackActive()) return createMediaAssetRecordMem(input);
   try {
     await ensureDatabaseSeeded();
     const data = normalized.data;
@@ -114,8 +172,8 @@ export async function createMediaAssetRecord(
       .returning();
     return inserted;
   } catch (error) {
-    console.error("Error creating media asset:", error);
-    throw new Error("Database query failed while saving media asset.", { cause: error });
+    markDatabaseOffline(error);
+    return createMediaAssetRecordMem(input);
   }
 }
 
@@ -125,6 +183,9 @@ export async function ensureMediaAssetIdForUrl(
   entityScope = "general",
   uploadedByUserId: number | null = null
 ): Promise<number | null> {
+  if (isMemoryFallbackActive()) {
+    return ensureMediaAssetIdForUrlMem(url, title, entityScope, uploadedByUserId);
+  }
   const clean = (url || "").trim();
   if (!clean) return null;
   try {
@@ -155,6 +216,7 @@ export async function ensureMediaAssetIdForUrl(
 }
 
 export async function deleteMediaAssetRecord(id: number) {
+  if (isMemoryFallbackActive()) return deleteMediaAssetRecordMem(id);
   try {
     await ensureDatabaseSeeded();
     const deleted = await db
@@ -163,8 +225,8 @@ export async function deleteMediaAssetRecord(id: number) {
       .returning();
     return deleted[0] || null;
   } catch (error) {
-    console.error("Error deleting media asset:", error);
-    throw new Error("Database query failed while deleting media asset.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteMediaAssetRecordMem(id);
   }
 }
 
@@ -172,6 +234,7 @@ export async function deleteMediaAssetRecord(id: number) {
 // USERS (ADMINS / STAFF / CUSTOMERS)
 // ============================================================================
 export async function listUsersByRoles(roles?: string[]) {
+  if (isMemoryFallbackActive()) return listUsersByRolesMem(roles);
   try {
     await ensureDatabaseSeeded();
     if (roles && roles.length > 0) {
@@ -183,8 +246,8 @@ export async function listUsersByRoles(roles?: string[]) {
     }
     return await db.select().from(users).orderBy(asc(users.id));
   } catch (error) {
-    console.error("Error listing users:", error);
-    throw new Error("Database query failed while loading users.", { cause: error });
+    markDatabaseOffline(error);
+    return listUsersByRolesMem(roles);
   }
 }
 
@@ -200,6 +263,7 @@ export async function createUserAccount(payload: {
   isVerified?: boolean;
   purchaseGoods?: string[];
 }) {
+  if (isMemoryFallbackActive()) return createUserAccountMem(payload);
   try {
     await ensureDatabaseSeeded();
     const cleanEmail = payload.email.trim().toLowerCase();
@@ -221,8 +285,8 @@ export async function createUserAccount(payload: {
       .returning();
     return created;
   } catch (error) {
-    console.error("Error creating user:", error);
-    throw new Error("Database query failed while creating user.", { cause: error });
+    markDatabaseOffline(error);
+    return createUserAccountMem(payload);
   }
 }
 
@@ -240,6 +304,7 @@ export async function updateUserAccount(
     purchaseGoods: string[];
   }>
 ) {
+  if (isMemoryFallbackActive()) return updateUserAccountMem(id, patch);
   try {
     await ensureDatabaseSeeded();
     const [updated] = await db
@@ -260,19 +325,20 @@ export async function updateUserAccount(
       .returning();
     return updated || null;
   } catch (error) {
-    console.error("Error updating user:", error);
-    throw new Error("Database query failed while updating user.", { cause: error });
+    markDatabaseOffline(error);
+    return updateUserAccountMem(id, patch);
   }
 }
 
 export async function deleteUserAccount(id: number) {
+  if (isMemoryFallbackActive()) return deleteUserAccountMem(id);
   try {
     await ensureDatabaseSeeded();
     const deleted = await db.delete(users).where(eq(users.id, id)).returning();
     return deleted[0] || null;
   } catch (error) {
-    console.error("Error deleting user:", error);
-    throw new Error("Database query failed while deleting user.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteUserAccountMem(id);
   }
 }
 
@@ -299,6 +365,7 @@ function mapCategoryRow(row: typeof categories.$inferSelect): ProductCategory {
 }
 
 export async function listCategories(): Promise<ProductCategory[]> {
+  if (isMemoryFallbackActive()) return listCategoriesMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -307,12 +374,13 @@ export async function listCategories(): Promise<ProductCategory[]> {
       .orderBy(asc(categories.displayOrder), asc(categories.id));
     return rows.map(mapCategoryRow);
   } catch (error) {
-    console.error("Error listing categories:", error);
-    throw new Error("Database query failed while loading categories.", { cause: error });
+    markDatabaseOffline(error);
+    return listCategoriesMem();
   }
 }
 
 export async function createCategoryRecord(raw: Partial<ProductCategory>) {
+  if (isMemoryFallbackActive()) return createCategoryRecordMem(raw);
   try {
     await ensureDatabaseSeeded();
     const existing = await db.select().from(categories);
@@ -342,12 +410,13 @@ export async function createCategoryRecord(raw: Partial<ProductCategory>) {
       .returning();
     return mapCategoryRow(inserted);
   } catch (error) {
-    console.error("Error creating category:", error);
-    throw new Error("Database query failed while creating category.", { cause: error });
+    markDatabaseOffline(error);
+    return createCategoryRecordMem(raw);
   }
 }
 
 export async function updateCategoryRecord(keyOrId: string, raw: Partial<ProductCategory>) {
+  if (isMemoryFallbackActive()) return updateCategoryRecordMem(keyOrId, raw);
   try {
     await ensureDatabaseSeeded();
     const all = await db.select().from(categories);
@@ -391,12 +460,13 @@ export async function updateCategoryRecord(keyOrId: string, raw: Partial<Product
 
     return mapCategoryRow(updated);
   } catch (error) {
-    console.error("Error updating category:", error);
-    throw new Error("Database query failed while updating category.", { cause: error });
+    markDatabaseOffline(error);
+    return updateCategoryRecordMem(keyOrId, raw);
   }
 }
 
 export async function reorderCategoryRecords(orderedIds: string[]): Promise<ProductCategory[]> {
+  if (isMemoryFallbackActive()) return reorderCategoryRecordsMem(orderedIds);
   try {
     await ensureDatabaseSeeded();
     const all = await db.select().from(categories).orderBy(asc(categories.displayOrder));
@@ -413,12 +483,13 @@ export async function reorderCategoryRecords(orderedIds: string[]): Promise<Prod
     }
     return await listCategories();
   } catch (error) {
-    console.error("Error reordering categories:", error);
-    throw new Error("Database query failed while reordering categories.", { cause: error });
+    markDatabaseOffline(error);
+    return reorderCategoryRecordsMem(orderedIds);
   }
 }
 
 export async function deleteCategoryRecord(keyOrId: string) {
+  if (isMemoryFallbackActive()) return deleteCategoryRecordMem(keyOrId);
   try {
     await ensureDatabaseSeeded();
     const all = await db.select().from(categories);
@@ -432,8 +503,8 @@ export async function deleteCategoryRecord(keyOrId: string) {
     await db.delete(categories).where(eq(categories.id, match.id));
     return mapCategoryRow(match);
   } catch (error) {
-    console.error("Error deleting category:", error);
-    throw new Error("Database query failed while deleting category.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteCategoryRecordMem(keyOrId);
   }
 }
 
@@ -525,17 +596,19 @@ async function resolveProductRowByAnyId(idOrKey: string | number) {
 }
 
 export async function listProducts(): Promise<DesignItem[]> {
+  if (isMemoryFallbackActive()) return listProductsMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db.select().from(products).orderBy(asc(products.id));
     return await hydrateProducts(rows);
   } catch (error) {
-    console.error("Error listing products:", error);
-    throw new Error("Database query failed while loading products.", { cause: error });
+    markDatabaseOffline(error);
+    return listProductsMem();
   }
 }
 
 export async function getProductByAnyId(idOrKey: string | number): Promise<DesignItem | null> {
+  if (isMemoryFallbackActive()) return getProductByAnyIdMem(idOrKey);
   try {
     await ensureDatabaseSeeded();
     const row = await resolveProductRowByAnyId(idOrKey);
@@ -543,8 +616,8 @@ export async function getProductByAnyId(idOrKey: string | number): Promise<Desig
     const hydrated = await hydrateProducts([row]);
     return hydrated[0] || null;
   } catch (error) {
-    console.error("Error fetching product:", error);
-    throw new Error("Database query failed while fetching product.", { cause: error });
+    markDatabaseOffline(error);
+    return getProductByAnyIdMem(idOrKey);
   }
 }
 
@@ -591,6 +664,7 @@ async function syncProductRelations(
 }
 
 export async function createProductRecord(raw: Partial<DesignItem>): Promise<DesignItem> {
+  if (isMemoryFallbackActive()) return createProductRecordMem(raw);
   try {
     await ensureDatabaseSeeded();
     const existingAll = await db.select().from(products);
@@ -675,8 +749,8 @@ export async function createProductRecord(raw: Partial<DesignItem>): Promise<Des
     const hydrated = await hydrateProducts([inserted]);
     return hydrated[0];
   } catch (error) {
-    console.error("Error creating product:", error);
-    throw new Error("Database query failed while creating product.", { cause: error });
+    markDatabaseOffline(error);
+    return createProductRecordMem(raw);
   }
 }
 
@@ -684,6 +758,7 @@ export async function updateProductRecord(
   idOrKey: string | number,
   raw: Partial<DesignItem>
 ): Promise<DesignItem | null> {
+  if (isMemoryFallbackActive()) return updateProductRecordMem(idOrKey, raw);
   try {
     await ensureDatabaseSeeded();
     const row = await resolveProductRowByAnyId(idOrKey);
@@ -756,12 +831,13 @@ export async function updateProductRecord(
 
     return (await hydrateProducts([updated]))[0];
   } catch (error) {
-    console.error("Error updating product:", error);
-    throw new Error("Database query failed while updating product.", { cause: error });
+    markDatabaseOffline(error);
+    return updateProductRecordMem(idOrKey, raw);
   }
 }
 
 export async function deleteProductRecord(idOrKey: string | number): Promise<boolean> {
+  if (isMemoryFallbackActive()) return deleteProductRecordMem(idOrKey);
   try {
     await ensureDatabaseSeeded();
     const row = await resolveProductRowByAnyId(idOrKey);
@@ -769,8 +845,8 @@ export async function deleteProductRecord(idOrKey: string | number): Promise<boo
     await db.delete(products).where(eq(products.id, row.id));
     return true;
   } catch (error) {
-    console.error("Error deleting product:", error);
-    throw new Error("Database query failed while deleting product.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteProductRecordMem(idOrKey);
   }
 }
 
@@ -796,6 +872,7 @@ function mapAppointmentRow(row: typeof appointments.$inferSelect): SiteVisitBook
 }
 
 export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleConfig> {
+  if (isMemoryFallbackActive()) return getAppointmentScheduleConfigMem();
   try {
     await ensureDatabaseSeeded();
     const [slotRows, dateRows, blockedDoc] = await Promise.all([
@@ -835,12 +912,13 @@ export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleC
       blockedKeys,
     });
   } catch (error) {
-    console.error("Error loading appointment schedule:", error);
-    throw new Error("Database query failed while loading appointment schedule.", { cause: error });
+    markDatabaseOffline(error);
+    return getAppointmentScheduleConfigMem();
   }
 }
 
 export async function listAppointments(): Promise<SiteVisitBooking[]> {
+  if (isMemoryFallbackActive()) return listAppointmentsMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -849,8 +927,8 @@ export async function listAppointments(): Promise<SiteVisitBooking[]> {
       .orderBy(desc(appointments.createdAt));
     return rows.map(mapAppointmentRow);
   } catch (error) {
-    console.error("Error listing appointments:", error);
-    throw new Error("Database query failed while loading appointments.", { cause: error });
+    markDatabaseOffline(error);
+    return listAppointmentsMem();
   }
 }
 
@@ -865,6 +943,7 @@ export async function createAppointmentRecord(input: {
   notes?: string;
   userId?: number | null;
 }) {
+  if (isMemoryFallbackActive()) return createAppointmentRecordMem(input);
   try {
     await ensureDatabaseSeeded();
     const normalizedTime = normalizeSlotTime(input.slotTime);
@@ -894,8 +973,8 @@ export async function createAppointmentRecord(input: {
 
     return mapAppointmentRow(inserted);
   } catch (error) {
-    console.error("Error creating appointment:", error);
-    throw new Error("Database query failed while creating appointment.", { cause: error });
+    markDatabaseOffline(error);
+    return createAppointmentRecordMem(input);
   }
 }
 
@@ -903,6 +982,7 @@ export async function updateAppointmentStatusRecord(
   idOrCode: string,
   status: SiteVisitStatus
 ): Promise<SiteVisitBooking | null> {
+  if (isMemoryFallbackActive()) return updateAppointmentStatusRecordMem(idOrCode, status);
   try {
     await ensureDatabaseSeeded();
     const rows = await db.select().from(appointments);
@@ -918,8 +998,8 @@ export async function updateAppointmentStatusRecord(
       .returning();
     return mapAppointmentRow(updated);
   } catch (error) {
-    console.error("Error updating appointment status:", error);
-    throw new Error("Database query failed while updating appointment.", { cause: error });
+    markDatabaseOffline(error);
+    return updateAppointmentStatusRecordMem(idOrCode, status);
   }
 }
 
@@ -927,6 +1007,7 @@ export async function addAppointmentSlotRecord(
   date: string | undefined,
   slotInput: { time: string; endTime?: string; label?: string; available?: boolean }
 ) {
+  if (isMemoryFallbackActive()) return addAppointmentSlotRecordMem(date, slotInput);
   try {
     await ensureDatabaseSeeded();
     const normTime = normalizeSlotTime(slotInput.time);
@@ -1005,8 +1086,8 @@ export async function addAppointmentSlotRecord(
 
     return await getAppointmentScheduleConfig();
   } catch (error) {
-    console.error("Error adding appointment slot:", error);
-    throw new Error("Database query failed while adding appointment slot.", { cause: error });
+    markDatabaseOffline(error);
+    return addAppointmentSlotRecordMem(date, slotInput);
   }
 }
 
@@ -1015,6 +1096,7 @@ export async function updateAppointmentSlotRecord(
   date: string | undefined,
   patch: Partial<ManagedSiteVisitSlot>
 ) {
+  if (isMemoryFallbackActive()) return updateAppointmentSlotRecordMem(slotId, date, patch);
   try {
     await ensureDatabaseSeeded();
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
@@ -1087,12 +1169,13 @@ export async function updateAppointmentSlotRecord(
     }
     return await getAppointmentScheduleConfig();
   } catch (error) {
-    console.error("Error updating appointment slot:", error);
-    throw new Error("Database query failed while updating appointment slot.", { cause: error });
+    markDatabaseOffline(error);
+    return updateAppointmentSlotRecordMem(slotId, date, patch);
   }
 }
 
 export async function deleteAppointmentSlotRecord(slotId: string, date?: string) {
+  if (isMemoryFallbackActive()) return deleteAppointmentSlotRecordMem(slotId, date);
   try {
     await ensureDatabaseSeeded();
     if (date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim())) {
@@ -1142,8 +1225,8 @@ export async function deleteAppointmentSlotRecord(slotId: string, date?: string)
     }
     return await getAppointmentScheduleConfig();
   } catch (error) {
-    console.error("Error deleting appointment slot:", error);
-    throw new Error("Database query failed while deleting appointment slot.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteAppointmentSlotRecordMem(slotId, date);
   }
 }
 
@@ -1153,6 +1236,7 @@ export async function upsertAppointmentDateRecord(input: {
   note?: string;
   isCustom?: boolean;
 }) {
+  if (isMemoryFallbackActive()) return upsertAppointmentDateRecordMem(input);
   try {
     await ensureDatabaseSeeded();
     const visitDate = input.date.trim();
@@ -1186,19 +1270,20 @@ export async function upsertAppointmentDateRecord(input: {
       });
     return await getAppointmentScheduleConfig();
   } catch (error) {
-    console.error("Error upserting appointment date:", error);
-    throw new Error("Database query failed while updating appointment date.", { cause: error });
+    markDatabaseOffline(error);
+    return upsertAppointmentDateRecordMem(input);
   }
 }
 
 export async function deleteAppointmentDateRecord(date: string) {
+  if (isMemoryFallbackActive()) return deleteAppointmentDateRecordMem(date);
   try {
     await ensureDatabaseSeeded();
     await db.delete(appointmentDates).where(eq(appointmentDates.visitDate, date.trim()));
     return await getAppointmentScheduleConfig();
   } catch (error) {
-    console.error("Error deleting appointment date:", error);
-    throw new Error("Database query failed while deleting appointment date.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteAppointmentDateRecordMem(date);
   }
 }
 
@@ -1228,17 +1313,19 @@ function mapBlogRow(row: typeof blogPosts.$inferSelect): BlogPostItem {
 }
 
 export async function listBlogPosts(): Promise<BlogPostItem[]> {
+  if (isMemoryFallbackActive()) return listBlogPostsMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db.select().from(blogPosts).orderBy(desc(blogPosts.publishedAt));
     return rows.map(mapBlogRow);
   } catch (error) {
-    console.error("Error listing blog posts:", error);
-    throw new Error("Database query failed while loading blog posts.", { cause: error });
+    markDatabaseOffline(error);
+    return listBlogPostsMem();
   }
 }
 
 export async function upsertBlogPostRecord(post: BlogPostItem): Promise<BlogPostItem> {
+  if (isMemoryFallbackActive()) return upsertBlogPostRecordMem(post);
   try {
     await ensureDatabaseSeeded();
     const coverAssetId = await ensureMediaAssetIdForUrl(post.coverImage, post.title, "blog");
@@ -1290,12 +1377,13 @@ export async function upsertBlogPostRecord(post: BlogPostItem): Promise<BlogPost
 
     return mapBlogRow(saved);
   } catch (error) {
-    console.error("Error saving blog post:", error);
-    throw new Error("Database query failed while saving blog post.", { cause: error });
+    markDatabaseOffline(error);
+    return upsertBlogPostRecordMem(post);
   }
 }
 
 export async function deleteBlogPostRecord(idOrSlug: string): Promise<boolean> {
+  if (isMemoryFallbackActive()) return deleteBlogPostRecordMem(idOrSlug);
   try {
     await ensureDatabaseSeeded();
     const all = await db.select().from(blogPosts);
@@ -1306,8 +1394,8 @@ export async function deleteBlogPostRecord(idOrSlug: string): Promise<boolean> {
     await db.delete(blogPosts).where(eq(blogPosts.id, match.id));
     return true;
   } catch (error) {
-    console.error("Error deleting blog post:", error);
-    throw new Error("Database query failed while deleting blog post.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteBlogPostRecordMem(idOrSlug);
   }
 }
 
@@ -1315,6 +1403,7 @@ export async function deleteBlogPostRecord(idOrSlug: string): Promise<boolean> {
 // PROJECTS REPOSITORY
 // ============================================================================
 export async function listProjects() {
+  if (isMemoryFallbackActive()) return listProjectsMem();
   try {
     await ensureDatabaseSeeded();
     const [projRows, imgRows] = await Promise.all([
@@ -1339,8 +1428,8 @@ export async function listProjects() {
       Budget: Number(p.budget || 0),
     }));
   } catch (error) {
-    console.error("Error listing projects:", error);
-    throw new Error("Database query failed while loading projects.", { cause: error });
+    markDatabaseOffline(error);
+    return listProjectsMem();
   }
 }
 
@@ -1356,6 +1445,7 @@ export async function createProjectRecord(input: {
   Project_FinishedDate?: string | null;
   Budget?: number;
 }) {
+  if (isMemoryFallbackActive()) return createProjectRecordMem(input);
   try {
     await ensureDatabaseSeeded();
     const [inserted] = await db
@@ -1387,8 +1477,8 @@ export async function createProjectRecord(input: {
     const all = await listProjects();
     return all.find((p) => p.ProjectID === inserted.id)!;
   } catch (error) {
-    console.error("Error creating project:", error);
-    throw new Error("Database query failed while creating project.", { cause: error });
+    markDatabaseOffline(error);
+    return createProjectRecordMem(input);
   }
 }
 
@@ -1407,6 +1497,7 @@ export async function updateProjectRecord(
     Budget: number;
   }>
 ) {
+  if (isMemoryFallbackActive()) return updateProjectRecordMem(projectId, input);
   try {
     await ensureDatabaseSeeded();
     const [updated] = await db
@@ -1446,19 +1537,20 @@ export async function updateProjectRecord(
     const all = await listProjects();
     return all.find((p) => p.ProjectID === projectId) || null;
   } catch (error) {
-    console.error("Error updating project:", error);
-    throw new Error("Database query failed while updating project.", { cause: error });
+    markDatabaseOffline(error);
+    return updateProjectRecordMem(projectId, input);
   }
 }
 
 export async function deleteProjectRecord(projectId: number): Promise<boolean> {
+  if (isMemoryFallbackActive()) return deleteProjectRecordMem(projectId);
   try {
     await ensureDatabaseSeeded();
     const deleted = await db.delete(projects).where(eq(projects.id, projectId)).returning();
     return deleted.length > 0;
   } catch (error) {
-    console.error("Error deleting project:", error);
-    throw new Error("Database query failed while deleting project.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteProjectRecordMem(projectId);
   }
 }
 
@@ -1466,6 +1558,7 @@ export async function deleteProjectRecord(projectId: number): Promise<boolean> {
 // ORDERS & RFQS REPOSITORY
 // ============================================================================
 export async function listOrders() {
+  if (isMemoryFallbackActive()) return listOrdersMem();
   try {
     await ensureDatabaseSeeded();
     const [orderRows, itemRows] = await Promise.all([
@@ -1494,8 +1587,8 @@ export async function listOrders() {
         })),
     }));
   } catch (error) {
-    console.error("Error listing orders:", error);
-    throw new Error("Database query failed while loading orders.", { cause: error });
+    markDatabaseOffline(error);
+    return listOrdersMem();
   }
 }
 
@@ -1506,6 +1599,7 @@ export async function createOrderRecord(input: {
   Client_Number?: string;
   Designs?: Array<{ DesignID?: string | number; Design_Name?: string; Design_Image?: string }>;
 }) {
+  if (isMemoryFallbackActive()) return createOrderRecordMem(input);
   try {
     await ensureDatabaseSeeded();
     const orderCode = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -1567,12 +1661,13 @@ export async function createOrderRecord(input: {
     const all = await listOrders();
     return all.find((o) => o.OrderID === orderCode)!;
   } catch (error) {
-    console.error("Error creating order:", error);
-    throw new Error("Database query failed while creating order.", { cause: error });
+    markDatabaseOffline(error);
+    return createOrderRecordMem(input);
   }
 }
 
 export async function updateOrderStatusRecord(orderCode: string, status: string) {
+  if (isMemoryFallbackActive()) return updateOrderStatusRecordMem(orderCode, status);
   try {
     await ensureDatabaseSeeded();
     const [updated] = await db
@@ -1584,8 +1679,8 @@ export async function updateOrderStatusRecord(orderCode: string, status: string)
     const all = await listOrders();
     return all.find((o) => o.OrderID === orderCode) || null;
   } catch (error) {
-    console.error("Error updating order status:", error);
-    throw new Error("Database query failed while updating order status.", { cause: error });
+    markDatabaseOffline(error);
+    return updateOrderStatusRecordMem(orderCode, status);
   }
 }
 
@@ -1593,6 +1688,7 @@ export async function createRfqRecord(
   input: Record<string, string>,
   attachments: Array<{ url: string; fileName: string; size?: number; mediaAssetId?: number | null }>
 ) {
+  if (isMemoryFallbackActive()) return createRfqRecordMem(input, attachments);
   try {
     await ensureDatabaseSeeded();
     const [inserted] = await db
@@ -1645,12 +1741,13 @@ export async function createRfqRecord(
 
     return inserted;
   } catch (error) {
-    console.error("Error creating RFQ request:", error);
-    throw new Error("Database query failed while saving RFQ.", { cause: error });
+    markDatabaseOffline(error);
+    return createRfqRecordMem(input, attachments);
   }
 }
 
 export async function listRfqRecords() {
+  if (isMemoryFallbackActive()) return listRfqRecordsMem();
   try {
     await ensureDatabaseSeeded();
     const [rfqs, atts] = await Promise.all([
@@ -1662,8 +1759,8 @@ export async function listRfqRecords() {
       attachments: atts.filter((a) => a.rfqId === r.id),
     }));
   } catch (error) {
-    console.error("Error listing RFQ requests:", error);
-    throw new Error("Database query failed while loading RFQs.", { cause: error });
+    markDatabaseOffline(error);
+    return listRfqRecordsMem();
   }
 }
 
@@ -1693,6 +1790,7 @@ function mapFeedbackRow(row: typeof customerFeedbacks.$inferSelect): CustomerFee
 }
 
 export async function listFeedbacks(): Promise<CustomerFeedbackRecord[]> {
+  if (isMemoryFallbackActive()) return listFeedbacksMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -1701,12 +1799,13 @@ export async function listFeedbacks(): Promise<CustomerFeedbackRecord[]> {
       .orderBy(asc(customerFeedbacks.displayOrder), asc(customerFeedbacks.id));
     return rows.map(mapFeedbackRow);
   } catch (error) {
-    console.error("Error listing feedbacks:", error);
-    throw new Error("Database query failed while loading customer feedbacks.", { cause: error });
+    markDatabaseOffline(error);
+    return listFeedbacksMem();
   }
 }
 
 export async function createFeedbackRecord(fb: Omit<CustomerFeedbackRecord, "Feed_backId">) {
+  if (isMemoryFallbackActive()) return createFeedbackRecordMem(fb);
   try {
     await ensureDatabaseSeeded();
     const avatarAssetId = fb.Customer.Cus_Avatar
@@ -1731,8 +1830,8 @@ export async function createFeedbackRecord(fb: Omit<CustomerFeedbackRecord, "Fee
       .returning();
     return mapFeedbackRow(inserted);
   } catch (error) {
-    console.error("Error creating feedback:", error);
-    throw new Error("Database query failed while saving feedback.", { cause: error });
+    markDatabaseOffline(error);
+    return createFeedbackRecordMem(fb);
   }
 }
 
@@ -1740,6 +1839,7 @@ export async function updateFeedbackRecord(
   id: number,
   patch: Partial<CustomerFeedbackRecord>
 ): Promise<CustomerFeedbackRecord | null> {
+  if (isMemoryFallbackActive()) return updateFeedbackRecordMem(id, patch);
   try {
     await ensureDatabaseSeeded();
     const existing = await db
@@ -1776,12 +1876,13 @@ export async function updateFeedbackRecord(
 
     return mapFeedbackRow(updated);
   } catch (error) {
-    console.error("Error updating feedback:", error);
-    throw new Error("Database query failed while updating feedback.", { cause: error });
+    markDatabaseOffline(error);
+    return updateFeedbackRecordMem(id, patch);
   }
 }
 
 export async function deleteFeedbackRecord(id: number): Promise<boolean> {
+  if (isMemoryFallbackActive()) return deleteFeedbackRecordMem(id);
   try {
     await ensureDatabaseSeeded();
     const deleted = await db
@@ -1790,12 +1891,13 @@ export async function deleteFeedbackRecord(id: number): Promise<boolean> {
       .returning();
     return deleted.length > 0;
   } catch (error) {
-    console.error("Error deleting feedback:", error);
-    throw new Error("Database query failed while deleting feedback.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteFeedbackRecordMem(id);
   }
 }
 
 export async function reorderFeedbackRecords(orderedIds: number[]) {
+  if (isMemoryFallbackActive()) return reorderFeedbackRecordsMem(orderedIds);
   try {
     await ensureDatabaseSeeded();
     for (let i = 0; i < orderedIds.length; i++) {
@@ -1806,12 +1908,13 @@ export async function reorderFeedbackRecords(orderedIds: number[]) {
     }
     return await listFeedbacks();
   } catch (error) {
-    console.error("Error reordering feedbacks:", error);
-    throw new Error("Database query failed while reordering feedbacks.", { cause: error });
+    markDatabaseOffline(error);
+    return reorderFeedbackRecordsMem(orderedIds);
   }
 }
 
 export async function listChatbotFaqs(): Promise<ChatbotFaqItem[]> {
+  if (isMemoryFallbackActive()) return listChatbotFaqsMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -1829,12 +1932,13 @@ export async function listChatbotFaqs(): Promise<ChatbotFaqItem[]> {
       updatedAt: f.updatedAt.toISOString(),
     }));
   } catch (error) {
-    console.error("Error listing chatbot FAQs:", error);
-    throw new Error("Database query failed while loading chatbot FAQs.", { cause: error });
+    markDatabaseOffline(error);
+    return listChatbotFaqsMem();
   }
 }
 
 export async function upsertChatbotFaqRecord(faq: ChatbotFaqItem): Promise<ChatbotFaqItem> {
+  if (isMemoryFallbackActive()) return upsertChatbotFaqRecordMem(faq);
   try {
     await ensureDatabaseSeeded();
     const [saved] = await db
@@ -1872,12 +1976,13 @@ export async function upsertChatbotFaqRecord(faq: ChatbotFaqItem): Promise<Chatb
       updatedAt: saved.updatedAt.toISOString(),
     };
   } catch (error) {
-    console.error("Error saving chatbot FAQ:", error);
-    throw new Error("Database query failed while saving chatbot FAQ.", { cause: error });
+    markDatabaseOffline(error);
+    return upsertChatbotFaqRecordMem(faq);
   }
 }
 
 export async function deleteChatbotFaqRecord(faqKey: string): Promise<boolean> {
+  if (isMemoryFallbackActive()) return deleteChatbotFaqRecordMem(faqKey);
   try {
     await ensureDatabaseSeeded();
     const deleted = await db
@@ -1886,12 +1991,13 @@ export async function deleteChatbotFaqRecord(faqKey: string): Promise<boolean> {
       .returning();
     return deleted.length > 0;
   } catch (error) {
-    console.error("Error deleting chatbot FAQ:", error);
-    throw new Error("Database query failed while deleting chatbot FAQ.", { cause: error });
+    markDatabaseOffline(error);
+    return deleteChatbotFaqRecordMem(faqKey);
   }
 }
 
 export async function listRelatedPortals(): Promise<RelatedPortalItem[]> {
+  if (isMemoryFallbackActive()) return listRelatedPortalsMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -1908,12 +2014,13 @@ export async function listRelatedPortals(): Promise<RelatedPortalItem[]> {
       isExternal: p.isExternal,
     }));
   } catch (error) {
-    console.error("Error listing related portals:", error);
-    throw new Error("Database query failed while loading portals.", { cause: error });
+    markDatabaseOffline(error);
+    return listRelatedPortalsMem();
   }
 }
 
 export async function replaceRelatedPortals(items: RelatedPortalItem[]) {
+  if (isMemoryFallbackActive()) return replaceRelatedPortalsMem(items);
   try {
     await ensureDatabaseSeeded();
     await db.delete(relatedPortals);
@@ -1934,12 +2041,13 @@ export async function replaceRelatedPortals(items: RelatedPortalItem[]) {
     }
     return await listRelatedPortals();
   } catch (error) {
-    console.error("Error replacing related portals:", error);
-    throw new Error("Database query failed while saving portals.", { cause: error });
+    markDatabaseOffline(error);
+    return replaceRelatedPortalsMem(items);
   }
 }
 
 export async function listNotifications() {
+  if (isMemoryFallbackActive()) return listNotificationsMem();
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -1955,12 +2063,13 @@ export async function listNotifications() {
       isRead: n.isRead,
     }));
   } catch (error) {
-    console.error("Error listing notifications:", error);
-    throw new Error("Database query failed while loading notifications.", { cause: error });
+    markDatabaseOffline(error);
+    return listNotificationsMem();
   }
 }
 
 export async function markNotificationRead(notifKey?: string) {
+  if (isMemoryFallbackActive()) return markNotificationReadMem(notifKey);
   try {
     await ensureDatabaseSeeded();
     if (notifKey) {
@@ -1973,12 +2082,13 @@ export async function markNotificationRead(notifKey?: string) {
     }
     return true;
   } catch (error) {
-    console.error("Error marking notification read:", error);
-    throw new Error("Database query failed while updating notification.", { cause: error });
+    markDatabaseOffline(error);
+    return markNotificationReadMem(notifKey);
   }
 }
 
 export async function getCmsDoc<T>(key: string, fallback: T): Promise<T> {
+  if (isMemoryFallbackActive()) return getCmsDocMem(key, fallback);
   try {
     await ensureDatabaseSeeded();
     const rows = await db
@@ -1989,8 +2099,8 @@ export async function getCmsDoc<T>(key: string, fallback: T): Promise<T> {
     if (!rows[0]) return fallback;
     return rows[0].payload as unknown as T;
   } catch (error) {
-    console.error(`Error fetching CMS document ${key}:`, error);
-    throw new Error("Database query failed while loading CMS settings.", { cause: error });
+    markDatabaseOffline(error);
+    return getCmsDocMem(key, fallback);
   }
 }
 
@@ -1999,6 +2109,7 @@ export async function setCmsDoc<T extends Record<string, unknown>>(
   payload: T,
   updatedByUserId: number | null = null
 ): Promise<T> {
+  if (isMemoryFallbackActive()) return setCmsDocMem(key, payload);
   try {
     await ensureDatabaseSeeded();
     await db
@@ -2019,27 +2130,33 @@ export async function setCmsDoc<T extends Record<string, unknown>>(
       });
     return payload;
   } catch (error) {
-    console.error(`Error saving CMS document ${key}:`, error);
-    throw new Error("Database query failed while saving CMS settings.", { cause: error });
+    markDatabaseOffline(error);
+    return setCmsDocMem(key, payload);
   }
 }
 
 export async function resetSeedDataCheck() {
-  // Helper for testing/diagnostics using Drizzle count
-  const [u, c, p, a, b, m] = await Promise.all([
-    db.select({ id: users.id }).from(users),
-    db.select({ id: categories.id }).from(categories),
-    db.select({ id: products.id }).from(products),
-    db.select({ id: appointments.id }).from(appointments),
-    db.select({ id: blogPosts.id }).from(blogPosts),
-    db.select({ id: mediaAssets.id }).from(mediaAssets),
-  ]);
-  return {
-    users: u.length,
-    categories: c.length,
-    products: p.length,
-    appointments: a.length,
-    blogPosts: b.length,
-    mediaAssets: m.length,
-  };
+  if (isMemoryFallbackActive()) return resetSeedDataCheckMem();
+  try {
+    // Helper for testing/diagnostics using Drizzle count
+    const [u, c, p, a, b, m] = await Promise.all([
+      db.select({ id: users.id }).from(users),
+      db.select({ id: categories.id }).from(categories),
+      db.select({ id: products.id }).from(products),
+      db.select({ id: appointments.id }).from(appointments),
+      db.select({ id: blogPosts.id }).from(blogPosts),
+      db.select({ id: mediaAssets.id }).from(mediaAssets),
+    ]);
+    return {
+      users: u.length,
+      categories: c.length,
+      products: p.length,
+      appointments: a.length,
+      blogPosts: b.length,
+      mediaAssets: m.length,
+    };
+  } catch (error) {
+    markDatabaseOffline(error);
+    return resetSeedDataCheckMem();
+  }
 }

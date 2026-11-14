@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
 interface BaseProps {
   children?: ReactNode;
@@ -31,6 +33,7 @@ const SIZE_CLASSES: Record<"sm" | "md" | "lg", string> = {
 };
 
 export default function RequestQuoteButton(props: RequestQuoteButtonProps) {
+  const { isLoggedIn } = useAuth();
   const {
     children = "Request Quote",
     className = "",
@@ -50,9 +53,13 @@ export default function RequestQuoteButton(props: RequestQuoteButtonProps) {
     .join(" ");
 
   if (props.as === "link") {
+    const resolvedTo =
+      !isLoggedIn && props.to.startsWith("/request-quote")
+        ? buildSignupRedirectUrl(props.to, "rfq")
+        : props.to;
     return (
       <Link
-        to={props.to}
+        to={resolvedTo}
         onClick={props.onClick}
         aria-label={ariaLabel}
         className={baseClasses}

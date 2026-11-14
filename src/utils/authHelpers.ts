@@ -103,3 +103,65 @@ export function getDemoAccountCredentials(kind: "client" | "admin"): {
     role: "customer",
   };
 }
+
+export type AuthGateAction = "quote" | "cart" | "rfq";
+
+/**
+ * Builds a signup-mode login route URL preserving the intended post-auth destination.
+ */
+export function buildSignupRedirectUrl(
+  redirectPath: string,
+  action?: AuthGateAction,
+  mode: "signup" | "login" = "signup"
+): string {
+  const safePath =
+    redirectPath && redirectPath.startsWith("/") && !redirectPath.startsWith("//")
+      ? redirectPath
+      : "/profile";
+  const params = new URLSearchParams();
+  params.set("mode", mode);
+  params.set("redirect", safePath);
+  if (action) {
+    params.set("action", action);
+  }
+  return `/profile-login?${params.toString()}`;
+}
+
+/**
+ * Parses ?mode=signup|login from query string.
+ */
+export function getAuthModeFromSearch(search: string): "login" | "signup" {
+  const params = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
+  return params.get("mode") === "signup" ? "signup" : "login";
+}
+
+/**
+ * Parses ?action=quote|cart|rfq from query string.
+ */
+export function getAuthActionFromSearch(search: string): AuthGateAction | null {
+  const params = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
+  const action = params.get("action");
+  if (action === "quote" || action === "cart" || action === "rfq") {
+    return action;
+  }
+  return null;
+}
+
+/**
+ * Resolves a safe post-auth destination from query string or falls back by role.
+ */
+export function parsePostAuthRedirect(search: string, role: AuthRole): string {
+  const params = new URLSearchParams(search.startsWith("?") ? search : `?${search}`);
+  const target = (params.get("redirect") || "").trim();
+  if (
+    target &&
+    target.startsWith("/") &&
+    !target.startsWith("//") &&
+    !target.startsWith("/profile-login") &&
+    !target.startsWith("/admin-login")
+  ) {
+    return target;
+  }
+  return resolvePostAuthRoute(role);
+}
+

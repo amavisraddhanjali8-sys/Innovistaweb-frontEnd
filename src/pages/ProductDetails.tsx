@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { Modal, message } from "antd";
 import {
   FiCheck,
@@ -26,6 +26,7 @@ import {
 } from "react-icons/md";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import ProductSystemCard from "../components/ProductSystemCard";
 import ConfigurationDiagramSvg from "../components/ConfigurationDiagramSvg";
@@ -75,7 +76,8 @@ function renderCustomizationIcon(category: CustomizationCategory) {
 export default function ProductDetails() {
   const { designId } = useParams<{ designId?: string }>();
   const location = useLocation();
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { user, isLoggedIn } = useAuth();
 
   const resolvedId = useMemo(() => {
     if (designId) return designId;
@@ -108,6 +110,11 @@ export default function ProductDetails() {
   const [quoteAccessory, setQuoteAccessory] = useState<string | undefined>(undefined);
 
   const openQuoteModal = (accessory?: string) => {
+    if (!isLoggedIn) {
+      message.info("Please create a customer account to request a quotation.");
+      navigate(buildSignupRedirectUrl(`${location.pathname}${location.search}`, "quote"));
+      return;
+    }
     setQuoteAccessory(accessory);
     setQuoteModalOpen(true);
   };
@@ -252,6 +259,11 @@ export default function ProductDetails() {
   }, [availableTabs, activeTab]);
 
   const handleAddToCart = () => {
+    if (!isLoggedIn) {
+      message.info("Please create a customer account to add items to your order.");
+      navigate(buildSignupRedirectUrl(`${location.pathname}${location.search}`, "cart"));
+      return;
+    }
     try {
       const saved = JSON.parse(localStorage.getItem("cart") || "[]");
       const currentList: (string | number)[] = Array.isArray(saved) ? saved : [];
@@ -262,12 +274,12 @@ export default function ProductDetails() {
         localStorage.setItem("cart", JSON.stringify(nextList));
         setInCart(true);
         window.dispatchEvent(new Event("innovista-cart-updated"));
-        message.success(`${design.Design_Name} added to quotation cart.`);
+        message.success(`${design.Design_Name} saved to your Customer Portal order selections.`);
       } else {
-        message.info(`${design.Design_Name} is already in your quotation cart.`);
+        message.info(`${design.Design_Name} is already in your order selections.`);
       }
     } catch {
-      message.error("Could not update quotation cart.");
+      message.error("Could not update order selections.");
     }
   };
 

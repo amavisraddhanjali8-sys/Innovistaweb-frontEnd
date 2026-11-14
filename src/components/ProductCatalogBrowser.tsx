@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Select, Slider } from "antd";
 import {
   FiRotateCcw,
   FiSearch,
-  FiShoppingBag,
   FiSliders,
 } from "react-icons/fi";
 import ProductSystemCard from "./ProductSystemCard";
@@ -46,7 +45,6 @@ export default function ProductCatalogBrowser({
   loading = false,
   onSelectCategorySlug,
 }: ProductCatalogBrowserProps) {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialQuery = searchParams.get("q") || "";
 
@@ -55,27 +53,6 @@ export default function ProductCatalogBrowser({
     searchQuery: initialQuery,
   }));
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [cartIds, setCartIds] = useState<string[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("cart") || "[]");
-      return Array.isArray(saved) ? saved.map(String) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    const syncCart = () => {
-      try {
-        const saved = JSON.parse(localStorage.getItem("cart") || "[]");
-        setCartIds(Array.isArray(saved) ? saved.map(String) : []);
-      } catch {
-        setCartIds([]);
-      }
-    };
-    window.addEventListener("innovista-cart-updated", syncCart);
-    return () => window.removeEventListener("innovista-cart-updated", syncCart);
-  }, []);
 
   useEffect(() => {
     if (lockedCategorySlug) {
@@ -207,17 +184,6 @@ export default function ProductCatalogBrowser({
               >
                 <FiRotateCcw className="text-xs" />
                 <span>Reset ({activeFilterCount})</span>
-              </button>
-            )}
-
-            {cartIds.length > 0 && (
-              <button
-                type="button"
-                onClick={() => navigate("/OrderCart")}
-                className="h-9 px-3.5 rounded-xl bg-sky-50 border border-sky-200 hover:border-[#3393B8] text-xs font-semibold text-[#22577A] inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors tabular-nums"
-              >
-                <FiShoppingBag className="text-xs" />
-                <span>Cart ({cartIds.length})</span>
               </button>
             )}
           </div>

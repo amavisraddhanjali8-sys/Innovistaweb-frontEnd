@@ -6,6 +6,10 @@ import {
   validateLoginInput,
   validateSignupInput,
   getDemoAccountCredentials,
+  buildSignupRedirectUrl,
+  getAuthModeFromSearch,
+  getAuthActionFromSearch,
+  parsePostAuthRedirect,
 } from "./authHelpers";
 
 describe("authHelpers", () => {
@@ -62,5 +66,28 @@ describe("authHelpers", () => {
     const admin = getDemoAccountCredentials("admin");
     assert.equal(admin.role, "admin");
     assert.equal(admin.email, "admin@innovista.com");
+  });
+
+  it("builds signup redirect URLs and parses modes, actions, and safe redirects", () => {
+    const url = buildSignupRedirectUrl("/products/1?view=specs", "cart");
+    assert.equal(
+      url,
+      "/profile-login?mode=signup&redirect=%2Fproducts%2F1%3Fview%3Dspecs&action=cart"
+    );
+
+    assert.equal(getAuthModeFromSearch("?mode=signup&action=quote"), "signup");
+    assert.equal(getAuthModeFromSearch("?mode=login"), "login");
+    assert.equal(getAuthActionFromSearch("?mode=signup&action=rfq"), "rfq");
+    assert.equal(getAuthActionFromSearch("?mode=signup&action=unknown"), null);
+
+    assert.equal(
+      parsePostAuthRedirect("?redirect=%2Frequest-quote%3Fproduct%3DDoor", "customer"),
+      "/request-quote?product=Door"
+    );
+    // Reject external / protocol-relative open redirects and login loops
+    assert.equal(parsePostAuthRedirect("?redirect=https://evil.com", "customer"), "/profile");
+    assert.equal(parsePostAuthRedirect("?redirect=//evil.com", "customer"), "/profile");
+    assert.equal(parsePostAuthRedirect("?redirect=/profile-login", "customer"), "/profile");
+    assert.equal(parsePostAuthRedirect("", "admin"), "/admin-home");
   });
 });

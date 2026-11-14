@@ -112,7 +112,7 @@ export default function Chatbot3DReceptionistAvatar({
     if (!container) return;
 
     const isSoftwareGl = detectSoftwareWebGL();
-    const fallbackSize = variant === "launcher" ? 84 : 48;
+    const fallbackSize = variant === "launcher" ? 104 : 52;
     const width = Math.max(44, container.clientWidth || fallbackSize);
     const height = Math.max(44, container.clientHeight || fallbackSize);
 

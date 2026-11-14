@@ -13,13 +13,40 @@ import {
   validateSiteContactSettings,
 } from "./footerConsultationHelpers";
 
-test("footer navigation columns expose valid internal routes without placeholder items", () => {
-  assert.equal(FOOTER_LINK_COLUMNS.length, 3);
+test("footer navigation columns expose all public routes without placeholder items", () => {
+  assert.equal(FOOTER_LINK_COLUMNS.length, 4);
+  const allRoutes = new Set<string>();
   for (const col of FOOTER_LINK_COLUMNS) {
     assert.ok(col.items.length >= 4);
     for (const item of col.items) {
       assert.ok(item.to.startsWith("/"), `Expected route for ${item.label}`);
+      allRoutes.add(item.to);
     }
+  }
+  const requiredRoutes = [
+    "/",
+    "/about",
+    "/products",
+    "/projects",
+    "/milestones",
+    "/news",
+    "/blogs",
+    "/resources",
+    "/request-quote",
+    "/contact",
+    "/profile",
+    "/profile-login",
+    "/products/category/doors",
+    "/products/category/windows",
+    "/products/category/shop-front",
+    "/products/category/partitions",
+    "/products/category/louvers",
+    "/products/category/roof-skylights",
+    "/products/category/bathrooms",
+    "/products/category/wardrobe-pantry",
+  ];
+  for (const route of requiredRoutes) {
+    assert.ok(allRoutes.has(route), `Missing required route in footer: ${route}`);
   }
 });
 

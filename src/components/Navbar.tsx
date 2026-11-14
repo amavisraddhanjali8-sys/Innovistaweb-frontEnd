@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   FiBookOpen,
   FiBox,
+  FiCalendar,
   FiFileText,
   FiHome,
   FiInfo,
@@ -13,7 +14,6 @@ import {
   FiSend,
   FiSettings,
   FiShield,
-  FiShoppingBag,
   FiUser,
   FiX,
 } from "react-icons/fi";
@@ -27,10 +27,13 @@ import {
   DashboardOutlined,
   ShoppingOutlined,
   SettingOutlined,
+  FileTextOutlined,
+  CalendarOutlined,
 } from "@ant-design/icons";
 import logo from "../assets/Images/logo/CompanyLogo.png";
 import styles from "../cssModules/Navbar.module.css";
 import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
 const MOBILE_BOTTOM_TABS = [
   { to: "/", label: "Home", Icon: FiHome, exact: true },
@@ -51,14 +54,26 @@ export default function Navbar() {
     {
       key: "profile",
       icon: <UserOutlined />,
-      label: "My Profile",
+      label: "Customer Portal",
       onClick: () => navigate("/profile"),
     },
     {
       key: "orders",
       icon: <ShoppingOutlined />,
-      label: "My Orders & Quotations",
+      label: "My Orders",
       onClick: () => navigate("/profile?tab=orders"),
+    },
+    {
+      key: "rfqs",
+      icon: <FileTextOutlined />,
+      label: "Request for Quotations",
+      onClick: () => navigate("/profile?tab=rfqs"),
+    },
+    {
+      key: "site-visits",
+      icon: <CalendarOutlined />,
+      label: "Site Visit Schedules",
+      onClick: () => navigate("/profile?tab=site-visits"),
     },
     {
       key: "settings",
@@ -134,6 +149,11 @@ export default function Navbar() {
 
   const handleQuoteClick = () => {
     setIsOpen(false);
+    if (!isLoggedIn) {
+      message.info("Please create a customer account to request a quotation.");
+      navigate(buildSignupRedirectUrl("/request-quote", "rfq"));
+      return;
+    }
     navigate("/request-quote");
   };
 
@@ -219,15 +239,6 @@ export default function Navbar() {
           >
             Contact
           </NavLink>
-          <NavLink
-            to="/OrderCart"
-            aria-label="Order Cart"
-            className={({ isActive }) =>
-              `${isActive ? styles.activeLink : styles.link} cursor-target flex items-center`
-            }
-          >
-            <FiShoppingBag className="text-[20px] text-[#22577a]" />
-          </NavLink>
 
           {isLoggedIn && user ? (
             <Dropdown
@@ -238,32 +249,38 @@ export default function Navbar() {
             >
               <button
                 type="button"
-                className="flex items-center gap-2 cursor-pointer bg-neutral-100 hover:bg-neutral-200 px-3 py-1.5 rounded-full transition-all border border-neutral-200 text-left -mt-1 cursor-target"
+                aria-label="Customer Profile Menu"
+                title={user.name}
+                data-testid="navbar-profile-icon"
+                className="w-10 h-10 rounded-full flex items-center justify-center cursor-pointer bg-[#22577A] hover:bg-[#194563] text-white border border-[#22577A] transition-all p-0 cursor-target shrink-0 overflow-hidden"
               >
-                <Avatar
-                  size={26}
-                  src={user.logo}
-                  icon={<UserOutlined />}
-                  className="bg-[#22577a] text-white shrink-0"
-                />
-                <span className="font-bold text-neutral-800 text-xs truncate max-w-[90px]">
-                  {user.name.split(" ")[0]}
-                </span>
-                <FontAwesomeIcon
-                  icon={faCaretDown}
-                  className="text-neutral-400 text-xs ml-0.5"
-                />
+                {user.logo && !user.logo.toLowerCase().includes(".svg") && !user.logo.includes("/assets/logos/") ? (
+                  <Avatar
+                    size={38}
+                    src={user.logo}
+                    icon={<UserOutlined />}
+                    className="bg-[#22577a] text-white shrink-0"
+                  />
+                ) : (
+                  <FiUser className="text-[18px]" />
+                )}
               </button>
             </Dropdown>
           ) : (
             <NavLink
               to="/profile-login"
+              aria-label="Customer Sign In or Profile"
+              title="Customer Portal & Sign In"
+              data-testid="navbar-profile-icon"
               className={({ isActive }) =>
-                `${isActive ? styles.activeLink : styles.link} cursor-target flex items-center gap-1.5`
+                `w-10 h-10 rounded-full flex items-center justify-center border transition-all no-underline cursor-target shrink-0 ${
+                  isActive
+                    ? "bg-[#22577A] text-white border-[#22577A]"
+                    : "bg-slate-50 text-[#22577a] border-slate-200 hover:bg-sky-50 hover:border-[#3393B8]"
+                }`
               }
             >
-              <UserOutlined className="text-base text-[#22577a]" />
-              <span>Profile</span>
+              <FiUser className="text-[18px]" />
             </NavLink>
           )}
         </div>
@@ -275,14 +292,32 @@ export default function Navbar() {
           <span className="relative z-10">Request Quote</span>
         </button>
 
-        {/* Mobile Right Quick Controls (Cart + 44px Hamburger Button) */}
+        {/* Mobile Right Quick Controls (Profile Icon + 44px Hamburger Button) */}
         <div className={styles.mobileControls}>
           <NavLink
-            to="/OrderCart"
-            aria-label="Order Cart"
-            className="w-11 h-11 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-[#22577A] no-underline"
+            to={isLoggedIn && user ? "/profile" : "/profile-login"}
+            aria-label={isLoggedIn ? "Customer Portal" : "Customer Sign In or Profile"}
+            data-testid="mobile-navbar-profile-icon"
+            className={`w-11 h-11 rounded-full border flex items-center justify-center no-underline overflow-hidden ${
+              isLoggedIn && user
+                ? "bg-[#22577A] border-[#22577A] text-white"
+                : "bg-white border-slate-200 text-[#22577A]"
+            }`}
           >
-            <FiShoppingBag className="text-[19px]" />
+            {isLoggedIn &&
+            user &&
+            user.logo &&
+            !user.logo.toLowerCase().includes(".svg") &&
+            !user.logo.includes("/assets/logos/") ? (
+              <Avatar
+                size={36}
+                src={user.logo}
+                icon={<UserOutlined />}
+                className="bg-[#22577a] text-white"
+              />
+            ) : (
+              <FiUser className="text-[19px]" />
+            )}
           </NavLink>
           <button
             type="button"
@@ -347,7 +382,7 @@ export default function Navbar() {
                         onClick={handleLinkClick}
                       >
                         <FiUser className="text-[#22577A] shrink-0" />
-                        <span>My Profile</span>
+                        <span>Customer Portal</span>
                       </NavLink>
                       <NavLink
                         to="/profile?tab=orders"
@@ -355,7 +390,23 @@ export default function Navbar() {
                         onClick={handleLinkClick}
                       >
                         <FiBox className="text-[#22577A] shrink-0" />
-                        <span>My Orders &amp; Quotations</span>
+                        <span>My Orders</span>
+                      </NavLink>
+                      <NavLink
+                        to="/profile?tab=rfqs"
+                        className={drawerLinkClass}
+                        onClick={handleLinkClick}
+                      >
+                        <FiFileText className="text-[#22577A] shrink-0" />
+                        <span>Request for Quotations</span>
+                      </NavLink>
+                      <NavLink
+                        to="/profile?tab=site-visits"
+                        className={drawerLinkClass}
+                        onClick={handleLinkClick}
+                      >
+                        <FiCalendar className="text-[#22577A] shrink-0" />
+                        <span>Site Visit Schedules</span>
                       </NavLink>
                       {user.role === "admin" && (
                         <>
@@ -399,7 +450,7 @@ export default function Navbar() {
                     onClick={handleLinkClick}
                   >
                     <FiUser className="text-[#22577A] shrink-0" />
-                    <span>Profile Login / Sign In</span>
+                    <span>Profile Login / Sign Up</span>
                   </NavLink>
                 )}
 
@@ -435,10 +486,6 @@ export default function Navbar() {
                   <FiMail className="text-[#3393B8] shrink-0" />
                   <span>Contact Desks</span>
                 </NavLink>
-                <NavLink to="/OrderCart" className={drawerLinkClass} onClick={handleLinkClick}>
-                  <FiShoppingBag className="text-[#3393B8] shrink-0" />
-                  <span>Order Cart</span>
-                </NavLink>
 
                 <button
                   type="button"
@@ -463,10 +510,14 @@ export default function Navbar() {
           const isActive = exact
             ? location.pathname === to
             : location.pathname.startsWith(to);
+          const resolvedTo =
+            to === "/request-quote" && !isLoggedIn
+              ? buildSignupRedirectUrl("/request-quote", "rfq")
+              : to;
           return (
             <NavLink
               key={to}
-              to={to}
+              to={resolvedTo}
               className={`h-full flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold no-underline transition-colors ${
                 isActive ? "text-[#22577A]" : "text-slate-500 hover:text-slate-800"
               }`}

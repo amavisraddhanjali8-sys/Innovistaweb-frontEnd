@@ -12,7 +12,10 @@ import {
 } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import PageMetadata from "../components/PageMetadata";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
 const { Title, Text } = Typography;
 
@@ -25,10 +28,18 @@ interface DesignDetails {
 }
 
 function OrderCart() {
+  const navigate = useNavigate();
+  const { isLoggedIn } = useAuth();
   const [cart, setCart] = useState<number[]>([]);
   const [cardDetails, setCardDetails] = useState<DesignDetails[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [form] = Form.useForm();
+
+  useEffect(() => {
+    if (!isLoggedIn && !sessionStorage.getItem("accessToken")) {
+      navigate(buildSignupRedirectUrl("/OrderCart", "cart"), { replace: true });
+    }
+  }, [isLoggedIn, navigate]);
 
   const loadCart = () => {
     try {

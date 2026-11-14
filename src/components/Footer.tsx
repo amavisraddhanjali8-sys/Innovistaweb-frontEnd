@@ -1,29 +1,42 @@
+import { useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { FiArrowRight, FiCheckCircle } from "react-icons/fi";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
 import companyLogo from "../assets/Images/logo/CompanyLogo.png";
 import AnimatedSocialIcons from "./AnimatedSocialIcons";
+import Footer3DContactIcon from "./Footer3DContactIcon";
+import FooterBuildingConstructionBg from "./FooterBuildingConstructionBg";
 import InteractiveContactSection from "./InteractiveContactSection";
 import RequestQuoteButton from "./RequestQuoteButton";
+import VintagePhone3DIcon from "./VintagePhone3DIcon";
 import {
+  DEFAULT_SITE_CONTACT_SETTINGS,
   FOOTER_LINK_COLUMNS,
   FOOTER_SERVICE_HIGHLIGHTS,
-  formatTelHref,
 } from "../utils/footerConsultationHelpers";
 
 function Footer() {
   const location = useLocation();
   const { contactSettings } = useSiteSettings();
+  const lowerFooterHostRef = useRef<HTMLDivElement | null>(null);
   const isContactPage = location.pathname === "/contact";
+
+  const websiteHref = contactSettings.website.startsWith("http")
+    ? contactSettings.website
+    : `https://${contactSettings.website}`;
+  const showroomHours =
+    contactSettings.showroomHours ||
+    DEFAULT_SITE_CONTACT_SETTINGS.showroomHours ||
+    "Mon – Sat · 8:30 AM – 6:00 PM";
 
   return (
     <footer className="w-full bg-[#F8FAFC] text-[#14171A] border-t border-slate-200 overflow-hidden">
-      {/* Upper Interactive 3D Character + Shuffle Deck + Get In Touch Form (suppressed on /contact to avoid duplicating Contact page section) */}
+      {/* Upper Interactive 3D Character + Shuffle Deck + Get In Touch Form */}
       {!isContactPage && (
         <InteractiveContactSection variant="footer" idPrefix="footer-contact" />
       )}
 
-      {/* Slim Architectural Service Highlight Strip (from Image 2 dark contrast strip in Innovista navy) */}
+      {/* Slim Architectural Service Highlight Strip */}
       <div className="w-full bg-gradient-to-r from-[#14171A] via-[#1B3A4E] to-[#22577A] text-white">
         <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="space-y-1.5">
@@ -50,67 +63,137 @@ function Footer() {
         </div>
       </div>
 
-      {/* Lower Rounded Footer Surface with Navigation Columns & Giant Brand Wordmark (Image 1 bottom) */}
+      {/* Lower Rounded Footer Surface with Soft Interactive Corporate Building Construction Motion */}
       <div className="bg-gradient-to-r from-[#14171A] via-[#1B3A4E] to-[#22577A] pt-1">
-        <div className="w-full rounded-t-[28px] sm:rounded-t-[36px] bg-gradient-to-br from-white via-[#F1F8FC] to-[#E2F1F8] pt-10 sm:pt-12 pb-20 md:pb-8 border-t border-white/80">
-          <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
-            {/* Multi-column Navigation + Direct Contact + Top-Right Social Icons */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-12 gap-7 pb-8 border-b border-slate-200/80">
-              {FOOTER_LINK_COLUMNS.map((column) => (
-                <div key={column.title} className="lg:col-span-2">
-                  <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#14171A] mb-3.5 mt-0">
-                    {column.title}
-                  </h4>
-                  <ul className="list-none p-0 m-0 space-y-2">
-                    {column.items.map((item) => (
-                      <li key={item.to}>
-                        <Link
-                          to={item.to}
-                          className="text-xs sm:text-[13px] text-[#5F6672] hover:text-[#22577A] transition-colors no-underline block"
-                        >
-                          {item.label}
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+        <div
+          ref={lowerFooterHostRef}
+          className="relative overflow-hidden w-full rounded-t-[28px] sm:rounded-t-[36px] bg-gradient-to-br from-white via-[#F1F8FC] to-[#E2F1F8] pt-10 sm:pt-12 pb-20 md:pb-8 border-t border-white/80"
+        >
+          {/* Soft, non-harsh interactive building construction backdrop */}
+          <FooterBuildingConstructionBg hostRef={lowerFooterHostRef} />
 
-              <div className="col-span-2 sm:col-span-1 lg:col-span-3 space-y-3">
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#14171A] mb-1.5 mt-0">
-                    Email
-                  </h4>
-                  <a
-                    href={`mailto:${contactSettings.email}`}
-                    className="text-xs sm:text-[13px] text-[#5F6672] hover:text-[#22577A] no-underline transition-colors"
-                  >
-                    {contactSettings.email}
-                  </a>
-                </div>
-                <div>
-                  <h4 className="text-xs font-bold uppercase tracking-[0.12em] text-[#14171A] mb-1.5 mt-0">
-                    Phone Number
-                  </h4>
-                  <a
-                    href={formatTelHref(contactSettings.phone)}
-                    className="text-xs sm:text-[13px] text-[#5F6672] hover:text-[#22577A] no-underline transition-colors"
-                  >
-                    {contactSettings.phone}
-                  </a>
-                </div>
+          <div className="relative z-10 w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10">
+            {/* All Public Pages + Complete 3D Contact Hub & Actual-Logo 3D Social Icons */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pb-9 border-b border-slate-300/70">
+              {/* 4 Balanced Page Link Columns (20 Public Routes) */}
+              <div className="lg:col-span-6 grid grid-cols-2 sm:grid-cols-4 gap-5 sm:gap-4">
+                {FOOTER_LINK_COLUMNS.map((column) => (
+                  <div key={column.title}>
+                    <h4 className="text-xs font-extrabold uppercase tracking-[0.12em] text-[#14171A] mb-3.5 mt-0">
+                      {column.title}
+                    </h4>
+                    <ul className="list-none p-0 m-0 space-y-2.5">
+                      {column.items.map((item) => (
+                        <li key={item.to}>
+                          <Link
+                            to={item.to}
+                            className="text-xs sm:text-[13px] font-medium text-[#3B4451] hover:text-[#22577A] transition-colors no-underline block"
+                          >
+                            {item.label}
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
 
-              <div className="col-span-2 sm:col-span-2 lg:col-span-3 flex lg:justify-end items-start">
-                <AnimatedSocialIcons
-                  settings={contactSettings}
-                  align="end"
-                  keyPrefix="bottom"
+              {/* Direct Contact Details with 3D Icons & Auto-Shaking/Scaling 3D Old Phone */}
+              <div className="lg:col-span-6 flex flex-col gap-3.5">
+                {/* 3D Interactive Vintage Rotary Call Phone */}
+                <VintagePhone3DIcon
+                  phone={contactSettings.phone}
+                  whatsapp={contactSettings.whatsapp}
+                  label="Direct Hotline"
                 />
+
+                {/* 3D Tactile Contact Details Grid (Email, Address, Website & Hours) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Email */}
+                  <a
+                    href={`mailto:${contactSettings.email}`}
+                    className="group flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 hover:border-[#3393B8]/50 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)] no-underline transition-all duration-200"
+                  >
+                    <Footer3DContactIcon kind="email" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
+                        Email Desk
+                      </span>
+                      <span className="block text-xs font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug break-all mt-0.5">
+                        {contactSettings.email}
+                      </span>
+                    </div>
+                  </a>
+
+                  {/* Showroom Address */}
+                  <Link
+                    to="/contact"
+                    className="group flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 hover:border-[#3393B8]/50 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)] no-underline transition-all duration-200"
+                  >
+                    <Footer3DContactIcon kind="address" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
+                        Headquarters
+                      </span>
+                      <span className="block text-xs font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug break-words mt-0.5">
+                        {contactSettings.address}
+                      </span>
+                    </div>
+                  </Link>
+
+                  {/* Website */}
+                  <a
+                    href={websiteHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="group flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 hover:border-[#3393B8]/50 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)] no-underline transition-all duration-200"
+                  >
+                    <Footer3DContactIcon kind="website" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
+                        Official Portal
+                      </span>
+                      <span className="block text-xs font-bold text-[#14171A] group-hover:text-[#22577A] leading-snug break-all mt-0.5">
+                        {contactSettings.website}
+                      </span>
+                    </div>
+                  </a>
+
+                  {/* Showroom Hours */}
+                  <div className="flex items-center gap-3 rounded-2xl bg-white/88 backdrop-blur-xs border border-slate-200/90 p-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)]">
+                    <Footer3DContactIcon kind="hours" />
+                    <div className="min-w-0 flex-1">
+                      <span className="block text-[10px] font-extrabold uppercase tracking-[0.1em] text-slate-500">
+                        Showroom Hours
+                      </span>
+                      <span className="block text-xs font-bold text-[#14171A] leading-snug break-words mt-0.5">
+                        {showroomHours}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actual-Logo 3D Social Media Strip */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 rounded-2xl bg-white/85 backdrop-blur-xs border border-slate-200/90 px-4 py-3 shadow-[0_8px_18px_-14px_rgba(34,87,122,0.28)]">
+                  <div>
+                    <h4 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-[#14171A] m-0">
+                      Follow Innovista
+                    </h4>
+                    <p className="text-[11px] text-slate-500 m-0 mt-0.5">
+                      Project updates &amp; showroom reels
+                    </p>
+                  </div>
+                  <AnimatedSocialIcons
+                    settings={contactSettings}
+                    align="end"
+                    size="sm"
+                    keyPrefix="bottom"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Oversized Architectural Brand Wordmark (Image 1 Hero Footer Signature) */}
+            {/* Oversized Architectural Brand Wordmark */}
             <div className="pt-6 sm:pt-8 pb-4 flex flex-col items-center justify-center">
               <div
                 aria-label="Innovista Fabriconix"
@@ -140,7 +223,7 @@ function Footer() {
                 </span>
               </div>
 
-              <p className="mt-4 text-[11px] sm:text-xs text-[#5F6672] text-center m-0">
+              <p className="mt-4 text-[11px] sm:text-xs font-medium text-[#3B4451] text-center m-0">
                 Innovista Metal Fabriconix Pvt Ltd © {new Date().getFullYear()} All Rights Reserved · Architectural Aluminium &amp; Structural Glazing
               </p>
             </div>

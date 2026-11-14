@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
+import { message } from "antd";
 import gsap from "gsap";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import styles from "../cssModules/ProductCard.module.css";
 import RequestQuoteModal from "./RequestQuoteModal";
 import TactileActionButton from "./TactileActionButton";
@@ -13,6 +16,8 @@ type Props = {
 };
 
 function ProductCard({ id, image, title, description }: Props) {
+  const { isLoggedIn } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
@@ -152,6 +157,16 @@ function ProductCard({ id, image, title, description }: Props) {
           className="cursor-target"
           onClick={(e) => {
             handleButtonClick(e);
+            if (!isLoggedIn) {
+              message.info("Please create a customer account to request a quotation.");
+              navigate(
+                buildSignupRedirectUrl(
+                  `${location.pathname}${location.search}`,
+                  "quote"
+                )
+              );
+              return;
+            }
             setQuoteModalOpen(true);
           }}
         >

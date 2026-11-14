@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Pagination, Spin } from "antd";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Pagination, Spin, message } from "antd";
 import {
   FiArrowRight,
   FiBriefcase,
@@ -14,6 +14,8 @@ import {
   FiX,
 } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
 import PageMetadata from "../components/PageMetadata";
@@ -39,6 +41,9 @@ const STATUS_TABS: Array<{ key: ProjectStatusFilter; label: string }> = [
 ];
 
 function Projects() {
+  const { isLoggedIn } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<ProjectShowcaseItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
@@ -56,6 +61,17 @@ function Projects() {
 
   // Quote modal state
   const [quoteProjectTitle, setQuoteProjectTitle] = useState<string | null>(null);
+
+  const handleRequestQuote = (projectTitle: string) => {
+    if (!isLoggedIn) {
+      message.info("Please create a customer account to request a quotation.");
+      navigate(
+        buildSignupRedirectUrl(`${location.pathname}${location.search}`, "quote")
+      );
+      return;
+    }
+    setQuoteProjectTitle(projectTitle);
+  };
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -407,7 +423,7 @@ function Projects() {
                           <button
                             type="button"
                             onClick={() =>
-                              setQuoteProjectTitle(project.Project_Title)
+                              handleRequestQuote(project.Project_Title)
                             }
                             className="request-quote-fx flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-all cursor-pointer"
                           >
@@ -468,7 +484,7 @@ function Projects() {
               <button
                 type="button"
                 onClick={() =>
-                  setQuoteProjectTitle("Custom Architectural Project")
+                  handleRequestQuote("Custom Architectural Project")
                 }
                 className="request-quote-fx inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-white text-xs font-semibold transition-all cursor-pointer"
               >

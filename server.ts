@@ -117,6 +117,7 @@ import {
   normalizeCustomerFeedbackRecord,
 } from "./src/utils/customerFeedbackHelpers.ts";
 import { optionalAuth, requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
+import { isMemoryFallbackActive } from "./src/db/index.ts";
 import { findUserByEmail, getAdminAndStaffUsers, getCustomerUsers, getOrCreateUser } from "./src/db/users.ts";
 import {
   addAppointmentSlotRecord,
@@ -177,7 +178,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = process.env.DEFAULT_APP_PORT ? parseInt(process.env.DEFAULT_APP_PORT, 10) : 3000;
 
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
@@ -340,7 +341,11 @@ async function syncFromBloggerSource(targetUrl: string, blogId = "", apiKey = ""
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
     const cats = await listCategories();
-    return res.json({ status: "ok", database: "postgresql", categories: cats.length });
+    return res.json({
+      status: "ok",
+      database: isMemoryFallbackActive() ? "in-memory-fallback" : "postgresql",
+      categories: cats.length,
+    });
   } catch (err) {
     console.error("Health check failed:", err);
     return res.status(503).json({ status: "error", message: "Database unreachable" });
@@ -1037,11 +1042,33 @@ app.get("/customer/profile", async (req: Request, res: Response) => {
     );
     if (!customer) return res.status(404).json({ message: "Customer profile not found" });
 
-    const allOrders = await listOrders();
+    const [allOrders, allRfqs, allAppointments] = await Promise.all([
+      listOrders(),
+      listRfqRecords(),
+      listAppointments(),
+    ]);
+
+    const normalizedEmail = customer.email.toLowerCase();
     const customerOrders = allOrders.filter(
-      (o) => o.Client_Email.toLowerCase() === customer.email.toLowerCase()
+      (o) => o.Client_Email.toLowerCase() === normalizedEmail
     );
-    return res.json({ customer: mapCustomerUserToLegacy(customer), orders: customerOrders });
+    const customerRfqs = allRfqs.filter(
+      (r) =>
+        (r.email || "").toLowerCase() === normalizedEmail ||
+        (r.customerUserId !== null &&
+          r.customerUserId !== undefined &&
+          Number(r.customerUserId) === Number(customer.id))
+    );
+    const customerVisits = allAppointments.filter(
+      (v) => (v.visitorEmail || "").toLowerCase() === normalizedEmail
+    );
+
+    return res.json({
+      customer: mapCustomerUserToLegacy(customer),
+      orders: customerOrders,
+      rfqs: customerRfqs,
+      siteVisits: customerVisits,
+    });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
@@ -1114,7 +1141,11 @@ app.post("/order/createOrder", async (req: Request, res: Response) => {
       Client_Number,
       Designs,
     });
-    return res.status(201).json({ message: "Order placed successfully!", order: created });
+    return res.status(201).json({
+      message: "Order placed successfully!",
+      order: created,
+      data: created,
+    });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
@@ -2430,6 +2461,7 @@ app.post(["/api/site-visits", "/api/appointments"], optionalAuth, async (req: Au
   return res.status(201).json({
     message: `Site visit booked for ${booking.date} at ${booking.slotLabel}.`,
     booking,
+    data: booking,
   });
 });
 

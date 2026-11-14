@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { message } from "antd";
 import { motion } from "framer-motion";
 import {
   FiArrowRight,
@@ -14,6 +15,7 @@ import {
   FiVolumeX,
 } from "react-icons/fi";
 import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import AboutTaglineHeading from "./AboutTaglineHeading";
 import RequestQuoteModal from "./RequestQuoteModal";
 import type {
@@ -79,7 +81,9 @@ export default function WhyChooseUsInfographic({
   heading = "Why Choose Us",
   items,
 }: WhyChooseUsInfographicProps) {
-  const { user } = useAuth();
+  const { user, isLoggedIn } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const displayItems = items && items.length > 0 ? items : [];
 
@@ -235,7 +239,21 @@ export default function WhyChooseUsInfographic({
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <button
             type="button"
-            onClick={() => setQuoteModalOpen(true)}
+            onClick={() => {
+              if (!isLoggedIn) {
+                message.info(
+                  "Please create a customer account to request a quotation."
+                );
+                navigate(
+                  buildSignupRedirectUrl(
+                    `${location.pathname}${location.search}`,
+                    "quote"
+                  )
+                );
+                return;
+              }
+              setQuoteModalOpen(true);
+            }}
             className="request-quote-fx inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-xs font-semibold transition-all whitespace-nowrap cursor-pointer"
           >
             <FiCheckCircle className="relative z-10" />

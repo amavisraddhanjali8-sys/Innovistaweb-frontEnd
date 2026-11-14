@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { message } from "antd";
 import { FiArrowRight, FiLayers, FiSliders } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
 import ProductCatalogBrowser from "../components/ProductCatalogBrowser";
@@ -25,7 +27,7 @@ export default function CategoryLanding() {
   const { slug } = useParams<{ slug?: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, isLoggedIn } = useAuth();
 
   const queryCategory = useMemo(() => {
     const params = new URLSearchParams(location.search);
@@ -202,7 +204,21 @@ export default function CategoryLanding() {
 
               <RequestQuoteButton
                 size="sm"
-                onClick={() => setQuoteModalOpen(true)}
+                onClick={() => {
+                  if (!isLoggedIn) {
+                    message.info(
+                      "Please create a customer account to request a quotation."
+                    );
+                    navigate(
+                      buildSignupRedirectUrl(
+                        `${location.pathname}${location.search}`,
+                        "quote"
+                      )
+                    );
+                    return;
+                  }
+                  setQuoteModalOpen(true);
+                }}
               >
                 <FiLayers />
                 <span>Request Quote</span>

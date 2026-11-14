@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { message } from "antd";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import RequestQuoteModal from "./RequestQuoteModal";
 import { sanitizeDesignImages, type DesignItem } from "../utils/productCatalogHelpers";
 
@@ -8,9 +11,23 @@ interface ProductSystemCardProps {
 }
 
 export default function ProductSystemCard({ design }: ProductSystemCardProps) {
+  const { isLoggedIn } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const images = sanitizeDesignImages(design.Design_Image);
   const detailPath = `/products/${encodeURIComponent(String(design.DesignID))}`;
+
+  const handleRequestQuoteClick = () => {
+    if (!isLoggedIn) {
+      message.info("Please create a customer account to request a quotation.");
+      navigate(
+        buildSignupRedirectUrl(`${location.pathname}${location.search}`, "quote")
+      );
+      return;
+    }
+    setQuoteModalOpen(true);
+  };
 
   return (
     <>
@@ -52,7 +69,7 @@ export default function ProductSystemCard({ design }: ProductSystemCardProps) {
 
           <button
             type="button"
-            onClick={() => setQuoteModalOpen(true)}
+            onClick={handleRequestQuoteClick}
             className="request-quote-fx w-full py-2.5 px-4 rounded-xl text-white text-[13px] font-semibold transition-all cursor-pointer"
           >
             <span className="relative z-10">Request Quote</span>

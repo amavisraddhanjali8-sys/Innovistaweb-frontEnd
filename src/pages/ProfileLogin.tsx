@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Modal, message } from "antd";
 import {
   EyeOutlined,
@@ -17,9 +17,11 @@ import { signInWithPopup } from "firebase/auth";
 import { auth, googleAuthProvider } from "../lib/firebase";
 import GoogleSignInButton from "../components/GoogleSignInButton";
 import {
+  getAuthActionFromSearch,
+  getAuthModeFromSearch,
   getDemoAccountCredentials,
   isAdminEmail,
-  resolvePostAuthRoute,
+  parsePostAuthRedirect,
   validateLoginInput,
   validateSignupInput,
   type SignupFields,
@@ -27,12 +29,21 @@ import {
 
 export default function ProfileLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { loginCustomer, loginAdmin, user } = useAuth();
 
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [mode, setMode] = useState<"login" | "signup">(() =>
+    getAuthModeFromSearch(location.search)
+  );
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setMode(getAuthModeFromSearch(location.search));
+  }, [location.search]);
+
+  const redirectAction = getAuthActionFromSearch(location.search);
 
   // Login state
   const [email, setEmail] = useState("duminda@zenithcapital.lk");
@@ -77,7 +88,7 @@ export default function ProfileLogin() {
             response.data.tokens.accessToken
           );
           message.success("Authenticated");
-          navigate(resolvePostAuthRoute("admin"));
+          navigate(parsePostAuthRedirect(location.search, "admin"));
         } else {
           setErrorMessage("Invalid admin credentials.");
         }
@@ -90,7 +101,7 @@ export default function ProfileLogin() {
         if (response.data?.customer) {
           loginCustomer(response.data.customer, response.data.tokens?.accessToken || "mock-token");
           message.success("Logged in");
-          navigate(resolvePostAuthRoute("customer"));
+          navigate(parsePostAuthRedirect(location.search, "customer"));
         } else {
           setErrorMessage("Account not found.");
         }
@@ -142,7 +153,7 @@ export default function ProfileLogin() {
           idToken
         );
         message.success("Signed in with Google");
-        navigate(resolvePostAuthRoute("admin"));
+        navigate(parsePostAuthRedirect(location.search, "admin"));
       } else {
         loginCustomer(
           {
@@ -157,7 +168,7 @@ export default function ProfileLogin() {
           idToken
         );
         message.success("Signed in with Google");
-        navigate(resolvePostAuthRoute("customer"));
+        navigate(parsePostAuthRedirect(location.search, "customer"));
       }
     } catch (err) {
       console.error("Google Sign-In failed:", err);
@@ -192,14 +203,18 @@ export default function ProfileLogin() {
       if (response.data?.data) {
         loginCustomer(response.data.data, "mock-cus-token-" + Date.now());
         message.success("Account created");
-        navigate(resolvePostAuthRoute("customer"));
+        navigate(parsePostAuthRedirect(location.search, "customer"));
       } else {
         message.success("Account created");
         setMode("login");
       }
     } catch (err: unknown) {
       console.error(err);
-      setErrorMessage("Registration failed. Please try again.");
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setErrorMessage(String(err.response.data.message));
+      } else {
+        setErrorMessage("Registration failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -335,6 +350,18 @@ export default function ProfileLogin() {
               </p>
             </div>
 
+            {/* Contextual Auth Gate Banner when redirected from Add to Cart or Request Quote */}
+            {redirectAction && (
+              <div
+                data-testid="auth-gate-notice"
+                className="mb-4 rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2.5 text-xs font-medium text-[#22577A]"
+              >
+                {redirectAction === "cart"
+                  ? "Sign up for a customer account (or login) to save systems and place fabrication orders."
+                  : "Sign up for a customer account (or login) to submit a Request for Quotation."}
+              </div>
+            )}
+
             {/* Active Session Quick Return */}
             {user && (
               <div className="mb-4 rounded-xl bg-orange-50/80 border border-orange-100 px-3.5 py-2.5 flex items-center justify-between gap-2">
@@ -343,7 +370,7 @@ export default function ProfileLogin() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => navigate(resolvePostAuthRoute(user.role))}
+                  onClick={() => navigate(parsePostAuthRedirect(location.search, user.role))}
                   className="text-xs font-semibold text-[#E55309] hover:text-[#c74404] whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   Open Portal →

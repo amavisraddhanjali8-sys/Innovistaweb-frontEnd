@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Button } from "antd";
+import { Button, message } from "antd";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
 interface Design {
   DesignID: string;
@@ -17,6 +19,8 @@ interface Design {
 
 function DesignView() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { isLoggedIn } = useAuth();
   const params = new URLSearchParams(location.search);
 
   const [designs, setDesigns] = useState<Design[]>([]);
@@ -39,6 +43,11 @@ function DesignView() {
 
 
 const AddtoCart = (designID: string) => {
+  if (!isLoggedIn) {
+    message.info("Please create a customer account to add items to your order.");
+    navigate(buildSignupRedirectUrl(`${location.pathname}${location.search}`, "cart"));
+    return;
+  }
   try {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
 
@@ -47,20 +56,8 @@ const AddtoCart = (designID: string) => {
     }
 
     localStorage.setItem("cart", JSON.stringify(cart));
-    // Use antd message or non-blocking notification
-    const feedbackEl = document.createElement("div");
-    feedbackEl.innerText = "Design added to cart!";
-    feedbackEl.style.position = "fixed";
-    feedbackEl.style.bottom = "24px";
-    feedbackEl.style.right = "24px";
-    feedbackEl.style.backgroundColor = "#22577a";
-    feedbackEl.style.color = "#fff";
-    feedbackEl.style.padding = "10px 18px";
-    feedbackEl.style.borderRadius = "8px";
-    feedbackEl.style.boxShadow = "0 4px 12px rgba(0,0,0,0.15)";
-    feedbackEl.style.zIndex = "9999";
-    document.body.appendChild(feedbackEl);
-    setTimeout(() => feedbackEl.remove(), 2500);
+    window.dispatchEvent(new Event("innovista-cart-updated"));
+    message.success("Design added to your Customer Portal order selections!");
   } catch (error) {
     console.error("Error adding to cart:", error);
   }

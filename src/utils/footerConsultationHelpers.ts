@@ -24,34 +24,43 @@ export interface FooterLinkColumn {
 
 export const FOOTER_LINK_COLUMNS: FooterLinkColumn[] = [
   {
-    title: "Navigation",
+    title: "Company",
     items: [
       { label: "Home", to: "/" },
       { label: "About Us", to: "/about" },
-      { label: "All Systems", to: "/products" },
       { label: "Projects", to: "/projects" },
+      { label: "Quality & Milestones", to: "/milestones" },
       { label: "Newsroom", to: "/news" },
       { label: "Blogs & Insights", to: "/blogs" },
     ],
   },
   {
-    title: "Systems",
+    title: "Core Systems",
     items: [
+      { label: "All Systems", to: "/products" },
       { label: "Architectural Doors", to: "/products/category/doors" },
       { label: "Sliding & Casement Windows", to: "/products/category/windows" },
       { label: "Shop Front & Facades", to: "/products/category/shop-front" },
       { label: "Acoustic Partitions", to: "/products/category/partitions" },
-      { label: "Roof Skylights & Louvers", to: "/products/category/roof-skylights" },
     ],
   },
   {
-    title: "Solutions",
+    title: "Specialty & Specs",
     items: [
+      { label: "Louvers & Sunshades", to: "/products/category/louvers" },
+      { label: "Roof & Skylights", to: "/products/category/roof-skylights" },
+      { label: "Bathroom Enclosures", to: "/products/category/bathrooms" },
+      { label: "Wardrobe & Pantry", to: "/products/category/wardrobe-pantry" },
       { label: "Resources & Downloads", to: "/resources" },
-      { label: "Contact Desks & Locations", to: "/contact" },
+    ],
+  },
+  {
+    title: "Client & Portals",
+    items: [
+      { label: "Customer Portal", to: "/profile" },
+      { label: "Sign In / Create Account", to: "/profile-login" },
       { label: "Request Custom RFQ", to: "/request-quote" },
-      { label: "Quality & Milestones", to: "/milestones" },
-      { label: "Order Cart", to: "/OrderCart" },
+      { label: "Contact Desks & Locations", to: "/contact" },
     ],
   },
 ];
@@ -62,6 +71,7 @@ export interface SiteContactSettings {
   email: string;
   website: string;
   address: string;
+  showroomHours?: string;
   linkedinUrl: string;
   facebookUrl: string;
   instagramUrl: string;
@@ -78,6 +88,7 @@ export const DEFAULT_SITE_CONTACT_SETTINGS: SiteContactSettings = {
   email: envMeta.VITE_CONTACT_EMAIL?.trim() || "innovistametal@gmail.com",
   website: "www.innovistafabriconix.lk",
   address: "No. 42, Nawala Road, Colombo 05",
+  showroomHours: "Mon – Sat · 8:30 AM – 6:00 PM",
   linkedinUrl: "https://www.linkedin.com",
   facebookUrl: "https://www.facebook.com/share/1CN1SBPycg/",
   instagramUrl:
@@ -89,6 +100,7 @@ export const FOOTER_CONTACT_DETAILS = {
   email: DEFAULT_SITE_CONTACT_SETTINGS.email,
   website: DEFAULT_SITE_CONTACT_SETTINGS.website,
   address: DEFAULT_SITE_CONTACT_SETTINGS.address,
+  showroomHours: DEFAULT_SITE_CONTACT_SETTINGS.showroomHours,
 };
 
 export function formatTelHref(phone: string): string {
@@ -123,6 +135,10 @@ export function normalizeSiteContactSettings(
       typeof raw?.address === "string" && raw.address.trim()
         ? raw.address.trim()
         : fallback.address,
+    showroomHours:
+      typeof raw?.showroomHours === "string" && raw.showroomHours.trim()
+        ? raw.showroomHours.trim()
+        : fallback.showroomHours || "Mon – Sat · 8:30 AM – 6:00 PM",
     linkedinUrl:
       typeof raw?.linkedinUrl === "string" && raw.linkedinUrl.trim()
         ? raw.linkedinUrl.trim()

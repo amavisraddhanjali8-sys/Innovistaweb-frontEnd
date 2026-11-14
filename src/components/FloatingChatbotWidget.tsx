@@ -4,7 +4,9 @@ import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { FiSend, FiSmartphone, FiX } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
 import AxiosConfig from "../Context/AxiosConfig";
+import { useAuth } from "../Context/AuthContext";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import {
   DEFAULT_CHATBOT_CONFIG,
   buildSmsHref,
@@ -31,6 +33,7 @@ interface ChatMessageItem {
 }
 
 export default function FloatingChatbotWidget() {
+  const { isLoggedIn } = useAuth();
   const { contactSettings } = useSiteSettings();
   const [isOpen, setIsOpen] = useState(false);
   const [launcherHovered, setLauncherHovered] = useState(false);
@@ -267,7 +270,9 @@ export default function FloatingChatbotWidget() {
     <MotionConfig reducedMotion="user">
       <div
         data-testid="floating-chatbot-root"
-        className="fixed right-4 sm:right-6 bottom-20 md:bottom-6 z-[70] flex flex-col items-end gap-3 pointer-events-none"
+        className={`fixed right-4 sm:right-6 bottom-20 md:bottom-6 ${
+          isOpen ? "z-[1250]" : "z-[70]"
+        } flex flex-col items-end gap-3 pointer-events-none`}
       >
         <AnimatePresence>
           {isOpen && (
@@ -280,12 +285,12 @@ export default function FloatingChatbotWidget() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.94 }}
               transition={{ type: "spring", stiffness: 360, damping: 28 }}
-              className="pointer-events-auto relative w-[min(372px,calc(100vw-2rem))] rounded-[22px] bg-white border border-slate-200/90 shadow-[0_24px_60px_-14px_rgba(15,23,42,0.26)] overflow-hidden flex flex-col max-h-[min(560px,calc(100vh-8rem))]"
+              className="pointer-events-auto relative w-[min(432px,calc(100vw-2rem))] rounded-[24px] bg-white border border-slate-200/90 shadow-[0_24px_60px_-14px_rgba(15,23,42,0.26)] overflow-hidden flex flex-col h-[min(620px,calc(100vh-7.5rem))] max-h-[min(640px,calc(100vh-7.5rem))]"
             >
               {/* Crisp White Header Bar matching reference chat card */}
               <div className="px-4 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between gap-2.5 shrink-0">
                 <div className="flex items-center gap-3 min-w-0">
-                  <div className="relative w-11 h-11 rounded-full bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 border border-slate-200/80 shrink-0">
+                  <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 border border-slate-200/80 shrink-0">
                     <Chatbot3DReceptionistAvatar
                       variant="concierge"
                       isHovered={panelHovered}
@@ -382,7 +387,11 @@ export default function FloatingChatbotWidget() {
                                 )}
                                 {msg.intent === "quote" && (
                                   <Link
-                                    to="/request-quote"
+                                    to={
+                                      isLoggedIn
+                                        ? "/request-quote"
+                                        : buildSignupRedirectUrl("/request-quote", "rfq")
+                                    }
                                     onClick={() => setIsOpen(false)}
                                     className="btn-anim-fx px-2.5 py-1 rounded-lg bg-orange-50 border border-orange-200 text-[#EA580C] text-[11px] font-semibold no-underline"
                                   >
@@ -787,12 +796,12 @@ export default function FloatingChatbotWidget() {
           whileTap={{ scale: 0.94 }}
           className={`pointer-events-auto relative flex items-center justify-center cursor-pointer transition-all ${
             isOpen
-              ? "w-12 h-12 rounded-full bg-white text-slate-700 border border-slate-200/90 shadow-[0_12px_28px_-6px_rgba(15,23,42,0.28)]"
-              : "w-20 h-20 sm:w-[88px] sm:h-[88px] rounded-full bg-transparent border-0 p-0 overflow-visible"
+              ? "w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-white text-slate-700 border border-slate-200/90 shadow-[0_12px_28px_-6px_rgba(15,23,42,0.28)]"
+              : "w-[84px] h-[84px] sm:w-[104px] sm:h-[104px] rounded-full bg-transparent border-0 p-0 overflow-visible"
           }`}
         >
           {isOpen ? (
-            <FiX className="text-lg relative z-10" />
+            <FiX className="text-xl relative z-10" />
           ) : (
             <>
               <span

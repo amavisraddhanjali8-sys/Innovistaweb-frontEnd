@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiCheckCircle,
   FiMail,
@@ -12,6 +12,7 @@ import {
 } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 import {
   INQUIRY_TYPE_OPTIONS,
   buildOrderQuotePayload,
@@ -47,7 +48,8 @@ export default function RequestQuoteModal({
   onSubmitted,
 }: RequestQuoteModalProps) {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const location = useLocation();
+  const { user, isLoggedIn } = useAuth();
 
   const [values, setValues] = useState<QuoteModalFormValues>(() =>
     createInitialQuoteFormValues({
@@ -188,7 +190,47 @@ export default function RequestQuoteModal({
         </div>
 
         {/* Body */}
-        {submittedOrderId ? (
+        {!isLoggedIn ? (
+          <div className="p-6 sm:p-7 text-center space-y-4">
+            <div className="w-12 h-12 rounded-full bg-orange-50 border border-orange-200 text-[#FF6B1E] flex items-center justify-center mx-auto">
+              <FiUser className="text-2xl" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-slate-900 m-0">
+                Customer Account Required
+              </h3>
+              <p className="text-xs text-slate-600 m-0 max-w-sm mx-auto leading-relaxed">
+                Please sign up for a customer account (or log in) to submit a Request for Quotation and track it inside your Customer Portal.
+              </p>
+            </div>
+            <div className="pt-2 flex flex-wrap items-center justify-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate(
+                    buildSignupRedirectUrl(`${location.pathname}${location.search}`, "quote", "signup")
+                  );
+                }}
+                className="px-5 py-2.5 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] text-white text-xs font-semibold cursor-pointer border-0 transition-all"
+              >
+                Create Account (Sign Up)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  navigate(
+                    buildSignupRedirectUrl(`${location.pathname}${location.search}`, "quote", "login")
+                  );
+                }}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold text-[#22577A] cursor-pointer transition-colors"
+              >
+                Sign In
+              </button>
+            </div>
+          </div>
+        ) : submittedOrderId ? (
           <div className="p-6 sm:p-7 text-center space-y-4">
             <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto">
               <FiCheckCircle className="text-2xl" />

@@ -402,11 +402,39 @@
   }
 }
 
+@keyframes vintagePhoneFallback {
+  0%,
+  100% {
+    transform: scale(0.96) rotate(0deg);
+  }
+  20% {
+    transform: scale(1.1) rotate(-7deg);
+  }
+  30% {
+    transform: scale(1.12) rotate(7deg);
+  }
+  40% {
+    transform: scale(1.1) rotate(-6deg);
+  }
+  50% {
+    transform: scale(1.06) rotate(4deg);
+  }
+  60% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.vintage-phone-fallback-anim {
+  animation: vintagePhoneFallback 2.8s ease-in-out infinite;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .request-quote-fx,
   .request-quote-fx::after,
   .silent-ring-wave,
   .silent-ring-handset,
+  .vintage-phone-fallback-anim,
   .tactile-pill-btn::after,
   .contact-card-sheen {
     animation: none !important;

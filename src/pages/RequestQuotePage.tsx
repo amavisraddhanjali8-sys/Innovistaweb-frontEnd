@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import styles from "../cssModules/RequestQuotePage.module.css";
 import PageMetadata from "../components/PageMetadata";
+import { useAuth } from "../Context/AuthContext";
+import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
 type ProjectType =
   | "Office Partition"
@@ -89,6 +91,7 @@ const requiredLabels: Record<
 
 export default function RequestQuotePage() {
   const location = useLocation();
+  const { user, isLoggedIn } = useAuth();
   const [bannerImage] = useState<string>("/assets/products/hero-showroom.jpg");
   const [form, setForm] = useState<QuoteFormState>(initialFormState);
   const [files, setFiles] = useState<File[]>([]);
@@ -98,6 +101,18 @@ export default function RequestQuotePage() {
   const [submitError, setSubmitError] = useState("");
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      setForm((prev) => ({
+        ...prev,
+        clientName: prev.clientName || user.company || user.name || "",
+        contactPerson: prev.contactPerson || user.name || "",
+        email: prev.email || user.email || "",
+        phone: prev.phone || user.phone || "",
+      }));
+    }
+  }, [user]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -290,6 +305,36 @@ export default function RequestQuotePage() {
         </p>
       </section>
 
+      {!isLoggedIn ? (
+        <section
+          data-testid="rfq-signup-gate"
+          className="max-w-xl mx-auto my-8 rounded-3xl bg-white border border-slate-200 shadow-sm p-8 text-center space-y-4"
+        >
+          <div className="inline-flex items-center px-3 py-1 rounded-full bg-orange-50 text-[#E55309] text-xs font-bold uppercase tracking-wider">
+            Customer Account Required
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 m-0">
+            Sign Up to Request a Quotation
+          </h2>
+          <p className="text-sm text-slate-600 leading-relaxed m-0">
+            To submit a Request for Quotation (RFQ), upload CAD drawings, and track pricing updates &amp; site visits in your Customer Portal, please create a free customer account first.
+          </p>
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to={buildSignupRedirectUrl(`${location.pathname}${location.search}`, "rfq", "signup")}
+              className="px-6 py-3 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] text-white text-sm font-semibold no-underline shadow-sm transition-colors"
+            >
+              Sign Up for Customer Account
+            </Link>
+            <Link
+              to={buildSignupRedirectUrl(`${location.pathname}${location.search}`, "rfq", "login")}
+              className="px-5 py-3 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-sm font-semibold text-[#22577A] no-underline transition-colors"
+            >
+              Sign In
+            </Link>
+          </div>
+        </section>
+      ) : (
       <form className={styles.form} onSubmit={handleSubmit} noValidate>
         <section className={styles.card}>
           <h2>1. Client Details</h2>
@@ -674,6 +719,7 @@ export default function RequestQuotePage() {
         {successMessage && <p className={styles.success}>{successMessage}</p>}
         {submitError && <p className={styles.error}>{submitError}</p>}
       </form>
+      )}
     </article>
   );
 }
