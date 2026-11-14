@@ -3,16 +3,21 @@ import styled from 'styled-components';
 
 interface ContactButtonProps {
   onClick?: () => void;
+  label?: string;
   [key: string]: unknown;
 }
 
-const ContactButton: React.FC<ContactButtonProps> = ({ onClick, ...props }) => {
+const ContactButton: React.FC<ContactButtonProps> = ({
+  onClick,
+  label = "Contact Us",
+  ...props
+}) => {
   return (
     <StyledWrapper {...props}>
       <div>
-        <button className="btn cursor-target" onClick={onClick}>
+        <button type="button" className="btn cursor-target" onClick={onClick}>
           <i className="animation" />
-          Contact Us
+          {label}
           <i className="animation" />
         </button>
       </div>

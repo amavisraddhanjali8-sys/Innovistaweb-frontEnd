@@ -26,6 +26,7 @@ import {
 } from "@ant-design/icons";
 import axios from "axios";
 import { useAuth } from "../Context/AuthContext";
+import PageMetadata from "../components/PageMetadata";
 
 interface OrderItem {
   OrderID: string;
@@ -160,6 +161,12 @@ export default function UserProfile() {
 
   return (
     <div className="min-h-screen bg-neutral-50 py-10 px-4 sm:px-6 lg:px-8">
+      <PageMetadata
+        title={`${user.name} — Client Workspace`}
+        description="Manage your Innovista Fabriconix quotation orders, fabrication milestones, and account details."
+        canonicalPath="/user-profile"
+        noIndex
+      />
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Simple Profile Header */}
         <div className="bg-white rounded-3xl shadow-sm border border-neutral-200 p-6 sm:p-8">

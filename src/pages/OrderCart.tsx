@@ -12,6 +12,7 @@ import {
 } from "antd";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
+import PageMetadata from "../components/PageMetadata";
 
 const { Title, Text } = Typography;
 
@@ -106,6 +107,12 @@ function OrderCart() {
 
   return (
     <div style={{ padding: "24px" , margin:"30px 0" }}>
+      <PageMetadata
+        title="Quotation Cart"
+        description="Review your selected aluminium door, window, and glazing designs and submit a consolidated quotation order."
+        canonicalPath="/ordercart"
+        noIndex
+      />
       <Title level={2} style={{ textAlign: "center", color: "#555" , marginBottom:"30px" }}>
         Order Cart
       </Title>

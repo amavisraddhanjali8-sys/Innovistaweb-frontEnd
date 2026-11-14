@@ -1,0 +1,209 @@
+import type { SiteContactSettings } from "./footerConsultationHelpers";
+
+export type CharacterPoseId = "handshake" | "call" | "quote";
+
+export type StageBackdropTheme = "clean" | "amber";
+
+export type ContactFormIntentId = "quote" | "visit" | "callback";
+
+export interface CharacterPoseMeta {
+  id: CharacterPoseId;
+  label: string;
+  shortLabel: string;
+  speechHeadline: string;
+  speechSubline: string;
+  actionLabel: string;
+  badgeText: string;
+}
+
+export const CHARACTER_POSES: Record<CharacterPoseId, CharacterPoseMeta> = {
+  handshake: {
+    id: "handshake",
+    label: "Shake Hands",
+    shortLabel: "Handshake",
+    speechHeadline: "Contact Us!",
+    speechSubline: "Let's shake hands & start your project",
+    actionLabel: "Shake Hands Now",
+    badgeText: "Live Greeting",
+  },
+  call: {
+    id: "call",
+    label: "Live Call",
+    shortLabel: "On Call",
+    speechHeadline: "Contact Us!",
+    speechSubline: "Our engineering desk is ready to talk",
+    actionLabel: "Ring Desk Visually",
+    badgeText: "Direct Hotline",
+  },
+  quote: {
+    id: "quote",
+    label: "Quote Desk",
+    shortLabel: "Get Quote",
+    speechHeadline: "Contact Us!",
+    speechSubline: "Send your specs — fast BOQ turnaround",
+    actionLabel: "Wave & Preview",
+    badgeText: "RFQ Ready",
+  },
+};
+
+export const CHARACTER_POSE_ORDER: CharacterPoseId[] = [
+  "handshake",
+  "call",
+  "quote",
+];
+
+export interface ContactIntentOption {
+  id: ContactFormIntentId;
+  label: string;
+  department: string;
+  subjectPreset: string;
+  placeholderNote: string;
+}
+
+export const CONTACT_INTENT_OPTIONS: ContactIntentOption[] = [
+  {
+    id: "quote",
+    label: "Project Quote",
+    department: "Sales & Estimations",
+    subjectPreset: "Custom Aluminium & Glazing BOQ Quote",
+    placeholderNote:
+      "Tell us your opening sizes, finish preferences, or project location...",
+  },
+  {
+    id: "visit",
+    label: "Site Visit",
+    department: "Technical & CAD Desk",
+    subjectPreset: "On-Site Laser Measurement & CAD Review",
+    placeholderNote:
+      "Share your preferred inspection date, site city, and window/door scope...",
+  },
+  {
+    id: "callback",
+    label: "Direct Callback",
+    department: "After-Sales & Warranty",
+    subjectPreset: "Engineer Callback Request",
+    placeholderNote:
+      "Let us know the best time to reach you and what system you want to discuss...",
+  },
+];
+
+export interface ContactShuffleCardItem {
+  id: string;
+  kicker: string;
+  title: string;
+  description: string;
+  detailPrimary: string;
+  detailSecondary: string;
+  kind: "hotline" | "sales" | "engineering" | "social";
+  linkedIntent: ContactFormIntentId;
+}
+
+export function buildContactShuffleCards(
+  settings: SiteContactSettings
+): ContactShuffleCardItem[] {
+  return [
+    {
+      id: "card-hotline",
+      kicker: "Live Visual Ring",
+      title: "Direct Hotline & WhatsApp",
+      description: "Silent visual call beacon — tap to call, WhatsApp, or copy.",
+      detailPrimary: settings.phone,
+      detailSecondary: settings.email,
+      kind: "hotline",
+      linkedIntent: "callback",
+    },
+    {
+      id: "card-sales",
+      kicker: "Department 01",
+      title: "Sales & Estimations",
+      description: "Fast BOQ pricing, thermal door schedules & showroom bookings.",
+      detailPrimary: settings.email,
+      detailSecondary: settings.address,
+      kind: "sales",
+      linkedIntent: "quote",
+    },
+    {
+      id: "card-engineering",
+      kicker: "Department 02",
+      title: "Technical & CAD Desk",
+      description: "Shop drawings, wind-load checks & acoustic glazing specs.",
+      detailPrimary: "engineering@innovista.lk",
+      detailSecondary: "Mon–Fri · 8:30 AM – 5:30 PM",
+      kind: "engineering",
+      linkedIntent: "visit",
+    },
+    {
+      id: "card-social",
+      kicker: "Connect Online",
+      title: "Social & Portfolio Channels",
+      description: "Follow recent facade handovers or message us on your favorite app.",
+      detailPrimary: settings.website,
+      detailSecondary: "LinkedIn · Facebook · Instagram · WhatsApp",
+      kind: "social",
+      linkedIntent: "quote",
+    },
+  ];
+}
+
+export function getNextPose(current: CharacterPoseId): CharacterPoseId {
+  const idx = CHARACTER_POSE_ORDER.indexOf(current);
+  if (idx < 0) return "handshake";
+  return CHARACTER_POSE_ORDER[(idx + 1) % CHARACTER_POSE_ORDER.length];
+}
+
+export interface DeckOrderEntry<T> {
+  item: T;
+  originalIndex: number;
+  slotIndex: number;
+}
+
+export function buildContactDeckOrder<T>(
+  items: T[],
+  activeIndex: number,
+  maxVisible = 3
+): DeckOrderEntry<T>[] {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const total = items.length;
+  const count = Math.min(Math.max(1, maxVisible), total);
+  const start = ((activeIndex % total) + total) % total;
+
+  const result: DeckOrderEntry<T>[] = [];
+  for (let slotIndex = 0; slotIndex < count; slotIndex++) {
+    const originalIndex = (start + slotIndex) % total;
+    result.push({
+      item: items[originalIndex],
+      originalIndex,
+      slotIndex,
+    });
+  }
+  return result;
+}
+
+export function composeSplitFullName(
+  firstName: string,
+  lastName: string
+): string {
+  return [firstName.trim(), lastName.trim()].filter(Boolean).join(" ").trim();
+}
+
+export function splitFullName(fullName: string): {
+  firstName: string;
+  lastName: string;
+} {
+  const parts = (fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+}
+
+export function getContactIntentMeta(
+  id: ContactFormIntentId
+): ContactIntentOption {
+  return (
+    CONTACT_INTENT_OPTIONS.find((item) => item.id === id) ||
+    CONTACT_INTENT_OPTIONS[0]
+  );
+}

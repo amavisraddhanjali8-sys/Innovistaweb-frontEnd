@@ -10,6 +10,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
+import PageMetadata from "../components/PageMetadata";
 import {
   NEWS_ARTICLES,
   NEWS_CATEGORIES,
@@ -49,6 +50,21 @@ export default function News() {
 
   return (
     <div style={SANS_FONT} className="w-full bg-white text-[#14171A] flex flex-col">
+      <PageMetadata
+        title={
+          activeArticle
+            ? activeArticle.title
+            : "Newsroom & Technical Dispatches"
+        }
+        description={
+          activeArticle
+            ? activeArticle.summary
+            : "Latest product launches, commercial curtain wall handovers, and ISO laboratory quality audits from Innovista Fabriconix."
+        }
+        canonicalPath="/news"
+        ogType={activeArticle ? "article" : "website"}
+        ogImage={activeArticle?.image}
+      />
       {/* Newsroom Corporate Wire Masthead (Crisp Slate Dispatch Band — Distinct from Blogs) */}
       <header className="w-full bg-[#F8FAFC] border-b border-slate-200">
         <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-5 sm:py-6 flex flex-col gap-4">

@@ -5,6 +5,7 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
 import {
   DEFAULT_ABOUT_SECTIONS,
   DEFAULT_CLIENTS,
@@ -73,6 +74,39 @@ import {
   type BlogPostItem,
   type BloggerConnectionConfig,
 } from "./src/utils/blogBloggerHelpers";
+import {
+  DEFAULT_SITE_CONTACT_SETTINGS,
+  normalizeSiteContactSettings,
+  validateSiteContactSettings,
+  type SiteContactSettings,
+} from "./src/utils/footerConsultationHelpers";
+import {
+  DEFAULT_CHATBOT_CONFIG,
+  DEFAULT_CHATBOT_FAQS,
+  buildSmsHref,
+  buildWhatsAppChatUrl,
+  detectChatIntent,
+  matchTrainedFaq,
+  normalizeChatbotConfig,
+  normalizeChatbotFaq,
+  type ChatbotConfig,
+  type ChatbotFaqItem,
+} from "./src/utils/chatbotHelpers";
+import {
+  SITE_VISIT_SLOT_TEMPLATES,
+  computeAvailableSlotsForDate,
+  getUpcomingSiteVisitDates,
+  validateSiteVisitBooking,
+  type SiteVisitBooking,
+  type SiteVisitStatus,
+} from "./src/utils/siteVisitSchedulerHelpers";
+import {
+  DEFAULT_HOME_SLIDESHOW_CMS,
+  deleteHomeSlide,
+  normalizeHomeSlideshowCms,
+  upsertHomeSlide,
+  type HomeSlideshowCmsPayload,
+} from "./src/utils/homeSlideshowHelpers";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -102,7 +136,10 @@ const storage = multer.diskStorage({
     cb(null, uniqueName);
   },
 });
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 },
+});
 
 // In-memory data stores with sensible initial data
 interface Admin {
@@ -439,6 +476,58 @@ let bloggerConfig: BloggerConnectionConfig = { ...DEFAULT_BLOGGER_CONFIG };
 let blogPosts: BlogPostItem[] = DEFAULT_BLOG_POSTS.map((p) => ({ ...p }));
 let lastAutoSyncAttemptAt = 0;
 
+// Site-wide Contact, Phone & Social Settings store (configurable via env & Admin)
+let siteContactSettings: SiteContactSettings = normalizeSiteContactSettings({
+  phone: process.env.VITE_CONTACT_PHONE || DEFAULT_SITE_CONTACT_SETTINGS.phone,
+  whatsapp:
+    process.env.VITE_WHATSAPP_NUMBER || DEFAULT_SITE_CONTACT_SETTINGS.whatsapp,
+  email: process.env.VITE_CONTACT_EMAIL || DEFAULT_SITE_CONTACT_SETTINGS.email,
+});
+
+// Chatbot Configuration & Admin FAQ Training Store
+let chatbotConfig: ChatbotConfig = { ...DEFAULT_CHATBOT_CONFIG };
+let chatbotFaqs: ChatbotFaqItem[] = DEFAULT_CHATBOT_FAQS.map((item) => ({ ...item }));
+
+// Site Visit Bookings & Blocked Slots Store
+const upcomingDatesSeed = getUpcomingSiteVisitDates(10);
+const firstSeedDate = upcomingDatesSeed[0]?.date || new Date().toISOString().slice(0, 10);
+let blockedSiteVisitSlots: string[] = [];
+const siteVisitBookings: SiteVisitBooking[] = [
+  {
+    id: "SV-2041",
+    date: firstSeedDate,
+    slotTime: "11:00",
+    slotLabel: "11:00 AM",
+    locationName: "Nawala Showroom & Consultation",
+    visitorName: "Duminda Perera",
+    visitorEmail: "duminda@zenithcapital.lk",
+    visitorPhone: "+94 77 455 1200",
+    notes: "Slim sliding door frame measurement check.",
+    status: "CONFIRMED",
+    calendarEventId: "",
+    emailSent: false,
+    createdAt: new Date(Date.now() - 86400000).toISOString(),
+  },
+];
+
+// Home Hero Slideshow CMS Store (supports images, MP4/WebM/embed videos, stats & content)
+let homeSlideshowCms: HomeSlideshowCmsPayload = normalizeHomeSlideshowCms(
+  DEFAULT_HOME_SLIDESHOW_CMS
+);
+
+function getServerGeminiClient(): GoogleGenAI | null {
+  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        "User-Agent": "aistudio-build",
+      },
+    },
+  });
+}
+
 async function syncFromBloggerSource(
   targetUrl: string,
   blogId = "",
@@ -539,16 +628,20 @@ async function syncFromBloggerSource(
 
 // =================== API ENDPOINTS ===================
 
-// Upload route (allows admin to upload images directly)
+// Upload route (allows admin to upload images and videos directly)
 app.post("/api/upload", upload.single("file"), (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ error: "No file uploaded" });
   }
   const fileUrl = `/uploads/${req.file.filename}`;
+  const isVideo =
+    req.file.mimetype?.startsWith("video/") ||
+    /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(req.file.originalname || "");
   return res.json({
     secure_url: fileUrl,
     url: fileUrl,
     filename: req.file.filename,
+    mediaType: isVideo ? "video" : "image",
   });
 });
 
@@ -1936,6 +2029,472 @@ app.delete("/api/blogs/:id", (req: Request, res: Response) => {
   return res.json({
     message: "Blog post deleted.",
     posts: blogPosts,
+  });
+});
+
+// Site-wide Contact & Phone Setup Endpoints
+app.get("/api/site-settings", (_req: Request, res: Response) => {
+  return res.json({ data: siteContactSettings });
+});
+
+app.put("/api/site-settings", (req: Request, res: Response) => {
+  const candidate = normalizeSiteContactSettings(req.body, siteContactSettings);
+  const errors = validateSiteContactSettings(candidate);
+  if (Object.keys(errors).length > 0) {
+    return res.status(400).json({
+      message: "Invalid contact settings provided.",
+      errors,
+    });
+  }
+  siteContactSettings = candidate;
+  return res.json({
+    message: "Contact phone & channel settings saved.",
+    data: siteContactSettings,
+  });
+});
+
+// =================== CHATBOT SETUP, FAQ TRAINING & AI ASK ===================
+
+app.get("/api/chatbot/config", (_req: Request, res: Response) => {
+  return res.json({
+    config: chatbotConfig,
+    faqs: chatbotFaqs,
+    contact: {
+      phone: siteContactSettings.phone,
+      whatsapp: siteContactSettings.whatsapp,
+      email: siteContactSettings.email,
+    },
+  });
+});
+
+app.put("/api/chatbot/config", (req: Request, res: Response) => {
+  chatbotConfig = normalizeChatbotConfig(req.body, chatbotConfig);
+  return res.json({
+    message: "Chatbot configuration saved!",
+    config: chatbotConfig,
+  });
+});
+
+app.post("/api/chatbot/faqs", (req: Request, res: Response) => {
+  const question = typeof req.body?.question === "string" ? req.body.question.trim() : "";
+  const answer = typeof req.body?.answer === "string" ? req.body.answer.trim() : "";
+  if (!question || !answer) {
+    return res.status(400).json({ message: "Question and answer are both required." });
+  }
+  const created = normalizeChatbotFaq(
+    {
+      ...req.body,
+      id: `faq-${Date.now()}`,
+      updatedAt: new Date().toISOString(),
+    },
+    chatbotFaqs.length
+  );
+  chatbotFaqs.unshift(created);
+  return res.json({
+    message: "FAQ training pair added!",
+    data: created,
+    faqs: chatbotFaqs,
+  });
+});
+
+app.put("/api/chatbot/faqs/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  const idx = chatbotFaqs.findIndex((f) => f.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ message: "FAQ item not found." });
+  }
+  const existing = chatbotFaqs[idx];
+  const updated = normalizeChatbotFaq(
+    {
+      ...existing,
+      ...req.body,
+      id: existing.id,
+      updatedAt: new Date().toISOString(),
+    },
+    idx
+  );
+  if (!updated.question || !updated.answer) {
+    return res.status(400).json({ message: "Question and answer cannot be empty." });
+  }
+  chatbotFaqs[idx] = updated;
+  return res.json({
+    message: "FAQ training pair updated!",
+    data: updated,
+    faqs: chatbotFaqs,
+  });
+});
+
+app.delete("/api/chatbot/faqs/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  const before = chatbotFaqs.length;
+  chatbotFaqs = chatbotFaqs.filter((f) => f.id !== id);
+  if (chatbotFaqs.length === before) {
+    return res.status(404).json({ message: "FAQ item not found." });
+  }
+  return res.json({
+    message: "FAQ training pair deleted.",
+    faqs: chatbotFaqs,
+  });
+});
+
+app.post("/api/chatbot/ask", async (req: Request, res: Response) => {
+  const rawMessage = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+  const history = Array.isArray(req.body?.history) ? req.body.history.slice(-6) : [];
+  if (!rawMessage) {
+    return res.status(400).json({ message: "Message is required." });
+  }
+
+  const intent = detectChatIntent(rawMessage);
+  const faqMatch = matchTrainedFaq(rawMessage, chatbotFaqs);
+  const whatsappUrl = buildWhatsAppChatUrl(
+    siteContactSettings.whatsapp,
+    rawMessage,
+    chatbotConfig.defaultWhatsappPrefix
+  );
+  const smsUrl = buildSmsHref(siteContactSettings.phone, rawMessage);
+
+  const enabledFaqs = chatbotFaqs.filter((f) => f.enabled);
+  const faqKnowledgeBlock = enabledFaqs
+    .map((f, idx) => `${idx + 1}. Q: ${f.question}\n   A: ${f.answer}`)
+    .join("\n");
+
+  const aiClient = getServerGeminiClient();
+  let replyText = "";
+  let source: "gemini" | "trained-faq" | "fallback" = "fallback";
+
+  if (aiClient) {
+    try {
+      const conversationContext = history
+        .map((h: { role?: string; text?: string }) =>
+          `${h.role === "user" ? "Customer" : "Assistant"}: ${String(h.text || "").slice(0, 300)}`
+        )
+        .join("\n");
+
+      const prompt = [
+        conversationContext ? `Recent chat:\n${conversationContext}` : "",
+        `Customer question: ${rawMessage}`,
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
+      const systemInstruction = [
+        chatbotConfig.systemInstructions,
+        `Company channels: Phone ${siteContactSettings.phone}, WhatsApp ${siteContactSettings.whatsapp}, Email ${siteContactSettings.email}.`,
+        "Trained Q&A knowledge base (prioritize these facts whenever relevant):",
+        faqKnowledgeBlock || "No custom FAQs added yet.",
+        "Keep answers concise (max 3 short sentences). Do not use markdown code blocks.",
+      ].join("\n\n");
+
+      const response = await aiClient.models.generateContent({
+        model: "gemini-4-hydrogen",
+        contents: prompt,
+        config: {
+          systemInstruction,
+        },
+      });
+      const candidateText = (response.text || "").trim();
+      if (candidateText) {
+        replyText = candidateText;
+        source = "gemini";
+      }
+    } catch {
+      // Fall through cleanly to trained FAQ / deterministic response
+    }
+  }
+
+  if (!replyText && faqMatch) {
+    replyText = faqMatch.item.answer;
+    source = "trained-faq";
+  }
+
+  if (!replyText) {
+    if (intent === "visit") {
+      replyText =
+        "Available site visit slots are open Mon–Sat (09:30 AM, 11:00 AM, 02:00 PM, 03:30 PM). Pick a slot below or open the Site Visit tab to sync with Google Calendar.";
+    } else if (intent === "whatsapp") {
+      replyText =
+        "Tap Chat on WhatsApp below to connect directly with our fabrication team with your message prefilled.";
+    } else if (intent === "sms") {
+      replyText = `You can send a direct text message to ${siteContactSettings.phone} using Text Phone below.`;
+    } else if (intent === "quote") {
+      replyText =
+        "Send your dimensions or architectural drawings via Request Quote or WhatsApp for a 24–48h BOQ estimate.";
+    } else {
+      replyText = `Thanks for reaching Innovista Fabriconix. You can ask about products, quotes, coastal warranties, book a site visit, or chat directly on WhatsApp (${siteContactSettings.phone}).`;
+    }
+    source = "fallback";
+  }
+
+  return res.json({
+    reply: replyText,
+    source,
+    intent,
+    matchedFaqQuestion: faqMatch?.item.question || null,
+    whatsappUrl,
+    smsUrl,
+    suggestions: chatbotConfig.quickPrompts.slice(0, 4),
+  });
+});
+
+// =================== SITE VISIT SLOTS & BOOKING ENDPOINTS ===================
+
+app.get("/api/site-visits/slots", (req: Request, res: Response) => {
+  const upcomingDates = getUpcomingSiteVisitDates(10);
+  const requestedDate =
+    typeof req.query.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)
+      ? req.query.date
+      : upcomingDates[0]?.date || formatTodayIso();
+
+  const slots = computeAvailableSlotsForDate(
+    requestedDate,
+    siteVisitBookings,
+    blockedSiteVisitSlots
+  );
+
+  return res.json({
+    date: requestedDate,
+    dates: upcomingDates,
+    slots,
+    blockedKeys: blockedSiteVisitSlots,
+  });
+});
+
+function formatTodayIso(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
+}
+
+app.get("/api/site-visits", (_req: Request, res: Response) => {
+  return res.json({
+    data: siteVisitBookings,
+    blockedKeys: blockedSiteVisitSlots,
+  });
+});
+
+app.post("/api/site-visits", (req: Request, res: Response) => {
+  const date = String(req.body?.date || "").trim();
+  const slotTime = String(req.body?.slotTime || "").trim();
+  const visitorName = String(req.body?.visitorName || "").trim();
+  const visitorEmail = String(req.body?.visitorEmail || "").trim();
+  const visitorPhone = String(req.body?.visitorPhone || "").trim();
+  const locationName =
+    String(req.body?.locationName || "").trim() || "Nawala Showroom / Client Site";
+  const notes = String(req.body?.notes || "").trim();
+  const calendarEventId =
+    typeof req.body?.calendarEventId === "string" ? req.body.calendarEventId : "";
+  const emailSent = Boolean(req.body?.emailSent);
+
+  const errors = validateSiteVisitBooking({
+    date,
+    slotTime,
+    visitorName,
+    visitorEmail,
+    visitorPhone,
+  });
+
+  if (Object.keys(errors).length > 0) {
+    return res.status(400).json({
+      message: "Please complete all required site visit fields.",
+      errors,
+    });
+  }
+
+  const slotKey = `${date}|${slotTime}`;
+  const isBlocked = blockedSiteVisitSlots.includes(slotKey);
+  const isTaken = siteVisitBookings.some(
+    (b) => b.date === date && b.slotTime === slotTime && b.status !== "CANCELLED"
+  );
+  if (isBlocked || isTaken) {
+    return res.status(409).json({
+      message: "Selected slot is no longer available. Please choose another slot.",
+    });
+  }
+
+  const tpl = SITE_VISIT_SLOT_TEMPLATES.find((s) => s.time === slotTime);
+  const booking: SiteVisitBooking = {
+    id: `SV-${Math.floor(1000 + Math.random() * 9000)}`,
+    date,
+    slotTime,
+    slotLabel: tpl?.label || slotTime,
+    locationName,
+    visitorName,
+    visitorEmail,
+    visitorPhone,
+    notes,
+    status: "CONFIRMED",
+    calendarEventId,
+    emailSent,
+    createdAt: new Date().toISOString(),
+  };
+
+  siteVisitBookings.unshift(booking);
+
+  // Sync booking into Admin Orders & Notifications
+  orders.unshift({
+    OrderID: booking.id,
+    Order_Date: booking.createdAt,
+    Order_Status: "PENDING",
+    Client_Name: visitorName,
+    Client_Email: visitorEmail,
+    Client_Number: visitorPhone,
+    Customer: {
+      Cus_CompanyName: `Site Visit (${date} · ${booking.slotLabel})`,
+    },
+    Designs: [
+      {
+        Design: {
+          Design_Name: `Site Visit — ${locationName}`,
+          Design_Image: [],
+        },
+      },
+    ],
+  });
+
+  notifications.unshift({
+    id: `notif-${Date.now()}`,
+    NotificationsID: `notif-${Date.now()}`,
+    Notifications_Title: `Site Visit Booked (${booking.id})`,
+    Notifications_Body: `${visitorName} booked ${date} at ${booking.slotLabel} (${locationName}).`,
+    Date_Timestamp: new Date().toISOString(),
+    isRead: false,
+  });
+
+  return res.json({
+    message: "Site visit booked successfully!",
+    data: booking,
+    slots: computeAvailableSlotsForDate(date, siteVisitBookings, blockedSiteVisitSlots),
+  });
+});
+
+app.patch("/api/site-visits/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  const idx = siteVisitBookings.findIndex((b) => b.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ message: "Site visit booking not found." });
+  }
+
+  const existing = siteVisitBookings[idx];
+  const nextStatus = req.body?.status as SiteVisitStatus | undefined;
+  const validStatuses: SiteVisitStatus[] = ["CONFIRMED", "COMPLETED", "CANCELLED"];
+
+  siteVisitBookings[idx] = {
+    ...existing,
+    status:
+      nextStatus && validStatuses.includes(nextStatus)
+        ? nextStatus
+        : existing.status,
+    calendarEventId:
+      typeof req.body?.calendarEventId === "string"
+        ? req.body.calendarEventId
+        : existing.calendarEventId,
+    emailSent:
+      typeof req.body?.emailSent === "boolean"
+        ? req.body.emailSent
+        : existing.emailSent,
+  };
+
+  return res.json({
+    message: "Site visit booking updated.",
+    data: siteVisitBookings[idx],
+  });
+});
+
+app.post("/api/site-visits/slots/toggle-block", (req: Request, res: Response) => {
+  const date = String(req.body?.date || "").trim();
+  const slotTime = String(req.body?.slotTime || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !slotTime) {
+    return res.status(400).json({ message: "Date and slotTime are required." });
+  }
+  const key = `${date}|${slotTime}`;
+  const exists = blockedSiteVisitSlots.includes(key);
+  blockedSiteVisitSlots = exists
+    ? blockedSiteVisitSlots.filter((k) => k !== key)
+    : [...blockedSiteVisitSlots, key];
+
+  return res.json({
+    message: exists ? "Slot unblocked." : "Slot blocked.",
+    blockedKeys: blockedSiteVisitSlots,
+    slots: computeAvailableSlotsForDate(date, siteVisitBookings, blockedSiteVisitSlots),
+  });
+});
+
+// Home Hero Slideshow CMS Endpoints (videos, images, content, stats & CTA buttons)
+app.get("/api/home-slideshow", (_req: Request, res: Response) => {
+  return res.json({ data: homeSlideshowCms });
+});
+
+app.put("/api/home-slideshow", (req: Request, res: Response) => {
+  const payload = normalizeHomeSlideshowCms({
+    ...homeSlideshowCms,
+    ...req.body,
+  });
+  homeSlideshowCms = payload;
+  return res.json({
+    message: "Home slideshow settings & slides published!",
+    data: homeSlideshowCms,
+  });
+});
+
+app.post("/api/home-slideshow/slides", (req: Request, res: Response) => {
+  const mediaUrl = String(req.body?.mediaUrl || "").trim();
+  if (!mediaUrl) {
+    return res.status(400).json({ message: "A media URL or uploaded file is required." });
+  }
+  const nextSlides = upsertHomeSlide(homeSlideshowCms.slides, {
+    mediaType: req.body?.mediaType,
+    mediaUrl,
+    posterUrl: req.body?.posterUrl,
+    headline: req.body?.headline,
+    description: req.body?.description,
+    active: req.body?.active,
+  });
+  homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
+  return res.json({
+    message: "Home slide added!",
+    data: homeSlideshowCms,
+  });
+});
+
+app.put("/api/home-slideshow/slides/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (!homeSlideshowCms.slides.some((s) => s.id === id)) {
+    return res.status(404).json({ message: "Home slide not found." });
+  }
+  const mediaUrl = String(req.body?.mediaUrl || "").trim();
+  if (!mediaUrl) {
+    return res.status(400).json({ message: "A media URL or uploaded file is required." });
+  }
+  const nextSlides = upsertHomeSlide(
+    homeSlideshowCms.slides,
+    {
+      mediaType: req.body?.mediaType,
+      mediaUrl,
+      posterUrl: req.body?.posterUrl,
+      headline: req.body?.headline,
+      description: req.body?.description,
+      active: req.body?.active,
+    },
+    id
+  );
+  homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
+  return res.json({
+    message: "Home slide updated!",
+    data: homeSlideshowCms,
+  });
+});
+
+app.delete("/api/home-slideshow/slides/:id", (req: Request, res: Response) => {
+  const { id } = req.params;
+  if (homeSlideshowCms.slides.length <= 1) {
+    return res.status(400).json({ message: "At least one home hero slide must remain." });
+  }
+  const nextSlides = deleteHomeSlide(homeSlideshowCms.slides, id);
+  homeSlideshowCms = { ...homeSlideshowCms, slides: nextSlides };
+  return res.json({
+    message: "Home slide deleted.",
+    data: homeSlideshowCms,
   });
 });
 

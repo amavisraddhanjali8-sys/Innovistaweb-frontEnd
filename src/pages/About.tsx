@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import AxiosConfig from "../Context/AxiosConfig";
 import AboutHead from "../components/AboutHead";
 import VisionSection from "../components/VisionSection";
+import PageMetadata from "../components/PageMetadata";
 import {
   ClientFeedbackSection,
   DirectorMessageSection,
@@ -69,6 +70,12 @@ function About() {
 
   return (
     <div className="w-full bg-white flex flex-col">
+      <PageMetadata
+        title="About Us — Engineering Heritage, Vision & Leadership"
+        description="Discover Innovista Fabriconix's architectural aluminium craftsmanship, leadership message, engineering team, fabrication milestones, and certified partners."
+        canonicalPath="/about"
+        ogImage="/assets/about/facade.jpg"
+      />
       <AboutHead slides={cmsData.heroSlides} slideshowSpeedMs={cmsData.slideshowSpeedMs} />
       <VisionSection content={cmsData} />
       <DirectorMessageSection data={cmsData.directorMessage} />

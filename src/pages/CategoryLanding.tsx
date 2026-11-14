@@ -8,6 +8,8 @@ import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
 import ProductCatalogBrowser from "../components/ProductCatalogBrowser";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
 import RequestQuoteModal from "../components/RequestQuoteModal";
+import PageMetadata from "../components/PageMetadata";
+import RequestQuoteButton from "../components/RequestQuoteButton";
 import {
   DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
@@ -126,6 +128,15 @@ export default function CategoryLanding() {
 
   return (
     <div className="w-full bg-white flex flex-col">
+      <PageMetadata
+        title={`${activeCategory.name} — Aluminium & Glazing Systems`}
+        description={
+          activeCategory.tagline ||
+          `Explore ${activeCategory.name} architectural aluminium and glazing systems fabricated by Innovista Fabriconix.`
+        }
+        canonicalPath={`/products/category/${activeCategory.slug}`}
+        ogImage={activeCategory.coverImage}
+      />
       {/* 1. Category-Specific Hero Slideshow */}
       <ShowcaseHeroSlideshow
         slides={categorySlides}
@@ -189,14 +200,13 @@ export default function CategoryLanding() {
                 </Link>
               )}
 
-              <button
-                type="button"
+              <RequestQuoteButton
+                size="sm"
                 onClick={() => setQuoteModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold transition-all shadow-sm whitespace-nowrap cursor-pointer"
               >
                 <FiLayers />
                 <span>Request Quote</span>
-              </button>
+              </RequestQuoteButton>
             </div>
           </div>
 

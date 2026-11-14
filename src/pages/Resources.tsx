@@ -14,6 +14,8 @@ import { useAuth } from "../Context/AuthContext";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import LogoLoop, { type LogoLoopItem } from "../components/LogoLoop";
 import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
+import PageMetadata from "../components/PageMetadata";
+import RequestQuoteButton from "../components/RequestQuoteButton";
 import type { HeroSlide } from "../utils/aboutContentHelpers";
 import {
   DEFAULT_ATTACHMENTS_RIBBON_SPEED,
@@ -91,6 +93,11 @@ export default function Resources() {
 
   return (
     <div className="w-full bg-white flex flex-col">
+      <PageMetadata
+        title="Technical Resources, CAD Schedules & Hardware Portals"
+        description="Download architectural aluminium profile catalogues, CAD installation schedules, finish care guides, and European hardware compatibility matrices."
+        canonicalPath="/resources"
+      />
       <ShowcaseHeroSlideshow
         slides={RESOURCES_HERO_SLIDES}
         slideshowSpeedMs={5000}
@@ -496,13 +503,10 @@ export default function Resources() {
               >
                 Contact Desks
               </Link>
-              <Link
-                to="/request-quote"
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white text-xs font-semibold no-underline"
-              >
+              <RequestQuoteButton as="link" to="/request-quote" size="sm">
                 <span>Request Quote</span>
                 <FiArrowRight className="text-xs" />
-              </Link>
+              </RequestQuoteButton>
             </div>
           </div>
         </div>

@@ -9,6 +9,11 @@ import {
   FaTimes,
 } from "react-icons/fa";
 import styles from "../cssModules/ContactModal.module.css";
+import { useSiteSettings } from "../Context/SiteSettingsContext";
+import {
+  formatTelHref,
+  formatWhatsAppHref,
+} from "../utils/footerConsultationHelpers";
 
 type ContactModalProps = {
   isOpen: boolean;
@@ -24,59 +29,61 @@ type ContactItem = {
   Icon: React.ComponentType<{ className?: string }>;
 };
 
-const contactItems: ContactItem[] = [
-  {
-    id: "phone",
-    label: "Phone",
-    text: "+94760818098",
-    href: "tel:+94760818098",
-    Icon: FaPhoneAlt,
-  },
-  {
-    id: "whatsapp",
-    label: "WhatsApp",
-    text: "Chat with us",
-    href: "https://wa.me/94760818098",
-    external: true,
-    Icon: FaWhatsapp,
-  },
-  {
-    id: "email",
-    label: "Email",
-    text: "innovistametal@gmail.com",
-    href: "mailto:innovistametal@gmail.com",
-    Icon: FaEnvelope,
-  },
-  {
-    id: "facebook",
-    label: "Facebook",
-    text: "Visit Facebook Page",
-    href: "https://www.facebook.com/share/1CN1SBPycg/",
-    external: true,
-    Icon: FaFacebookF,
-  },
-  {
-    id: "instagram",
-    label: "Instagram",
-    text: "Visit Instagram Page",
-    href: "https://www.instagram.com/innovista_fabriconx_aluminium?igsh=OXU0MndxZWMwNHo2",
-    external: true,
-    Icon: FaInstagram,
-  },
-  {
-    id: "portfolio",
-    label: "Alupenters Website",
-    text: "View Our Portfolio",
-    href: "https://alupenters.lk/fabricator/AP1559",
-    external: true,
-    Icon: FaGlobe,
-  },
-];
-
 export default function ContactModal({
   isOpen,
   onClose,
 }: Readonly<ContactModalProps>) {
+  const { contactSettings } = useSiteSettings();
+
+  const contactItems: ContactItem[] = [
+    {
+      id: "phone",
+      label: "Phone",
+      text: contactSettings.phone,
+      href: formatTelHref(contactSettings.phone),
+      Icon: FaPhoneAlt,
+    },
+    {
+      id: "whatsapp",
+      label: "WhatsApp",
+      text: "Chat with us",
+      href: formatWhatsAppHref(contactSettings.whatsapp || contactSettings.phone),
+      external: true,
+      Icon: FaWhatsapp,
+    },
+    {
+      id: "email",
+      label: "Email",
+      text: contactSettings.email,
+      href: `mailto:${contactSettings.email}`,
+      Icon: FaEnvelope,
+    },
+    {
+      id: "facebook",
+      label: "Facebook",
+      text: "Visit Facebook Page",
+      href: contactSettings.facebookUrl,
+      external: true,
+      Icon: FaFacebookF,
+    },
+    {
+      id: "instagram",
+      label: "Instagram",
+      text: "Visit Instagram Page",
+      href: contactSettings.instagramUrl,
+      external: true,
+      Icon: FaInstagram,
+    },
+    {
+      id: "portfolio",
+      label: "Alupenters Website",
+      text: "View Our Portfolio",
+      href: "https://alupenters.lk/fabricator/AP1559",
+      external: true,
+      Icon: FaGlobe,
+    },
+  ];
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -130,7 +137,19 @@ export default function ContactModal({
               target={external ? "_blank" : undefined}
               rel={external ? "noreferrer noopener" : undefined}
             >
-              <Icon className={styles.icon} />
+              <span
+                className={
+                  id === "phone"
+                    ? "silent-ring-beacon relative inline-flex items-center justify-center"
+                    : "inline-flex items-center justify-center"
+                }
+              >
+                <Icon
+                  className={`${styles.icon} ${
+                    id === "phone" ? "silent-ring-handset" : ""
+                  }`}
+                />
+              </span>
               <div className={styles.cardText}>
                 <strong>{label}</strong>
                 <span>{text}</span>

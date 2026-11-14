@@ -359,9 +359,9 @@ export default function VisionSection({ content: externalContent }: VisionSectio
                   setInspectedCard(null);
                   navigate("/request-quote");
                 }}
-                className="px-4 py-2 rounded-xl bg-[#3E9CBE] hover:bg-[#3285a3] text-xs font-semibold text-white cursor-pointer"
+                className="request-quote-fx px-4 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer"
               >
-                Request Quote
+                <span className="relative z-10">Request Quote</span>
               </button>
             </div>
           </div>

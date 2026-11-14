@@ -12,6 +12,7 @@ import {
   FiLayers,
   FiLogOut,
   FiMenu,
+  FiMessageCircle,
   FiMessageSquare,
   FiShoppingBag,
   FiSliders,
@@ -94,6 +95,7 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   ads: <FiImage className="text-[15px]" />,
   portals: <FiExternalLink className="text-[15px]" />,
   blogs: <FiBookOpen className="text-[15px]" />,
+  chatbot: <FiMessageCircle className="text-[15px]" />,
 };
 
 const DEFAULT_AVATAR = "/assets/about/director.jpg";
@@ -253,9 +255,6 @@ export default function AdminPortalShell({
                 <span className="text-[19px] font-bold tracking-tight text-[#22577A]">
                   Innovista<span className="text-[#E60000]">.</span>
                 </span>
-                <span className="hidden xl:inline-block text-[10px] font-semibold uppercase tracking-wider text-slate-400 border-l border-slate-200 pl-2">
-                  Admin
-                </span>
               </Link>
             </div>
 
@@ -271,7 +270,7 @@ export default function AdminPortalShell({
                   <Link
                     key={item.key}
                     to={item.path}
-                    className={`relative h-full inline-flex items-center gap-1 px-2 text-xs whitespace-nowrap shrink-0 no-underline transition-colors ${
+                    className={`relative h-full inline-flex items-center gap-1 px-1.5 text-[11px] xl:text-xs whitespace-nowrap shrink-0 no-underline transition-colors ${
                       isActive
                         ? "text-[#22577A] font-semibold"
                         : "text-slate-500 font-medium hover:text-[#22577A]"
@@ -284,7 +283,7 @@ export default function AdminPortalShell({
                     {isActive && (
                       <span
                         aria-hidden="true"
-                        className="absolute bottom-0 left-1.5 right-1.5 h-[2.5px] rounded-t-full bg-[#22577A]"
+                        className="absolute bottom-0 left-1 right-1 h-[2.5px] rounded-t-full bg-[#22577A]"
                       />
                     )}
                   </Link>

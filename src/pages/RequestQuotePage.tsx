@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useLocation } from "react-router-dom";
 import styles from "../cssModules/RequestQuotePage.module.css";
+import PageMetadata from "../components/PageMetadata";
 
 type ProjectType =
   | "Office Partition"
@@ -268,6 +269,11 @@ export default function RequestQuotePage() {
 
   return (
     <article className={styles.page}>
+      <PageMetadata
+        title="Request a Project Quotation (RFQ)"
+        description="Submit project drawings, opening dimensions, glazing specifications, and site visit dates for a custom aluminium fabrication quote."
+        canonicalPath="/request-quote"
+      />
       <header className={styles.banner}>
         <img src={bannerImage} alt="Request quote banner" />
         <div className={styles.bannerOverlay} />

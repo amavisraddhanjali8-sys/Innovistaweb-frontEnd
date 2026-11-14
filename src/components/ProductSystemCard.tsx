@@ -63,9 +63,9 @@ export default function ProductSystemCard({ design }: ProductSystemCardProps) {
           <button
             type="button"
             onClick={() => setQuoteModalOpen(true)}
-            className="w-full py-2.5 px-4 bg-[#F1F5F9] group-hover:bg-gradient-to-r group-hover:from-[#22577A] group-hover:via-[#3393B8] group-hover:to-[#5CB6D2] text-slate-800 group-hover:text-white text-[13px] font-semibold transition-all cursor-pointer"
+            className="request-quote-fx w-full py-2.5 px-4 rounded-xl text-white text-[13px] font-semibold transition-all cursor-pointer"
           >
-            Request Quote
+            <span className="relative z-10">Request Quote</span>
           </button>
         </div>
       </article>

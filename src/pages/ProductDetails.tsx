@@ -33,6 +33,9 @@ import CertificationBadgeCard from "../components/CertificationBadgeCard";
 import ProductAccessoriesShowcase from "../components/ProductAccessoriesShowcase";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
 import RequestQuoteModal from "../components/RequestQuoteModal";
+import PageMetadata from "../components/PageMetadata";
+import RequestQuoteButton from "../components/RequestQuoteButton";
+import { buildProductJsonLd } from "../utils/seoMetadataHelpers";
 import {
   DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
@@ -295,6 +298,19 @@ export default function ProductDetails() {
 
   return (
     <div className="w-full bg-white text-[#14171A]">
+      <PageMetadata
+        title={`${design.Design_Name} — ${primaryCategory}`}
+        description={design.Design_Description}
+        canonicalPath={`/product-details/${design.DesignID}`}
+        ogType="product"
+        ogImage={photos[0]}
+        structuredData={buildProductJsonLd({
+          name: design.Design_Name,
+          description: design.Design_Description,
+          image: photos[0],
+          category: primaryCategory,
+        })}
+      />
       {/* Product Hero Gallery & Overview */}
       <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-8 sm:py-12">
         {loading && !rawDesign ? (
@@ -453,14 +469,13 @@ export default function ProductDetails() {
 
               {/* Primary & Secondary Action Buttons */}
               <div className="pt-2 flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
+                <RequestQuoteButton
+                  size="lg"
                   onClick={() => openQuoteModal()}
-                  className="px-6 py-3 rounded-lg bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-all shadow-sm"
                 >
                   <FiMail className="text-base" />
                   <span>Request Quote</span>
-                </button>
+                </RequestQuoteButton>
 
                 <button
                   type="button"
@@ -921,14 +936,14 @@ export default function ProductDetails() {
             </div>
 
             <div className="mt-8 text-center">
-              <button
-                type="button"
+              <RequestQuoteButton
+                size="md"
+                className="rounded-full"
                 onClick={() => openQuoteModal()}
-                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-all shadow-sm"
               >
                 <FiMail />
                 <span>Request Quote</span>
-              </button>
+              </RequestQuoteButton>
             </div>
           </div>
         </section>
@@ -966,14 +981,14 @@ export default function ProductDetails() {
             </div>
 
             <div className="mt-8 text-center">
-              <button
-                type="button"
+              <RequestQuoteButton
+                size="md"
+                className="rounded-full"
                 onClick={() => openQuoteModal()}
-                className="px-6 py-2.5 rounded-full bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs sm:text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-all shadow-sm"
               >
                 <FiMail />
                 <span>Request Quote</span>
-              </button>
+              </RequestQuoteButton>
             </div>
           </div>
         </section>
@@ -1084,13 +1099,14 @@ export default function ProductDetails() {
                   }}
                 />
 
-                <button
-                  type="button"
-                  onClick={() => openQuoteModal()}
-                  className="absolute top-4 right-4 px-4 py-2 rounded-lg bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold cursor-pointer shadow-md transition-all"
-                >
-                  Request Quote
-                </button>
+                <div className="absolute top-4 right-4 z-10">
+                  <RequestQuoteButton
+                    size="sm"
+                    onClick={() => openQuoteModal()}
+                  >
+                    <span>Request Quote</span>
+                  </RequestQuoteButton>
+                </div>
 
                 <div className="absolute bottom-4 left-5 right-5 text-white">
                   <div className="text-[11px] font-semibold uppercase tracking-wider text-[#5CB6D2]">

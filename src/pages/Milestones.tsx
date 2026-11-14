@@ -3,6 +3,7 @@ import styles from "../cssModules/Milestones.module.css";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import MainHeading from "../components/MainHeading";
+import PageMetadata from "../components/PageMetadata";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -156,6 +157,11 @@ function Milestones() {
 
   return (
     <div className={styles.page}>
+      <PageMetadata
+        title="Our Milestones & Engineering Timeline"
+        description="Explore Innovista Fabriconix's growth since 2015 across landmark commercial curtain wall projects, CNC fabrication, and ISO certification."
+        canonicalPath="/milestones"
+      />
       <MainHeading
         heading="Our Milestones"
         description="A journey of growth, innovation, and excellence that defines who we are today."

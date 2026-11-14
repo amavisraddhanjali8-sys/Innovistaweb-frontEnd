@@ -144,13 +144,13 @@ function ProductCard({ id, image, title, description }: Props) {
       <div ref={buttonsRef} className={styles.buttonContainer}>
         <button
           type="button"
-          className={`${styles.quoteBtn} cursor-target`}
+          className={`${styles.quoteBtn} request-quote-fx cursor-target`}
           onClick={(e) => {
             handleButtonClick(e);
             setQuoteModalOpen(true);
           }}
         >
-          Request Quote
+          <span className="relative z-10">Request Quote</span>
         </button>
         <button
           type="button"

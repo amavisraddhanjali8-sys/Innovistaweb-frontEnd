@@ -8,6 +8,7 @@ import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
 import WhyChooseUsInfographic from "../components/WhyChooseUsInfographic";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
+import PageMetadata from "../components/PageMetadata";
 import {
   DEFAULT_PRODUCT_CATEGORIES,
   DEFAULT_PRODUCT_LANDING_CMS,
@@ -59,6 +60,12 @@ export default function Products() {
 
   return (
     <div className="w-full bg-white flex flex-col">
+      <PageMetadata
+        title="Architectural Aluminium Products & Glazing Catalog"
+        description="Browse custom sliding doors, thermally broken casement windows, frameless shower enclosures, curtain walls, louvers, and acoustic office partitions."
+        canonicalPath="/products"
+        ogImage="/assets/products/hero-showroom.jpg"
+      />
       {/* 1. Simple Architectural Product Hero Slideshow */}
       <ShowcaseHeroSlideshow
         slides={landingCms.heroSlides}

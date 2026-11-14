@@ -1,11 +1,16 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  DEFAULT_SITE_CONTACT_SETTINGS,
   FOOTER_LINK_COLUMNS,
   buildFooterConsultationPayload,
   createInitialFooterConsultationValues,
+  formatTelHref,
+  formatWhatsAppHref,
   isFooterConsultationValid,
+  normalizeSiteContactSettings,
   validateFooterConsultation,
+  validateSiteContactSettings,
 } from "./footerConsultationHelpers";
 
 test("footer navigation columns expose valid internal routes without placeholder items", () => {
@@ -64,4 +69,29 @@ test("footer consultation validation requires valid name, strict email, phone, a
   assert.equal(payload.Client_Number, "+94 77 123 4567");
   assert.equal(payload.Product_Name, "Villa Glazing");
   assert.equal(payload.Inquiry_Type, "Free Architectural Consultation");
+});
+
+test("contact phone setup helpers normalize numbers and validate settings", () => {
+  assert.equal(formatTelHref("+94 76 081 8098"), "tel:+94760818098");
+  assert.equal(formatWhatsAppHref("+94 76 081 8098"), "https://wa.me/94760818098");
+
+  const normalized = normalizeSiteContactSettings({
+    phone: "+94 77 555 0199",
+    email: "desk@innovistafabriconix.lk",
+  });
+  assert.equal(normalized.phone, "+94 77 555 0199");
+  assert.equal(normalized.whatsapp, "94775550199");
+  assert.equal(normalized.email, "desk@innovistafabriconix.lk");
+  assert.equal(normalized.address, DEFAULT_SITE_CONTACT_SETTINGS.address);
+
+  const validErrors = validateSiteContactSettings(normalized);
+  assert.deepEqual(validErrors, {});
+
+  const invalidErrors = validateSiteContactSettings({
+    ...normalized,
+    phone: "12",
+    email: "bad-email",
+  });
+  assert.ok(invalidErrors.phone);
+  assert.ok(invalidErrors.email);
 });

@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 import axios from "axios";
 import { useAuth } from "../Context/AuthContext";
+import PageMetadata from "../components/PageMetadata";
 import loginCharacters from "../assets/images/login_dashboard_characters_1794509717439.jpg";
 import brandIcon from "../assets/Images/logo/titleImage.png";
 import {
@@ -179,6 +180,12 @@ export default function ProfileLogin() {
 
   return (
     <div className="flex-1 w-full bg-[#F2F4F7] flex items-center justify-center px-4 py-3 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+      <PageMetadata
+        title={mode === "login" ? "Client & Admin Login" : "Create Client Account"}
+        description="Sign in to manage Innovista Fabriconix architectural fabrication orders, milestones, and specifications."
+        canonicalPath="/profile-login"
+        noIndex
+      />
       {/* Main Split Card */}
       <div
         className="w-full max-w-[960px] bg-white rounded-[32px] p-3.5 sm:p-5 shadow-[0_24px_60px_-15px_rgba(15,23,42,0.10)] border border-slate-100/90 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-stretch"

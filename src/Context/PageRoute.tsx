@@ -37,7 +37,10 @@ import BlogsAdmin from "../pages/Adminpages/BlogsAdmin";
 import ProfileLogin from "../pages/ProfileLogin";
 import UserProfile from "../pages/UserProfile";
 import NotFound from "../pages/NotFound";
+import ChatbotAdmin from "../pages/Adminpages/ChatbotAdmin";
+import FloatingChatbotWidget from "../components/FloatingChatbotWidget";
 import { AuthProvider } from "./AuthContext";
+import { SiteSettingsProvider } from "./SiteSettingsContext";
 import { isAdminPortalPath } from "../utils/adminPortalHelpers";
 
 function MainContent() {
@@ -96,12 +99,14 @@ function MainContent() {
               <Route path="/request-quote" element={<RequestQuotePage />} />
               <Route path="/EditVisionMission" element={<EditVisionMission />} />
               <Route path="/BlogsAdmin" element={<BlogsAdmin />} />
+              <Route path="/ChatbotAdmin" element={<ChatbotAdmin />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </motion.div>
         </MotionConfig>
       </main>
       {!isAuthPage && !isAdminPortal && <Footer />}
+      {!isAuthPage && !isAdminPortal && <FloatingChatbotWidget />}
     </div>
   );
 }
@@ -109,10 +114,12 @@ function MainContent() {
 function PageRoute() {
   return (
     <AuthProvider>
-      <Router>
-        <ScrollToTop />
-        <MainContent />
-      </Router>
+      <SiteSettingsProvider>
+        <Router>
+          <ScrollToTop />
+          <MainContent />
+        </Router>
+      </SiteSettingsProvider>
     </AuthProvider>
   );
 }

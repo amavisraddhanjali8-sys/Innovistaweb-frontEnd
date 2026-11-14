@@ -16,6 +16,7 @@ import {
 import AxiosConfig from "../Context/AxiosConfig";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
+import PageMetadata from "../components/PageMetadata";
 import RequestQuoteModal from "../components/RequestQuoteModal";
 import { SafeImageGalleryModal } from "../components/SafeImage";
 import ShowcaseHeroSlideshow from "../components/ShowcaseHeroSlideshow";
@@ -109,6 +110,11 @@ function Projects() {
 
   return (
     <div className="w-full bg-white flex flex-col">
+      <PageMetadata
+        title="Architectural Projects Portfolio | Innovista Fabriconix"
+        description="Browse completed and ongoing luxury residential villas, commercial curtain walls, and corporate acoustic glazing commissions by Innovista Fabriconix."
+        canonicalPath="/projects"
+      />
       <SafeImageGalleryModal
         title={previewTitle}
         images={previewImages}
@@ -402,10 +408,10 @@ function Projects() {
                             onClick={() =>
                               setQuoteProjectTitle(project.Project_Title)
                             }
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+                            className="request-quote-fx flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-all cursor-pointer"
                           >
-                            <FiSend className="text-xs" />
-                            <span>Request Quote</span>
+                            <FiSend className="relative z-10 text-xs" />
+                            <span className="relative z-10">Request Quote</span>
                           </button>
                         </div>
                       </div>
@@ -463,10 +469,10 @@ function Projects() {
                 onClick={() =>
                   setQuoteProjectTitle("Custom Architectural Project")
                 }
-                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold transition-all shadow-sm cursor-pointer"
+                className="request-quote-fx inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-white text-xs font-semibold transition-all cursor-pointer"
               >
-                <FiSend className="text-xs" />
-                <span>Request Quote</span>
+                <FiSend className="relative z-10 text-xs" />
+                <span className="relative z-10">Request Quote</span>
               </button>
             </div>
           </div>

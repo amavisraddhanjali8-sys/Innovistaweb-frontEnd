@@ -236,11 +236,11 @@ export default function WhyChooseUsInfographic({
           <button
             type="button"
             onClick={() => setQuoteModalOpen(true)}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold transition-all shadow-sm whitespace-nowrap cursor-pointer"
+            className="request-quote-fx inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-white text-xs font-semibold transition-all whitespace-nowrap cursor-pointer"
           >
-            <FiCheckCircle />
-            <span>Request Quote</span>
-            <FiArrowRight />
+            <FiCheckCircle className="relative z-10" />
+            <span className="relative z-10">Request Quote</span>
+            <FiArrowRight className="relative z-10" />
           </button>
           <Link
             to="/projects"

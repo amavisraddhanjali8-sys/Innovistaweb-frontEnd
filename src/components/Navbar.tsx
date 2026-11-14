@@ -251,10 +251,10 @@ export default function Navbar() {
         </div>
 
         <button
-          className={`${styles.quoteBtn} cursor-target`}
+          className={`${styles.quoteBtn} request-quote-fx cursor-target`}
           onClick={handleQuoteClick}
         >
-          Get a Free Quote
+          <span className="relative z-10">Request Quote</span>
         </button>
 
         {/* Mobile Right Quick Controls (Cart + 44px Hamburger Button) */}
@@ -424,10 +424,10 @@ export default function Navbar() {
 
                 <button
                   type="button"
-                  className={styles.mobileQuoteBtn}
+                  className={`${styles.mobileQuoteBtn} request-quote-fx`}
                   onClick={handleQuoteClick}
                 >
-                  Get a Free Quote
+                  <span className="relative z-10">Request Quote</span>
                 </button>
               </div>
             </div>

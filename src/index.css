@@ -141,3 +141,242 @@
     animation: none;
   }
 }
+
+/* =========================================================
+   Request Quote CTA — Floating, Animated Gradient, Neon & Glassy FX
+   ========================================================= */
+@keyframes rqFloat {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes rqGradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes rqNeonBreath {
+  0%,
+  100% {
+    box-shadow:
+      0 8px 22px -6px rgba(34, 87, 122, 0.55),
+      0 0 12px rgba(51, 147, 184, 0.42),
+      0 0 24px rgba(56, 189, 248, 0.22),
+      inset 0 1px 1px rgba(255, 255, 255, 0.52);
+  }
+  50% {
+    box-shadow:
+      0 12px 28px -6px rgba(34, 87, 122, 0.72),
+      0 0 18px rgba(56, 189, 248, 0.68),
+      0 0 36px rgba(92, 182, 210, 0.42),
+      inset 0 1px 1.5px rgba(255, 255, 255, 0.7);
+  }
+}
+
+@keyframes rqGlassSweep {
+  0% {
+    transform: translateX(-140%) skewX(-24deg);
+  }
+  45%,
+  100% {
+    transform: translateX(240%) skewX(-24deg);
+  }
+}
+
+.request-quote-fx {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  background: linear-gradient(
+    125deg,
+    #18415c 0%,
+    #22577a 22%,
+    #0ea5e9 48%,
+    #3393b8 72%,
+    #06b6d4 100%
+  );
+  background-size: 240% 240%;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(10, 25, 41, 0.35);
+  animation:
+    rqFloat 3.4s ease-in-out infinite,
+    rqGradientShift 5s ease infinite,
+    rqNeonBreath 2.8s ease-in-out infinite;
+  transition:
+    transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.24s ease,
+    border-color 0.24s ease,
+    box-shadow 0.24s ease;
+}
+
+/* Frosted top glass highlight layer */
+.request-quote-fx::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.34) 0%,
+    rgba(255, 255, 255, 0.08) 48%,
+    rgba(15, 23, 42, 0.14) 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Diagonal specular glass shimmer sweep */
+.request-quote-fx::after {
+  content: "";
+  position: absolute;
+  top: -20%;
+  left: 0;
+  width: 42%;
+  height: 140%;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: rqGlassSweep 4.2s ease-in-out infinite;
+}
+
+.request-quote-fx:hover {
+  animation-play-state: paused;
+  transform: translateY(-3px) scale(1.02);
+  border-color: rgba(186, 230, 253, 0.85);
+  filter: brightness(1.08);
+  box-shadow:
+    0 14px 32px -6px rgba(14, 165, 233, 0.55),
+    0 0 22px rgba(56, 189, 248, 0.8),
+    0 0 44px rgba(6, 182, 212, 0.48),
+    inset 0 1px 2px rgba(255, 255, 255, 0.85);
+}
+
+.request-quote-fx:active {
+  transform: translateY(0px) scale(0.98);
+}
+
+.request-quote-fx:disabled {
+  animation: none;
+  opacity: 0.5;
+  filter: none;
+  cursor: not-allowed;
+}
+
+/* =========================================================
+   Silent Visual Ringing Call Animation (Zero Audio)
+   ========================================================= */
+@keyframes phoneWaveExpand {
+  0% {
+    transform: scale(0.92);
+    opacity: 0.78;
+  }
+  70% {
+    opacity: 0.28;
+  }
+  100% {
+    transform: scale(1.48);
+    opacity: 0;
+  }
+}
+
+@keyframes handsetSilentRing {
+  0%,
+  42%,
+  100% {
+    transform: rotate(0deg) scale(1);
+  }
+  6% {
+    transform: rotate(-16deg) scale(1.08);
+  }
+  12% {
+    transform: rotate(15deg) scale(1.08);
+  }
+  18% {
+    transform: rotate(-14deg) scale(1.08);
+  }
+  24% {
+    transform: rotate(12deg) scale(1.06);
+  }
+  30% {
+    transform: rotate(-7deg) scale(1.03);
+  }
+  36% {
+    transform: rotate(0deg) scale(1);
+  }
+}
+
+.silent-ring-beacon {
+  overflow: visible;
+}
+
+.silent-ring-wave {
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 1.5px solid rgba(51, 147, 184, 0.65);
+  pointer-events: none;
+  animation: phoneWaveExpand 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.silent-ring-wave-2 {
+  animation-delay: 0.8s;
+}
+
+.silent-ring-wave-3 {
+  animation-delay: 1.6s;
+}
+
+.silent-ring-handset {
+  animation: handsetSilentRing 2.6s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.silent-ring-beacon[data-active="true"] .silent-ring-wave {
+  border-color: rgba(56, 189, 248, 0.9);
+  animation-duration: 1.35s;
+}
+
+.silent-ring-beacon[data-active="true"] .silent-ring-handset,
+.group:hover .silent-ring-handset {
+  animation-duration: 1.15s;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .request-quote-fx,
+  .request-quote-fx::after,
+  .silent-ring-wave,
+  .silent-ring-handset {
+    animation: none !important;
+  }
+}

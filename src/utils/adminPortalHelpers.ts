@@ -72,6 +72,12 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     path: "/BlogsAdmin",
     matchPaths: ["/BlogsAdmin"],
   },
+  {
+    key: "chatbot",
+    label: "Chatbot",
+    path: "/ChatbotAdmin",
+    matchPaths: ["/ChatbotAdmin"],
+  },
 ];
 
 export const ADMIN_SHELL_PATHS: string[] = [
@@ -187,6 +193,13 @@ export function getAdminBreadcrumb(pathname: string): AdminBreadcrumbMeta {
         current: "Blogger Sync & Home Curation",
         title: "Blogs & Blogger.com Publisher",
         subtitle: "Connect Blogger.com to auto-share posts and curate which articles appear on the Home page.",
+      };
+    case "/chatbotadmin":
+      return {
+        parent: "Chatbot",
+        current: "Chatbot & Site Visits",
+        title: "Chatbot Training & Site Visit Slots",
+        subtitle: "Train FAQ questions & answers, customize WhatsApp handoff, and manage visit slots.",
       };
     default:
       return {

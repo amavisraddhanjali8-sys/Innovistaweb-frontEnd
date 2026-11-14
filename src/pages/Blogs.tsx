@@ -19,6 +19,8 @@ import {
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import PageAdBannerSlideshow from "../components/PageAdBannerSlideshow";
+import PageMetadata from "../components/PageMetadata";
+import RequestQuoteButton from "../components/RequestQuoteButton";
 import {
   BLOGGER_COVER_FALLBACKS,
   DEFAULT_BLOGGER_CONFIG,
@@ -198,6 +200,23 @@ export default function Blogs() {
       style={SANS_FONT}
       className="w-full bg-[#FCFAF6] text-[#181715] flex flex-col"
     >
+      <PageMetadata
+        title={
+          activeArticle
+            ? activeArticle.title
+            : "Architectural Journal, Essays & Facade Notes"
+        }
+        description={
+          activeArticle
+            ? activeArticle.excerpt
+            : "Read architectural aluminium facade engineering studies, thermal glazing insights, and fabrication notes from Innovista Fabriconix."
+        }
+        canonicalPath={
+          activeArticle ? `/blogs?post=${activeArticle.id}` : "/blogs"
+        }
+        ogType={activeArticle ? "article" : "website"}
+        ogImage={activeArticle?.coverImage}
+      />
       {/* Editorial Monograph Masthead & Blogger.com Integration Strip */}
       <header className="w-full border-b border-[#E4DDD0] bg-[#FCFAF6]">
         <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-10 py-5 sm:py-6 flex flex-col gap-4">
@@ -851,13 +870,10 @@ export default function Blogs() {
             >
               Open Press Newsroom
             </Link>
-            <Link
-              to="/request-quote"
-              className="min-h-[40px] inline-flex items-center gap-1.5 px-4 py-2 bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-semibold no-underline transition-colors"
-            >
+            <RequestQuoteButton as="link" to="/request-quote" size="sm">
               <span>Request Project Quote</span>
               <FiArrowRight className="text-xs" />
-            </Link>
+            </RequestQuoteButton>
           </div>
         </section>
       </main>

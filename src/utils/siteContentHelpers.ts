@@ -561,8 +561,8 @@ export const CONTACT_DEPARTMENTS: ContactDepartmentCard[] = [
     id: "dept-sales",
     title: "Sales & Estimations",
     role: "Project quotes, BOQ costing & showroom visits",
-    phone: "+94 11 234 5678",
-    email: "sales@innovista.lk",
+    phone: "+94 76 081 8098",
+    email: "innovistametal@gmail.com",
     hours: "Mon–Sat · 8:30 AM – 5:30 PM",
   },
   {
@@ -598,7 +598,7 @@ export const CONTACT_LOCATIONS: ContactLocationCard[] = [
     badge: "Head Office",
     address: "No. 42, Nawala Road, Colombo 05, Sri Lanka",
     hours: "Mon–Sat · 8:30 AM – 5:30 PM",
-    phone: "+94 11 234 5678",
+    phone: "+94 76 081 8098",
     mapUrl: "https://maps.google.com/?q=Nawala+Road+Colombo+05+Sri+Lanka",
   },
   {

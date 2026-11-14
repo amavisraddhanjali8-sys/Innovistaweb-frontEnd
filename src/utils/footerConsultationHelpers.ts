@@ -56,12 +56,103 @@ export const FOOTER_LINK_COLUMNS: FooterLinkColumn[] = [
   },
 ];
 
-export const FOOTER_CONTACT_DETAILS = {
-  phone: "+94 11 234 5678",
-  email: "info@innovista.lk",
+export interface SiteContactSettings {
+  phone: string;
+  whatsapp: string;
+  email: string;
+  website: string;
+  address: string;
+  linkedinUrl: string;
+  facebookUrl: string;
+  instagramUrl: string;
+}
+
+const envMeta =
+  typeof import.meta !== "undefined" && (import.meta as { env?: Record<string, string | undefined> }).env
+    ? (import.meta as { env?: Record<string, string | undefined> }).env!
+    : {};
+
+export const DEFAULT_SITE_CONTACT_SETTINGS: SiteContactSettings = {
+  phone: envMeta.VITE_CONTACT_PHONE?.trim() || "+94 76 081 8098",
+  whatsapp: envMeta.VITE_WHATSAPP_NUMBER?.trim() || "94760818098",
+  email: envMeta.VITE_CONTACT_EMAIL?.trim() || "innovistametal@gmail.com",
   website: "www.innovistafabriconix.lk",
   address: "No. 42, Nawala Road, Colombo 05",
+  linkedinUrl: "https://www.linkedin.com",
+  facebookUrl: "https://www.facebook.com/share/1CN1SBPycg/",
+  instagramUrl:
+    "https://www.instagram.com/innovista_fabriconx_aluminium?igsh=OXU0MndxZWMwNHo2",
 };
+
+export const FOOTER_CONTACT_DETAILS = {
+  phone: DEFAULT_SITE_CONTACT_SETTINGS.phone,
+  email: DEFAULT_SITE_CONTACT_SETTINGS.email,
+  website: DEFAULT_SITE_CONTACT_SETTINGS.website,
+  address: DEFAULT_SITE_CONTACT_SETTINGS.address,
+};
+
+export function formatTelHref(phone: string): string {
+  const cleaned = (phone || "").replace(/[^\d+]/g, "");
+  return cleaned ? `tel:${cleaned}` : "tel:+94760818098";
+}
+
+export function formatWhatsAppHref(phoneOrWhatsapp: string): string {
+  const digits = (phoneOrWhatsapp || "").replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : "https://wa.me/94760818098";
+}
+
+export function normalizeSiteContactSettings(
+  raw?: Partial<SiteContactSettings> | null,
+  fallback: SiteContactSettings = DEFAULT_SITE_CONTACT_SETTINGS
+): SiteContactSettings {
+  const phone = typeof raw?.phone === "string" && raw.phone.trim() ? raw.phone.trim() : fallback.phone;
+  const whatsappRaw =
+    typeof raw?.whatsapp === "string" && raw.whatsapp.trim()
+      ? raw.whatsapp.trim()
+      : phone.replace(/\D/g, "") || fallback.whatsapp;
+
+  return {
+    phone,
+    whatsapp: whatsappRaw.replace(/\D/g, "") || fallback.whatsapp,
+    email: typeof raw?.email === "string" && raw.email.trim() ? raw.email.trim() : fallback.email,
+    website:
+      typeof raw?.website === "string" && raw.website.trim()
+        ? raw.website.trim()
+        : fallback.website,
+    address:
+      typeof raw?.address === "string" && raw.address.trim()
+        ? raw.address.trim()
+        : fallback.address,
+    linkedinUrl:
+      typeof raw?.linkedinUrl === "string" && raw.linkedinUrl.trim()
+        ? raw.linkedinUrl.trim()
+        : fallback.linkedinUrl,
+    facebookUrl:
+      typeof raw?.facebookUrl === "string" && raw.facebookUrl.trim()
+        ? raw.facebookUrl.trim()
+        : fallback.facebookUrl,
+    instagramUrl:
+      typeof raw?.instagramUrl === "string" && raw.instagramUrl.trim()
+        ? raw.instagramUrl.trim()
+        : fallback.instagramUrl,
+  };
+}
+
+export function validateSiteContactSettings(
+  settings: SiteContactSettings
+): Partial<Record<keyof SiteContactSettings, string>> {
+  const errors: Partial<Record<keyof SiteContactSettings, string>> = {};
+  if (!settings.phone.trim() || !isValidOptionalPhone(settings.phone)) {
+    errors.phone = "Enter a valid phone number (7–15 digits).";
+  }
+  if (!settings.email.trim() || !isValidEmailAddress(settings.email)) {
+    errors.email = "Enter a valid email address.";
+  }
+  if (!settings.address.trim()) {
+    errors.address = "Address is required.";
+  }
+  return errors;
+}
 
 export const FOOTER_SERVICE_HIGHLIGHTS = [
   "Custom CAD Detailing",
