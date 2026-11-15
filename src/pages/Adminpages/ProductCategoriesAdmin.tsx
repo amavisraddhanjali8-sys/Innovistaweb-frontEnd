@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   App as AntdApp,
@@ -15,6 +15,7 @@ import {
 import {
   ArrowDownOutlined,
   ArrowUpOutlined,
+  BgColorsOutlined,
   DeleteOutlined,
   EditOutlined,
   EyeOutlined,
@@ -26,6 +27,18 @@ import {
 } from "@ant-design/icons";
 import AxiosConfig from "../../Context/AxiosConfig";
 import AdminPortalShell from "../../components/AdminPortalShell";
+import HeroThemeEditor, {
+  type HeroThemeCopySource,
+} from "../../components/HeroThemeEditor";
+import {
+  DEFAULT_HERO_THEME,
+  buildCategoryAccentFillCss,
+  buildHeroBackgroundCss,
+  buildHeroImageMaskCss,
+  describeHeroThemeSummary,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "../../utils/heroThemeHelpers";
 import {
   clampSlideshowSpeedMs,
   getNextSlideIndex,
@@ -101,11 +114,20 @@ export default function ProductCategoriesAdmin() {
   );
   const [catSlideshowSpeedMs, setCatSlideshowSpeedMs] = useState(4500);
   const [catHeroSlides, setCatHeroSlides] = useState<HeroSlide[]>([]);
+  const [catHeroTheme, setCatHeroTheme] =
+    useState<HeroThemeConfig>(DEFAULT_HERO_THEME);
+  const [aboutHeroTheme, setAboutHeroTheme] =
+    useState<HeroThemeConfig>(DEFAULT_HERO_THEME);
+  const [applyingAllCategories, setApplyingAllCategories] = useState(false);
+  const handledEditParamRef = useRef<string | null>(null);
 
   const fetchAllProductCms = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await AxiosConfig.get("/products/cms");
+      const [res, heroRes] = await Promise.all([
+        AxiosConfig.get("/products/cms"),
+        AxiosConfig.get("/api/hero-themes").catch(() => null),
+      ]);
       const rawLanding = res.data?.landing ?? res.data?.data;
       if (rawLanding) {
         setLandingCms(normalizeProductLandingCms(rawLanding));
@@ -115,6 +137,11 @@ export default function ProductCategoriesAdmin() {
           res.data.categories.map((c: Partial<ProductCategory>, idx: number) =>
             normalizeProductCategory(c, idx)
           )
+        );
+      }
+      if (heroRes?.data?.aboutHeroTheme) {
+        setAboutHeroTheme(
+          normalizeHeroTheme(heroRes.data.aboutHeroTheme, DEFAULT_HERO_THEME)
         );
       }
     } catch {
@@ -128,46 +155,61 @@ export default function ProductCategoriesAdmin() {
     fetchAllProductCms();
   }, [fetchAllProductCms]);
 
-  const openCategoryEditor = useCallback((cat?: ProductCategory) => {
-    if (cat) {
-      setEditingId(cat.CategoryID);
-      setCatName(cat.name);
-      setCatSlug(cat.slug);
-      setCatTagline(cat.tagline);
-      setCatDescription(cat.description);
-      setCatCoverImage(cat.coverImage);
-      setCatFeatured(cat.featured);
-      setCatSpecsText((cat.specHighlights || []).join(", "));
-      setCatSlideshowSpeedMs(cat.slideshowSpeedMs || 4500);
-      setCatHeroSlides(
-        cat.heroSlides?.length
-          ? cat.heroSlides
-          : createDefaultCategorySlides(cat.name, cat.tagline, cat.coverImage)
-      );
-    } else {
-      const defaultCover =
-        PRODUCT_ASSET_PRESETS[categories.length % PRODUCT_ASSET_PRESETS.length].url;
-      setEditingId(null);
-      setCatName("");
-      setCatSlug("");
-      setCatTagline("");
-      setCatDescription("");
-      setCatCoverImage(defaultCover);
-      setCatFeatured(true);
-      setCatSpecsText("20mm Sightlines, Marine Powder Coat, Site Tested");
-      setCatSlideshowSpeedMs(4500);
-      setCatHeroSlides([
-        {
-          id: `new-cat-s1-${Date.now()}`,
-          headline: "Architectural Category Series",
-          subheadline:
-            "Precision aluminium and laminated glass fabricated to exact site dimensions.",
-          image: defaultCover,
-        },
-      ]);
-    }
-    setEditorOpen(true);
-  }, [categories.length]);
+  const openCategoryEditor = useCallback(
+    (cat?: ProductCategory, scrollToColors = false) => {
+      if (cat) {
+        setEditingId(cat.CategoryID);
+        setCatName(cat.name);
+        setCatSlug(cat.slug);
+        setCatTagline(cat.tagline);
+        setCatDescription(cat.description);
+        setCatCoverImage(cat.coverImage);
+        setCatFeatured(cat.featured);
+        setCatSpecsText((cat.specHighlights || []).join(", "));
+        setCatSlideshowSpeedMs(cat.slideshowSpeedMs || 4500);
+        setCatHeroTheme(normalizeHeroTheme(cat.heroTheme, DEFAULT_HERO_THEME));
+        setCatHeroSlides(
+          cat.heroSlides?.length
+            ? cat.heroSlides
+            : createDefaultCategorySlides(cat.name, cat.tagline, cat.coverImage)
+        );
+      } else {
+        const defaultCover =
+          PRODUCT_ASSET_PRESETS[categories.length % PRODUCT_ASSET_PRESETS.length]
+            .url;
+        setEditingId(null);
+        setCatName("");
+        setCatSlug("");
+        setCatTagline("");
+        setCatDescription("");
+        setCatCoverImage(defaultCover);
+        setCatFeatured(true);
+        setCatSpecsText("20mm Sightlines, Marine Powder Coat, Site Tested");
+        setCatSlideshowSpeedMs(4500);
+        setCatHeroTheme(
+          normalizeHeroTheme(landingCms.heroTheme, DEFAULT_HERO_THEME)
+        );
+        setCatHeroSlides([
+          {
+            id: `new-cat-s1-${Date.now()}`,
+            headline: "Architectural Category Series",
+            subheadline:
+              "Precision aluminium and laminated glass fabricated to exact site dimensions.",
+            image: defaultCover,
+          },
+        ]);
+      }
+      setEditorOpen(true);
+      if (scrollToColors) {
+        setTimeout(() => {
+          document
+            .getElementById("cat-hero-color-studio")
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 180);
+      }
+    },
+    [categories.length, landingCms.heroTheme]
+  );
 
   useEffect(() => {
     const requestedTab = searchParams.get("tab");
@@ -179,11 +221,16 @@ export default function ProductCategoriesAdmin() {
       setActiveTab(requestedTab);
     }
     const editParam = searchParams.get("edit");
-    if (editParam && categories.length > 0) {
+    if (!editParam) {
+      handledEditParamRef.current = null;
+      return;
+    }
+    if (handledEditParamRef.current !== editParam && categories.length > 0) {
       const match = categories.find(
         (c) => c.CategoryID === editParam || c.slug === editParam
       );
       if (match) {
+        handledEditParamRef.current = editParam;
         openCategoryEditor(match);
       }
     }
@@ -269,6 +316,7 @@ export default function ProductCategoriesAdmin() {
       featured: catFeatured,
       slideshowSpeedMs: clampSlideshowSpeedMs(catSlideshowSpeedMs, 4500),
       heroSlides: cleanedSlides,
+      heroTheme: normalizeHeroTheme(catHeroTheme, DEFAULT_HERO_THEME),
       specHighlights: catSpecsText
         .split(",")
         .map((s) => s.trim())
@@ -291,6 +339,24 @@ export default function ProductCategoriesAdmin() {
       message.error("Failed to save product category.");
     } finally {
       setSavingCategory(false);
+    }
+  };
+
+  const handleApplyThemeToAllCategories = async (theme: HeroThemeConfig) => {
+    try {
+      setApplyingAllCategories(true);
+      const clean = normalizeHeroTheme(theme, DEFAULT_HERO_THEME);
+      await AxiosConfig.put("/products/categories/apply-theme", { theme: clean });
+      setCatHeroTheme(clean);
+      message.success(
+        `Applied color theme to all ${categories.length} product categories.`
+      );
+      setRefreshTick((t) => t + 1);
+      await fetchAllProductCms();
+    } catch {
+      message.error("Could not apply colors across all categories.");
+    } finally {
+      setApplyingAllCategories(false);
     }
   };
 
@@ -388,11 +454,28 @@ export default function ProductCategoriesAdmin() {
               </div>
             </div>
 
-            <div className="relative rounded-xl overflow-hidden bg-gradient-to-b from-[#22577A] via-[#3393B8] to-white pt-4 text-center border border-slate-100">
-              <h4 className="px-3 text-sm font-semibold text-white leading-snug">
+            <div
+              style={{ background: buildHeroBackgroundCss(landingCms.heroTheme) }}
+              className="relative rounded-xl overflow-hidden pt-4 text-center border border-slate-100"
+            >
+              <h4
+                style={{
+                  color:
+                    landingCms.heroTheme?.headlineColor ||
+                    DEFAULT_HERO_THEME.headlineColor,
+                }}
+                className="px-3 text-sm font-semibold leading-snug"
+              >
                 {activeLandingSlide.headline}
               </h4>
-              <p className="px-3 mt-1 text-[11px] text-white/90 line-clamp-2">
+              <p
+                style={{
+                  color:
+                    landingCms.heroTheme?.subheadlineColor ||
+                    DEFAULT_HERO_THEME.subheadlineColor,
+                }}
+                className="px-3 mt-1 text-[11px] line-clamp-2"
+              >
                 {activeLandingSlide.subheadline}
               </p>
               <img
@@ -401,9 +484,13 @@ export default function ProductCategoriesAdmin() {
                 referrerPolicy="no-referrer"
                 style={{
                   maskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 22%, black 85%, transparent 100%)",
+                    buildHeroImageMaskCss(landingCms.heroTheme) === "none"
+                      ? undefined
+                      : buildHeroImageMaskCss(landingCms.heroTheme),
                   WebkitMaskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 22%, black 85%, transparent 100%)",
+                    buildHeroImageMaskCss(landingCms.heroTheme) === "none"
+                      ? undefined
+                      : buildHeroImageMaskCss(landingCms.heroTheme),
                 }}
                 className="w-full h-32 object-cover mt-1 block"
               />
@@ -603,10 +690,19 @@ export default function ProductCategoriesAdmin() {
                       <div className="text-xs text-slate-600 line-clamp-1 mt-0.5">
                         {cat.tagline}
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1 tabular-nums">
-                        {cat.heroSlides?.length || 1} category{" "}
-                        {(cat.heroSlides?.length || 1) === 1 ? "slide" : "slides"} ·{" "}
-                        {((cat.slideshowSpeedMs || 4500) / 1000).toFixed(1)}s auto-change
+                      <div className="flex items-center gap-2 flex-wrap text-[11px] text-slate-500 mt-1 tabular-nums">
+                        <span>
+                          {cat.heroSlides?.length || 1} category{" "}
+                          {(cat.heroSlides?.length || 1) === 1 ? "slide" : "slides"} ·{" "}
+                          {((cat.slideshowSpeedMs || 4500) / 1000).toFixed(1)}s auto-change
+                        </span>
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-white border border-slate-200 text-slate-600">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-slate-300 shrink-0"
+                            style={{ background: buildCategoryAccentFillCss(cat.heroTheme) }}
+                          />
+                          <span>{describeHeroThemeSummary(cat.heroTheme)}</span>
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -626,6 +722,14 @@ export default function ProductCategoriesAdmin() {
                       aria-label={`Move ${cat.name} Down`}
                       onClick={() => handleReorderCategory(idx, 1)}
                     />
+                    <Button
+                      size="small"
+                      icon={<BgColorsOutlined />}
+                      aria-label={`Edit ${cat.name} Colors`}
+                      onClick={() => openCategoryEditor(cat, true)}
+                    >
+                      Colors
+                    </Button>
                     <Button
                       size="small"
                       icon={<EyeOutlined />}
@@ -772,6 +876,28 @@ export default function ProductCategoriesAdmin() {
                 />
               </div>
             </div>
+
+            <HeroThemeEditor
+              value={landingCms.heroTheme}
+              onChange={(nextTheme) =>
+                setLandingCms((prev) => ({ ...prev, heroTheme: nextTheme }))
+              }
+              title="Colors"
+              previewHeadline={activeLandingSlide?.headline || "Aluminium & Glazing Systems"}
+              previewSubheadline="Aluminium & Glazing Systems"
+              previewImage={activeLandingSlide?.image || "/assets/products/hero-showroom.jpg"}
+              copySources={[
+                { id: "about-hero", label: "About", theme: aboutHeroTheme },
+                ...categories.map((cat) => ({
+                  id: `cat-${cat.CategoryID}`,
+                  label: cat.name,
+                  theme: normalizeHeroTheme(cat.heroTheme, DEFAULT_HERO_THEME),
+                })),
+              ]}
+              onApplyToAll={handleApplyThemeToAllCategories}
+              applyToAllLabel="Apply"
+              applyingToAll={applyingAllCategories}
+            />
 
             <div className="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-slate-100">
               <span className="text-xs text-slate-500">
@@ -1224,7 +1350,7 @@ export default function ProductCategoriesAdmin() {
         )}
       </Spin>
 
-      {/* Add / Edit Category + Category Slideshow Modal */}
+      {/* Category Modal */}
       <Modal
         open={editorOpen}
         onCancel={() => setEditorOpen(false)}
@@ -1232,7 +1358,7 @@ export default function ProductCategoriesAdmin() {
         centered
         title={
           <span className="font-bold text-slate-900">
-            {editingId ? `Edit Category: ${catName}` : "Add New Product Category"}
+            {editingId ? catName || "Category" : "Category"}
           </span>
         }
         footer={[
@@ -1247,7 +1373,7 @@ export default function ProductCategoriesAdmin() {
             onClick={handleSaveCategory}
             style={{ background: "#22577A", borderColor: "#22577A" }}
           >
-            {editingId ? "Update Category" : "Create Category"}
+            Save
           </Button>,
         ]}
       >
@@ -1258,12 +1384,12 @@ export default function ProductCategoriesAdmin() {
                 htmlFor="cat-name-input"
                 className="block text-xs font-semibold text-slate-700 mb-1"
               >
-                Category Name *
+                Name
               </label>
               <Input
                 id="cat-name-input"
                 value={catName}
-                placeholder="e.g. Pergolas & Sunrooms"
+                placeholder="Name"
                 onChange={(e) => {
                   const val = e.target.value;
                   setCatName(val);
@@ -1279,12 +1405,12 @@ export default function ProductCategoriesAdmin() {
                 htmlFor="cat-slug-input"
                 className="block text-xs font-semibold text-slate-700 mb-1"
               >
-                Landing Page URL Slug
+                Slug
               </label>
               <Input
                 id="cat-slug-input"
                 value={catSlug}
-                placeholder="pergolas-and-sunrooms"
+                placeholder="slug"
                 onChange={(e) => setCatSlug(e.target.value)}
               />
             </div>
@@ -1295,12 +1421,12 @@ export default function ProductCategoriesAdmin() {
               htmlFor="cat-tagline-input"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              Short Tagline
+              Tagline
             </label>
             <Input
               id="cat-tagline-input"
               value={catTagline}
-              placeholder="Slim-line glass roofs and architectural terrace canopies."
+              placeholder="Tagline"
               onChange={(e) => setCatTagline(e.target.value)}
             />
           </div>
@@ -1310,7 +1436,7 @@ export default function ProductCategoriesAdmin() {
               htmlFor="cat-desc-input"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              Category Engineering Description
+              Description
             </label>
             <Input.TextArea
               id="cat-desc-input"
@@ -1326,7 +1452,7 @@ export default function ProductCategoriesAdmin() {
                 htmlFor="cat-specs-input"
                 className="block text-xs font-semibold text-slate-700 mb-1"
               >
-                Key Specifications (comma separated)
+                Specs
               </label>
               <Input
                 id="cat-specs-input"
@@ -1336,21 +1462,19 @@ export default function ProductCategoriesAdmin() {
             </div>
             <div className="flex items-end pb-1.5 gap-3">
               <Switch checked={catFeatured} onChange={setCatFeatured} />
-              <span className="text-xs font-semibold text-slate-700">
-                Featured on Product Landing Page
-              </span>
+              <span className="text-xs font-semibold text-slate-700">Featured</span>
             </div>
           </div>
 
-          {/* Cover Image */}
+          {/* Image */}
           <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 space-y-2.5">
             <label className="block text-xs font-semibold text-slate-700">
-              Category Card Cover Image
+              Image
             </label>
             <div className="flex items-center gap-3">
               <img
                 src={catCoverImage}
-                alt="Cover preview"
+                alt="Cover"
                 referrerPolicy="no-referrer"
                 className="w-20 h-14 rounded-lg object-cover border border-slate-200 shrink-0"
               />
@@ -1363,7 +1487,7 @@ export default function ProductCategoriesAdmin() {
               <label className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-dashed border-slate-300 bg-white text-[11px] font-medium cursor-pointer">
                 <UploadOutlined />
                 <span>
-                  {uploadingKey === "cat-cover" ? "Uploading..." : "Upload Cover"}
+                  {uploadingKey === "cat-cover" ? "Uploading..." : "Upload"}
                 </span>
                 <input
                   type="file"
@@ -1391,17 +1515,11 @@ export default function ProductCategoriesAdmin() {
             </div>
           </div>
 
-          {/* Category Landing Page Slideshow Configuration */}
+          {/* Slideshow */}
           <div className="rounded-xl border border-sky-200 bg-sky-50/50 p-4 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <div className="text-xs font-bold text-[#22577A]">
-                  Category Landing Page Slideshow ({catHeroSlides.length} slides ·{" "}
-                  {catSpeedSec}s)
-                </div>
-                <div className="text-[11px] text-slate-600">
-                  Shown as the hero slideshow on /products/category/{catSlug || "slug"}
-                </div>
+              <div className="text-xs font-bold text-[#22577A]">
+                Slideshow ({catHeroSlides.length} · {catSpeedSec}s)
               </div>
               <Button
                 size="small"
@@ -1424,7 +1542,7 @@ export default function ProductCategoriesAdmin() {
                   ]);
                 }}
               >
-                Add Slide
+                Add
               </Button>
             </div>
 
@@ -1446,7 +1564,7 @@ export default function ProductCategoriesAdmin() {
                 >
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-slate-700">
-                      Category Slide {sIdx + 1}
+                      Slide {sIdx + 1}
                     </span>
                     <Button
                       size="small"
@@ -1462,7 +1580,7 @@ export default function ProductCategoriesAdmin() {
                   </div>
                   <Input
                     size="small"
-                    placeholder="Slide headline"
+                    placeholder="Headline"
                     value={slide.headline}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -1475,7 +1593,7 @@ export default function ProductCategoriesAdmin() {
                   />
                   <Input
                     size="small"
-                    placeholder="Slide subtitle"
+                    placeholder="Subtitle"
                     value={slide.subheadline}
                     onChange={(e) => {
                       const val = e.target.value;
@@ -1489,7 +1607,7 @@ export default function ProductCategoriesAdmin() {
                   <div className="flex items-center gap-2">
                     <Input
                       size="small"
-                      placeholder="Image URL"
+                      placeholder="Image"
                       value={slide.image}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -1524,6 +1642,54 @@ export default function ProductCategoriesAdmin() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Colors */}
+          <div id="cat-hero-color-studio">
+            <HeroThemeEditor
+              value={catHeroTheme}
+              onChange={setCatHeroTheme}
+              title="Colors"
+              previewHeadline={
+                catHeroSlides[0]?.headline || `${catName || "Category"} Systems`
+              }
+              previewSubheadline={
+                catTagline || "Custom engineered architectural aluminium & glazing."
+              }
+              previewImage={
+                catHeroSlides[0]?.image ||
+                catCoverImage ||
+                "/assets/products/hero-showroom.jpg"
+              }
+              copySources={
+                [
+                  {
+                    id: "prod-landing",
+                    label: "Products",
+                    theme: normalizeHeroTheme(
+                      landingCms.heroTheme,
+                      DEFAULT_HERO_THEME
+                    ),
+                  },
+                  {
+                    id: "about-hero",
+                    label: "About",
+                    theme: aboutHeroTheme,
+                  },
+                  ...categories
+                    .filter((c) => c.CategoryID !== editingId)
+                    .map((c) => ({
+                      id: `cat-${c.CategoryID}`,
+                      label: c.name,
+                      theme: normalizeHeroTheme(c.heroTheme, DEFAULT_HERO_THEME),
+                    })),
+                ] as HeroThemeCopySource[]
+              }
+              onApplyToAll={handleApplyThemeToAllCategories}
+              applyToAllLabel="Apply"
+              applyingToAll={applyingAllCategories}
+              compact
+            />
           </div>
         </div>
       </Modal>

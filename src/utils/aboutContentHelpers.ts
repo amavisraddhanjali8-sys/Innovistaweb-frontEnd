@@ -1,3 +1,9 @@
+import {
+  DEFAULT_HERO_THEME,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "./heroThemeHelpers.ts";
+
 export interface AboutThumbnail {
   id: string;
   title: string;
@@ -90,6 +96,7 @@ export interface AboutCmsPayload {
   partners: PartnerItem[];
   clients: ClientItem[];
   clientFeedbacks: ClientFeedbackItem[];
+  heroTheme?: HeroThemeConfig;
 }
 
 export const MIN_SLIDESHOW_SPEED_MS = 1500;
@@ -754,5 +761,9 @@ export function normalizeAboutCmsPayload(
     partners,
     clients,
     clientFeedbacks,
+    heroTheme: normalizeHeroTheme(
+      incoming?.heroTheme,
+      defaults.heroTheme || DEFAULT_HERO_THEME
+    ),
   };
 }

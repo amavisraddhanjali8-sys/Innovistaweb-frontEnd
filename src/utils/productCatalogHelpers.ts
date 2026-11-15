@@ -7,6 +7,11 @@ import {
   sanitizeAboutImage,
   type HeroSlide,
 } from "./aboutContentHelpers.ts";
+import {
+  DEFAULT_HERO_THEME,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "./heroThemeHelpers.ts";
 
 export const MAX_CERTIFICATION_IMAGES = 8;
 export const DEFAULT_ACCESSORIES_SLIDESHOW_SPEED_MS = 4000;
@@ -186,6 +191,7 @@ export interface ProductCategory {
   slideshowSpeedMs: number;
   heroSlides: HeroSlide[];
   specHighlights: string[];
+  heroTheme?: HeroThemeConfig;
 }
 
 export type WhyChooseIcon =
@@ -210,6 +216,7 @@ export interface WhyChooseItem {
 export interface ProductLandingCms {
   slideshowSpeedMs: number;
   heroSlides: HeroSlide[];
+  heroTheme?: HeroThemeConfig;
   categoriesHeading: string;
   categoriesTagline: string;
   catalogHeading: string;
@@ -671,6 +678,7 @@ export const DEFAULT_WHY_CHOOSE_ITEMS: WhyChooseItem[] = [
 
 export const DEFAULT_PRODUCT_LANDING_CMS: ProductLandingCms = {
   slideshowSpeedMs: 5000,
+  heroTheme: { ...DEFAULT_HERO_THEME },
   categoriesHeading: "Product Categories",
   categoriesTagline: "",
   catalogHeading: "Systems Catalog",
@@ -1389,6 +1397,7 @@ export function normalizeProductCategory(
     specHighlights: Array.isArray(raw.specHighlights)
       ? raw.specHighlights.map((s) => s.trim()).filter(Boolean).slice(0, 4)
       : ["Custom Dimensions", "Anodized & Powder Coat", "Architectural Tolerance"],
+    heroTheme: normalizeHeroTheme(raw.heroTheme, DEFAULT_HERO_THEME),
   };
 }
 
@@ -1464,6 +1473,10 @@ export function normalizeProductLandingCms(
       raw?.whyChooseHeading?.trim() || defaults.whyChooseHeading || "Why Choose Us",
     whyChooseUs: normalizeWhyChooseItems(raw?.whyChooseUs, defaults.whyChooseUs),
     heroSlides: normalizeHeroSlides(raw?.heroSlides, defaults.heroSlides),
+    heroTheme: normalizeHeroTheme(
+      raw?.heroTheme,
+      defaults.heroTheme || DEFAULT_HERO_THEME
+    ),
   };
 }
 

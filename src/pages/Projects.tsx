@@ -156,6 +156,7 @@ function Projects() {
       <ShowcaseHeroSlideshow
         slides={heroSlides}
         slideshowSpeedMs={5000}
+        pageKey="projects"
         ariaLabel="Featured architectural projects slideshow"
         eyebrowText="Portfolio Showcase"
         adminManageTo="/AddProjects"

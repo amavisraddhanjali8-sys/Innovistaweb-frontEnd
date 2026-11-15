@@ -27,6 +27,7 @@ import {
   type HomeServiceItem,
 } from "../utils/homeServicesHelpers";
 import { searchHomeCatalog } from "../utils/homeSearchHelpers";
+import { buildCategoryAccentFillCss } from "../utils/heroThemeHelpers";
 
 export default function Products() {
   const { user } = useAuth();
@@ -206,6 +207,7 @@ export default function Products() {
       <ShowcaseHeroSlideshow
         slides={landingCms.heroSlides}
         slideshowSpeedMs={landingCms.slideshowSpeedMs}
+        heroTheme={landingCms.heroTheme}
         ariaLabel="Innovista Product Portfolio Slideshow"
         hideSubheadline
         adminManageTo="/ProductCategoriesAdmin?tab=slideshow"
@@ -251,6 +253,11 @@ export default function Products() {
                 to={`/products/category/${cat.slug}`}
                 className="group w-full bg-white rounded-2xl border border-slate-200/85 hover:border-[#3393B8]/70 shadow-[0_1px_3px_rgba(15,23,42,0.04)] hover:shadow-[0_12px_28px_rgba(34,87,122,0.10)] transition-all duration-200 overflow-hidden flex flex-col no-underline"
               >
+                <div
+                  className="h-1 w-full shrink-0"
+                  style={{ background: buildCategoryAccentFillCss(cat.heroTheme) }}
+                  aria-hidden="true"
+                />
                 <div className="aspect-[4/3] w-full bg-slate-100 overflow-hidden">
                   <img
                     src={cat.coverImage}

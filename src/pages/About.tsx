@@ -28,6 +28,7 @@ import {
   normalizeAboutCmsPayload,
   type AboutCmsPayload,
 } from "../utils/aboutContentHelpers";
+import { DEFAULT_HERO_THEME } from "../utils/heroThemeHelpers";
 
 const INITIAL_CMS_STATE: AboutCmsPayload = {
   slideshowSpeedMs: DEFAULT_SLIDESHOW_SPEED_MS,
@@ -44,6 +45,7 @@ const INITIAL_CMS_STATE: AboutCmsPayload = {
   partners: DEFAULT_PARTNERS,
   clients: DEFAULT_CLIENTS,
   clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
+  heroTheme: DEFAULT_HERO_THEME,
 };
 
 function About() {
@@ -77,7 +79,11 @@ function About() {
         canonicalPath="/about"
         ogImage="/assets/about/facade.jpg"
       />
-      <AboutHead slides={cmsData.heroSlides} slideshowSpeedMs={cmsData.slideshowSpeedMs} />
+      <AboutHead
+        slides={cmsData.heroSlides}
+        slideshowSpeedMs={cmsData.slideshowSpeedMs}
+        heroTheme={cmsData.heroTheme}
+      />
       <VisionSection content={cmsData} />
       <DirectorMessageSection data={cmsData.directorMessage} />
       <MeetTheTeamSection members={cmsData.teamMembers} />

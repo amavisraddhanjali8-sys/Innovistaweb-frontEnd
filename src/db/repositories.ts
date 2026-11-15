@@ -2,6 +2,7 @@ import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db, markDatabaseOffline, isMemoryFallbackActive } from "./index.ts";
 import {
   addAppointmentSlotRecordMem,
+  applyHeroThemeToAllCategoriesMem,
   createAppointmentRecordMem,
   createAuditLogMem,
   createCategoryRecordMem,
@@ -97,6 +98,11 @@ import {
   type DesignItem,
   type ProductCategory,
 } from "../utils/productCatalogHelpers.ts";
+import {
+  DEFAULT_HERO_THEME,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "../utils/heroThemeHelpers.ts";
 import {
   applyMonthlyTemplateToSchedule,
   computeDefaultEndTime,
@@ -437,15 +443,67 @@ function mapCategoryRow(row: typeof categories.$inferSelect): ProductCategory {
   );
 }
 
+async function loadCategoryThemeMap(): Promise<Record<string, HeroThemeConfig>> {
+  const rows = await db
+    .select()
+    .from(cmsDocuments)
+    .where(eq(cmsDocuments.key, "category_hero_themes"))
+    .limit(1);
+  const raw = (rows[0]?.payload || {}) as Record<string, Partial<HeroThemeConfig>>;
+  const out: Record<string, HeroThemeConfig> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v && typeof v === "object") {
+      out[k] = normalizeHeroTheme(v, DEFAULT_HERO_THEME);
+    }
+  }
+  return out;
+}
+
+async function saveCategoryThemeMap(
+  themeMap: Record<string, HeroThemeConfig>
+): Promise<void> {
+  await db
+    .insert(cmsDocuments)
+    .values({
+      key: "category_hero_themes",
+      payload: themeMap as unknown as Record<string, unknown>,
+      updatedByUserId: null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: cmsDocuments.key,
+      set: {
+        payload: themeMap as unknown as Record<string, unknown>,
+        updatedByUserId: null,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+function mergeCategoryTheme(
+  cat: ProductCategory,
+  themeMap: Record<string, HeroThemeConfig>
+): ProductCategory {
+  const match = themeMap[cat.CategoryID] || themeMap[cat.slug];
+  if (!match) return cat;
+  return {
+    ...cat,
+    heroTheme: normalizeHeroTheme(match, DEFAULT_HERO_THEME),
+  };
+}
+
 export async function listCategories(): Promise<ProductCategory[]> {
   if (isMemoryFallbackActive()) return listCategoriesMem();
   try {
     await ensureDatabaseSeeded();
-    const rows = await db
-      .select()
-      .from(categories)
-      .orderBy(asc(categories.displayOrder), asc(categories.id));
-    return rows.map(mapCategoryRow);
+    const [rows, themeMap] = await Promise.all([
+      db
+        .select()
+        .from(categories)
+        .orderBy(asc(categories.displayOrder), asc(categories.id)),
+      loadCategoryThemeMap(),
+    ]);
+    return rows.map((row) => mergeCategoryTheme(mapCategoryRow(row), themeMap));
   } catch (error) {
     markDatabaseOffline(error);
     return listCategoriesMem();
@@ -481,7 +539,14 @@ export async function createCategoryRecord(raw: Partial<ProductCategory>) {
         specHighlights: normalized.specHighlights,
       })
       .returning();
-    return mapCategoryRow(inserted);
+
+    const mapped = mapCategoryRow(inserted);
+    const theme = normalizeHeroTheme(raw.heroTheme, DEFAULT_HERO_THEME);
+    const themeMap = await loadCategoryThemeMap();
+    themeMap[mapped.CategoryID] = theme;
+    themeMap[mapped.slug] = theme;
+    await saveCategoryThemeMap(themeMap);
+    return { ...mapped, heroTheme: theme };
   } catch (error) {
     markDatabaseOffline(error);
     return createCategoryRecordMem(raw);
@@ -492,7 +557,10 @@ export async function updateCategoryRecord(keyOrId: string, raw: Partial<Product
   if (isMemoryFallbackActive()) return updateCategoryRecordMem(keyOrId, raw);
   try {
     await ensureDatabaseSeeded();
-    const all = await db.select().from(categories);
+    const [all, themeMap] = await Promise.all([
+      db.select().from(categories),
+      loadCategoryThemeMap(),
+    ]);
     const match = all.find(
       (c) =>
         c.categoryKey === keyOrId ||
@@ -501,7 +569,7 @@ export async function updateCategoryRecord(keyOrId: string, raw: Partial<Product
     );
     if (!match) return null;
 
-    const current = mapCategoryRow(match);
+    const current = mergeCategoryTheme(mapCategoryRow(match), themeMap);
     const normalized = normalizeProductCategory(
       { ...current, ...raw, CategoryID: current.CategoryID },
       match.displayOrder
@@ -531,10 +599,46 @@ export async function updateCategoryRecord(keyOrId: string, raw: Partial<Product
       .where(eq(categories.id, match.id))
       .returning();
 
-    return mapCategoryRow(updated);
+    const theme = normalizeHeroTheme(
+      raw.heroTheme ?? current.heroTheme,
+      DEFAULT_HERO_THEME
+    );
+    if (match.slug !== normalized.slug) {
+      delete themeMap[match.slug];
+    }
+    themeMap[current.CategoryID] = theme;
+    themeMap[normalized.slug] = theme;
+    await saveCategoryThemeMap(themeMap);
+
+    return { ...mapCategoryRow(updated), heroTheme: theme };
   } catch (error) {
     markDatabaseOffline(error);
     return updateCategoryRecordMem(keyOrId, raw);
+  }
+}
+
+export async function applyHeroThemeToAllCategories(
+  rawTheme: Partial<HeroThemeConfig>
+): Promise<ProductCategory[]> {
+  if (isMemoryFallbackActive()) return applyHeroThemeToAllCategoriesMem(rawTheme);
+  try {
+    await ensureDatabaseSeeded();
+    const theme = normalizeHeroTheme(rawTheme, DEFAULT_HERO_THEME);
+    const rows = await db
+      .select()
+      .from(categories)
+      .orderBy(asc(categories.displayOrder), asc(categories.id));
+    const themeMap: Record<string, HeroThemeConfig> = {};
+    for (const row of rows) {
+      const key = row.categoryKey || String(row.id);
+      themeMap[key] = { ...theme };
+      themeMap[row.slug] = { ...theme };
+    }
+    await saveCategoryThemeMap(themeMap);
+    return rows.map((row) => ({ ...mapCategoryRow(row), heroTheme: { ...theme } }));
+  } catch (error) {
+    markDatabaseOffline(error);
+    return applyHeroThemeToAllCategoriesMem(rawTheme);
   }
 }
 

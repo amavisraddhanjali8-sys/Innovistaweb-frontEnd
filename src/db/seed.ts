@@ -14,7 +14,9 @@ import {
   projectImages,
   projects,
   relatedPortals,
+  users,
 } from "./schema.ts";
+import { hashPassword } from "../utils/securityHelpers.ts";
 import {
   DEFAULT_ABOUT_SECTIONS,
   DEFAULT_CLIENTS,
@@ -30,6 +32,10 @@ import {
   DEFAULT_SLIDESHOW_SPEED_MS,
   DEFAULT_TEAM_MEMBERS,
 } from "../utils/aboutContentHelpers.ts";
+import {
+  DEFAULT_HERO_THEME,
+  DEFAULT_PAGE_HERO_THEMES,
+} from "../utils/heroThemeHelpers.ts";
 import {
   DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
@@ -68,8 +74,26 @@ import {
 let seedPromise: Promise<void> | null = null;
 
 async function runSeed(): Promise<void> {
-  // NOTE: Zero demo user accounts, zero demo orders, zero demo RFQs, zero demo bookings,
-  // and zero demo notifications are seeded. Only public catalog & CMS reference content.
+  // Ensure primary administrator account EMP-001 exists if not already created
+  await db
+    .insert(users)
+    .values({
+      uid: "EMP-001",
+      username: "emp-001",
+      name: "Administrator (EMP-001)",
+      email: "emp-001@innovistafabriconix.lk",
+      phone: "",
+      company: "Innovista Fabriconix HQ",
+      role: "admin",
+      passwordHash: hashPassword("admin29"),
+      avatarUrl: "/assets/about/director.jpg",
+      isVerified: true,
+      emailVerified: true,
+      accountStatus: "ACTIVE",
+      totpEnabled: false,
+      isActive: true,
+    })
+    .onConflictDoNothing();
 
   // 1. Seed Media Assets helper
   const mediaAssetMap = new Map<string, number>();
@@ -455,11 +479,20 @@ async function runSeed(): Promise<void> {
         partners: DEFAULT_PARTNERS,
         clients: DEFAULT_CLIENTS,
         clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
+        heroTheme: { ...DEFAULT_HERO_THEME },
       },
     },
     {
       key: "product_landing_cms",
       payload: normalizeProductLandingCms(DEFAULT_PRODUCT_LANDING_CMS) as unknown as Record<string, unknown>,
+    },
+    {
+      key: "page_hero_themes",
+      payload: DEFAULT_PAGE_HERO_THEMES as unknown as Record<string, unknown>,
+    },
+    {
+      key: "category_hero_themes",
+      payload: {},
     },
     {
       key: "page_ads_cms",

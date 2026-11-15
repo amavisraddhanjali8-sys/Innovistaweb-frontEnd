@@ -1,3 +1,9 @@
+import {
+  DEFAULT_HERO_THEME,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "./heroThemeHelpers.ts";
+
 export type HomeSlideMediaType = "image" | "video";
 
 export interface HomeHeroStat {
@@ -25,6 +31,8 @@ export interface HomeSlideshowCmsPayload {
   secondaryButtonPath: string;
   stats: HomeHeroStat[];
   slides: HomeHeroSlide[];
+  heroOverlayEnabled?: boolean;
+  heroTheme?: HeroThemeConfig;
 }
 
 export const MIN_HOME_SLIDESHOW_SPEED_MS = 2000;
@@ -161,6 +169,8 @@ export const DEFAULT_HOME_SLIDESHOW_CMS: HomeSlideshowCmsPayload = {
   secondaryButtonPath: "/products",
   stats: DEFAULT_HOME_HERO_STATS,
   slides: DEFAULT_HOME_HERO_SLIDES,
+  heroOverlayEnabled: false,
+  heroTheme: { ...DEFAULT_HERO_THEME, startColor: "#0D1A29", midColor: "#22577A", endColor: "#0D1A29" },
 };
 
 const VIDEO_FILE_EXT_RE = /\.(mp4|webm|mov|m4v|ogg|ogv)(?:[?#].*)?$/i;
@@ -309,6 +319,11 @@ export function normalizeHomeSlideshowCms(
       DEFAULT_HOME_SLIDESHOW_CMS.secondaryButtonPath,
     stats: normalizeHomeHeroStats(raw?.stats),
     slides: normalizeHomeHeroSlides(raw?.slides),
+    heroOverlayEnabled: Boolean(raw?.heroOverlayEnabled),
+    heroTheme: normalizeHeroTheme(
+      raw?.heroTheme,
+      DEFAULT_HOME_SLIDESHOW_CMS.heroTheme
+    ),
   };
 }
 

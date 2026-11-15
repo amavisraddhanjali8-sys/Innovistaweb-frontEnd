@@ -102,6 +102,7 @@ export default function Resources() {
       <ShowcaseHeroSlideshow
         slides={RESOURCES_HERO_SLIDES}
         slideshowSpeedMs={5000}
+        pageKey="resources"
         ariaLabel="Technical resources highlights"
         eyebrowText="Resources & Downloads"
       />

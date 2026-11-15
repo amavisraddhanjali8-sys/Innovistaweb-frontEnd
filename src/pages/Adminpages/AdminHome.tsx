@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { App as AntdApp, Modal } from "antd";
 import {
   FiBriefcase,
+  FiDroplet,
   FiFilm,
   FiKey,
   FiLayers,
@@ -25,13 +26,21 @@ import PasswordReset from "../../components/PasswordReset";
 import HomeSlideshowEditor from "../../components/HomeSlideshowEditor";
 import HomeServicesEditor from "../../components/HomeServicesEditor";
 import HomeTopPicksEditor from "../../components/HomeTopPicksEditor";
+import PageHeroColorsEditor from "../../components/PageHeroColorsEditor";
 import {
   validateSiteContactSettings,
   type SiteContactSettings,
 } from "../../utils/footerConsultationHelpers";
 
 interface AdminHomeProps {
-  defaultMode?: "team" | "register" | "contact" | "slideshow" | "services" | "top-picks";
+  defaultMode?:
+    | "team"
+    | "register"
+    | "contact"
+    | "slideshow"
+    | "services"
+    | "top-picks"
+    | "colors";
 }
 
 function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
@@ -40,7 +49,13 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { contactSettings, updateContactSettings } = useSiteSettings();
   const [activeMode, setActiveMode] = useState<
-    "team" | "register" | "contact" | "slideshow" | "services" | "top-picks"
+    | "team"
+    | "register"
+    | "contact"
+    | "slideshow"
+    | "services"
+    | "top-picks"
+    | "colors"
   >(() => {
     const t = searchParams.get("tab");
     if (
@@ -48,6 +63,7 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
       t === "slideshow" ||
       t === "services" ||
       t === "top-picks" ||
+      t === "colors" ||
       t === "contact" ||
       t === "team"
     ) {
@@ -83,6 +99,7 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
       requested === "slideshow" ||
       requested === "services" ||
       requested === "top-picks" ||
+      requested === "colors" ||
       requested === "contact" ||
       requested === "team"
     ) {
@@ -93,13 +110,21 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
   }, [searchParams, defaultMode]);
 
   const handleSelectMode = (
-    mode: "team" | "register" | "contact" | "slideshow" | "services" | "top-picks"
+    mode:
+      | "team"
+      | "register"
+      | "contact"
+      | "slideshow"
+      | "services"
+      | "top-picks"
+      | "colors"
   ) => {
     setActiveMode(mode);
     if (
       mode === "slideshow" ||
       mode === "services" ||
       mode === "top-picks" ||
+      mode === "colors" ||
       mode === "contact"
     ) {
       setSearchParams({ tab: mode });
@@ -280,6 +305,8 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
               ? "What We Build For You (Services Carousel)"
               : activeMode === "top-picks"
               ? "Home Top Picks & Accessories Ribbon"
+              : activeMode === "colors"
+              ? "Page & Site Hero Colors, Gradients & RGB Studio"
               : "Phone Number & Contact Setup"}
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -293,6 +320,8 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
               ? "Add, edit, upload, reorder, or delete the service cards and text in What We Build For You."
               : activeMode === "top-picks"
               ? "Select featured products shown on Home, customize product photos, and configure the Accessories Ribbon slideshow below."
+              : activeMode === "colors"
+              ? "Customize Projects, Resources & Contact hero gradients, uniform RGB solid colors, or apply a matching color scheme across the entire site."
               : "Configure the public phone number, WhatsApp, email, and social URLs shown in Footer & Contact."}
           </p>
         </div>
@@ -366,6 +395,18 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
           </button>
           <button
             type="button"
+            onClick={() => handleSelectMode("colors")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+              activeMode === "colors"
+                ? "bg-white text-[#22577A] shadow-xs"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            <FiDroplet className="text-xs" />
+            <span>Page Colors</span>
+          </button>
+          <button
+            type="button"
             onClick={() => handleSelectMode("contact")}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap ${
               activeMode === "contact"
@@ -413,6 +454,8 @@ function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
         <HomeTopPicksEditor
           onCountChange={(count) => setTopPicksCount(count)}
         />
+      ) : activeMode === "colors" ? (
+        <PageHeroColorsEditor />
       ) : (
         <form onSubmit={handleSaveContactSettings} className="space-y-4 max-w-2xl">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

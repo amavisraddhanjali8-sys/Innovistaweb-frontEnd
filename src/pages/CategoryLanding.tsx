@@ -22,6 +22,12 @@ import {
   type DesignItem,
   type ProductCategory,
 } from "../utils/productCatalogHelpers";
+import {
+  buildCategoryAccentFillCss,
+  ensureLightSurfaceAccent,
+  getHeroBackdropBaseColor,
+  pickReadableTextColor,
+} from "../utils/heroThemeHelpers";
 
 export default function CategoryLanding() {
   const { message } = AntdApp.useApp();
@@ -144,6 +150,7 @@ export default function CategoryLanding() {
       <ShowcaseHeroSlideshow
         slides={categorySlides}
         slideshowSpeedMs={activeCategory.slideshowSpeedMs}
+        heroTheme={activeCategory.heroTheme}
         ariaLabel={`${activeCategory.name} Category Slideshow`}
         eyebrowText="Product Category Showcase"
         backLink={{ label: "All Categories", to: "/products" }}
@@ -155,11 +162,26 @@ export default function CategoryLanding() {
 
       {/* Category Engineering Summary & Instant Category Switcher */}
       <section className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-8 pb-6">
-        <div className="rounded-2xl border border-slate-200/85 bg-[#F8FAFC] p-5 sm:p-6 space-y-4">
+        <div className="rounded-2xl border border-slate-200/85 bg-[#F8FAFC] overflow-hidden">
+          <div
+            className="h-1.5 w-full"
+            style={{ background: buildCategoryAccentFillCss(activeCategory.heroTheme) }}
+            aria-hidden="true"
+          />
+          <div className="p-5 sm:p-6 space-y-4">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="space-y-1.5 max-w-3xl">
               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className="font-semibold text-[#22577A]">
+                <span
+                  style={{
+                    color: ensureLightSurfaceAccent(
+                      activeCategory.heroTheme?.accentColor ||
+                        activeCategory.heroTheme?.startColor ||
+                        "#22577A"
+                    ),
+                  }}
+                  className="font-semibold"
+                >
                   System Collection
                 </span>
                 <span aria-hidden="true">·</span>
@@ -175,7 +197,16 @@ export default function CategoryLanding() {
 
               {activeCategory.specHighlights &&
                 activeCategory.specHighlights.length > 0 && (
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs font-semibold text-[#22577A]">
+                  <div
+                    style={{
+                      color: ensureLightSurfaceAccent(
+                        activeCategory.heroTheme?.accentColor ||
+                          activeCategory.heroTheme?.startColor ||
+                          "#22577A"
+                      ),
+                    }}
+                    className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-xs font-semibold"
+                  >
                     {activeCategory.specHighlights.map((spec, idx) => (
                       <span key={idx} className="inline-flex items-center gap-2">
                         {idx > 0 && (
@@ -231,14 +262,25 @@ export default function CategoryLanding() {
           <div className="pt-3 border-t border-slate-200/80 flex items-center gap-2 overflow-x-auto no-scrollbar snap-x pb-1">
             {categories.map((cat) => {
               const isCurrent = cat.CategoryID === activeCategory.CategoryID;
+              const pillFill = isCurrent
+                ? buildCategoryAccentFillCss(cat.heroTheme)
+                : undefined;
+              const pillTextColor = isCurrent
+                ? pickReadableTextColor(getHeroBackdropBaseColor(cat.heroTheme))
+                : undefined;
               return (
                 <button
                   key={cat.CategoryID}
                   type="button"
                   onClick={() => navigate(`/products/category/${cat.slug}`)}
+                  style={
+                    isCurrent
+                      ? { background: pillFill, color: pillTextColor }
+                      : undefined
+                  }
                   className={`snap-start min-h-[40px] px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     isCurrent
-                      ? "bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white border-transparent shadow-xs"
+                      ? "border-transparent shadow-xs"
                       : "bg-white text-slate-700 border-slate-200 hover:border-[#3393B8] hover:text-[#22577A]"
                   }`}
                 >
@@ -246,6 +288,7 @@ export default function CategoryLanding() {
                 </button>
               );
             })}
+          </div>
           </div>
         </div>
       </section>

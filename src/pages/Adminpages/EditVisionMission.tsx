@@ -64,6 +64,21 @@ import {
   type PartnerItem,
   type TeamMemberItem,
 } from "../../utils/aboutContentHelpers";
+import HeroThemeEditor, {
+  type HeroThemeCopySource,
+} from "../../components/HeroThemeEditor";
+import {
+  DEFAULT_HERO_THEME,
+  buildHeroBackgroundCss,
+  buildHeroImageMaskCss,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "../../utils/heroThemeHelpers";
+import {
+  normalizeProductCategory,
+  normalizeProductLandingCms,
+  type ProductCategory,
+} from "../../utils/productCatalogHelpers";
 
 const { TextArea } = Input;
 
@@ -98,6 +113,8 @@ function EditVisionMission() {
     DEFAULT_CLIENTS_RIBBON_SPEED
   );
   const [heroSlides, setHeroSlides] = useState<HeroSlide[]>(DEFAULT_HERO_SLIDES);
+  const [heroTheme, setHeroTheme] = useState<HeroThemeConfig>(DEFAULT_HERO_THEME);
+  const [copySources, setCopySources] = useState<HeroThemeCopySource[]>([]);
   const [previewSlideIdx, setPreviewSlideIdx] = useState<number>(0);
 
   // About Sections State
@@ -180,6 +197,7 @@ function EditVisionMission() {
           partners: DEFAULT_PARTNERS,
           clients: DEFAULT_CLIENTS,
           clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
+          heroTheme: DEFAULT_HERO_THEME,
         };
         const rawPayload = res.data?.data ?? res.data;
         const normalized = normalizeAboutCmsPayload(rawPayload, defaults);
@@ -189,6 +207,7 @@ function EditVisionMission() {
         setPartnersRibbonSpeed(normalized.partnersRibbonSpeed);
         setClientsRibbonSpeed(normalized.clientsRibbonSpeed);
         setHeroSlides(normalized.heroSlides);
+        setHeroTheme(normalizeHeroTheme(normalized.heroTheme, DEFAULT_HERO_THEME));
         setPreviewSlideIdx(0);
         setVisionData(normalized.vision);
         setMissionData(normalized.mission);
@@ -198,6 +217,37 @@ function EditVisionMission() {
         setPartners(normalized.partners);
         setClients(normalized.clients);
         setClientFeedbacks(normalized.clientFeedbacks);
+
+        // Fetch sibling pages/categories for quick "Copy Colors From..." actions
+        AxiosConfig.get("/products/cms")
+          .then((prodRes) => {
+            const sources: HeroThemeCopySource[] = [];
+            const prodLanding = prodRes.data?.landing ?? prodRes.data?.data;
+            if (prodLanding) {
+              const normProd = normalizeProductLandingCms(prodLanding);
+              sources.push({
+                id: "product-landing",
+                label: "Product Landing Hero",
+                theme: normalizeHeroTheme(normProd.heroTheme, DEFAULT_HERO_THEME),
+              });
+            }
+            if (Array.isArray(prodRes.data?.categories)) {
+              prodRes.data.categories.forEach(
+                (c: Partial<ProductCategory>, idx: number) => {
+                  const cat = normalizeProductCategory(c, idx);
+                  sources.push({
+                    id: `cat-${cat.CategoryID}`,
+                    label: `Category: ${cat.name}`,
+                    theme: normalizeHeroTheme(cat.heroTheme, DEFAULT_HERO_THEME),
+                  });
+                }
+              );
+            }
+            setCopySources(sources);
+          })
+          .catch(() => {
+            // Optional copy sources ignore failure
+          });
 
         form.setFieldsValue({
           vision_badge: normalized.vision.badge,
@@ -401,6 +451,7 @@ function EditVisionMission() {
         partners,
         clients,
         clientFeedbacks,
+        heroTheme: normalizeHeroTheme(heroTheme, DEFAULT_HERO_THEME),
       };
 
       await AxiosConfig.put("/about/vision-mission", payload);
@@ -421,6 +472,7 @@ function EditVisionMission() {
     setPartnersRibbonSpeed(DEFAULT_PARTNERS_RIBBON_SPEED);
     setClientsRibbonSpeed(DEFAULT_CLIENTS_RIBBON_SPEED);
     setHeroSlides(DEFAULT_HERO_SLIDES);
+    setHeroTheme(DEFAULT_HERO_THEME);
     setPreviewSlideIdx(0);
     setDirectorMessage(DEFAULT_DIRECTOR_MESSAGE);
     setTeamMembers(DEFAULT_TEAM_MEMBERS);
@@ -511,11 +563,20 @@ function EditVisionMission() {
               </div>
             </div>
 
-            <div className="relative rounded-xl overflow-hidden bg-gradient-to-b from-[#22577A] via-[#3393B8] to-white pt-4 text-center border border-slate-100">
-              <h4 className="px-3 text-sm font-semibold text-white leading-snug">
+            <div
+              style={{ background: buildHeroBackgroundCss(heroTheme) }}
+              className="relative rounded-xl overflow-hidden pt-4 text-center border border-slate-100"
+            >
+              <h4
+                style={{ color: heroTheme.headlineColor }}
+                className="px-3 text-sm font-semibold leading-snug"
+              >
                 {activePreviewSlide.headline}
               </h4>
-              <p className="px-3 mt-1 text-[11px] text-white/90 line-clamp-2">
+              <p
+                style={{ color: heroTheme.subheadlineColor }}
+                className="px-3 mt-1 text-[11px] line-clamp-2"
+              >
                 {activePreviewSlide.subheadline}
               </p>
               <img
@@ -524,9 +585,13 @@ function EditVisionMission() {
                 referrerPolicy="no-referrer"
                 style={{
                   maskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 22%, black 85%, transparent 100%)",
+                    buildHeroImageMaskCss(heroTheme) === "none"
+                      ? undefined
+                      : buildHeroImageMaskCss(heroTheme),
                   WebkitMaskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 22%, black 85%, transparent 100%)",
+                    buildHeroImageMaskCss(heroTheme) === "none"
+                      ? undefined
+                      : buildHeroImageMaskCss(heroTheme),
                 }}
                 className="w-full h-32 object-cover mt-1 block"
               />
@@ -748,6 +813,20 @@ function EditVisionMission() {
                         })}
                       </div>
                     </div>
+
+                    {/* Colors */}
+                    <HeroThemeEditor
+                      value={heroTheme}
+                      onChange={setHeroTheme}
+                      title="Colors"
+                      previewHeadline={activePreviewSlide?.headline || "Slim-Line Coastal Facades"}
+                      previewSubheadline={
+                        activePreviewSlide?.subheadline ||
+                        "Floor-to-ceiling anodized mullions and low-E corner glass."
+                      }
+                      previewImage={activePreviewSlide?.image || "/assets/about/facade.jpg"}
+                      copySources={copySources}
+                    />
 
                     <div className="flex items-center justify-between gap-3 flex-wrap pb-2 border-b border-slate-100">
                       <span className="text-xs text-slate-500">

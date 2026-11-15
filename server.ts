@@ -120,6 +120,13 @@ import {
 import {
   normalizeCustomerFeedbackRecord,
 } from "./src/utils/customerFeedbackHelpers.ts";
+import {
+  DEFAULT_HERO_THEME,
+  DEFAULT_PAGE_HERO_THEMES,
+  normalizeHeroTheme,
+  normalizePageHeroThemes,
+  type PageHeroThemesMap,
+} from "./src/utils/heroThemeHelpers.ts";
 import { randomBytes, randomInt } from "node:crypto";
 import QRCode from "qrcode";
 import { optionalAuth, requireAdminOrStaff, requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
@@ -135,6 +142,7 @@ import {
 } from "./src/db/users.ts";
 import {
   addAppointmentSlotRecord,
+  applyHeroThemeToAllCategories,
   createAppointmentRecord,
   createAuditLog,
   createCategoryRecord,
@@ -363,6 +371,7 @@ const DEFAULT_ABOUT_FALLBACK: AboutCmsPayload = {
   partners: DEFAULT_PARTNERS,
   clients: DEFAULT_CLIENTS,
   clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
+  heroTheme: DEFAULT_HERO_THEME,
 };
 
 let lastAutoSyncAttemptAt = 0;
@@ -3592,6 +3601,22 @@ app.put("/products/categories/reorder", async (req: Request, res: Response) => {
 });
 
 app.put(
+  ["/products/categories/apply-theme", "/api/categories/apply-theme"],
+  async (req: Request, res: Response) => {
+    try {
+      const rawTheme = req.body?.theme ?? req.body;
+      const data = await applyHeroThemeToAllCategories(rawTheme || {});
+      return res.json({
+        message: "Applied colors to all product categories",
+        data,
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+app.put(
   ["/products/categories/:id", "/api/categories/:id"],
   async (req: Request, res: Response) => {
     try {
@@ -3624,6 +3649,117 @@ app.delete(
     }
   }
 );
+
+// ============================================================================
+// PAGE HERO THEMES (PROJECTS / RESOURCES / CONTACT & GLOBAL SYNC)
+// ============================================================================
+app.get("/api/hero-themes", async (_req: Request, res: Response) => {
+  try {
+    const [rawPages, aboutCms, productCms] = await Promise.all([
+      getCmsDoc<PageHeroThemesMap>("page_hero_themes", DEFAULT_PAGE_HERO_THEMES),
+      getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK),
+      getCmsDoc<ProductLandingCms>("product_landing_cms", DEFAULT_PRODUCT_LANDING_CMS),
+    ]);
+    return res.json({
+      pageThemes: normalizePageHeroThemes(rawPages),
+      aboutHeroTheme: normalizeHeroTheme(aboutCms?.heroTheme, DEFAULT_HERO_THEME),
+      productLandingHeroTheme: normalizeHeroTheme(
+        productCms?.heroTheme,
+        DEFAULT_HERO_THEME
+      ),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.put("/api/hero-themes", async (req: Request, res: Response) => {
+  try {
+    const [currentPages, currentAbout, currentProduct] = await Promise.all([
+      getCmsDoc<PageHeroThemesMap>("page_hero_themes", DEFAULT_PAGE_HERO_THEMES),
+      getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK),
+      getCmsDoc<ProductLandingCms>("product_landing_cms", DEFAULT_PRODUCT_LANDING_CMS),
+    ]);
+
+    if (req.body?.applyToAllSite && req.body?.theme) {
+      const uniform = normalizeHeroTheme(req.body.theme, DEFAULT_HERO_THEME);
+      const nextPages: PageHeroThemesMap = {
+        projects: { ...uniform },
+        resources: { ...uniform },
+        contact: { ...uniform },
+      };
+      const nextAbout = normalizeAboutCmsPayload(
+        { ...currentAbout, heroTheme: uniform },
+        DEFAULT_ABOUT_FALLBACK
+      );
+      const nextProduct = normalizeProductLandingCms(
+        { ...currentProduct, heroTheme: uniform },
+        DEFAULT_PRODUCT_LANDING_CMS
+      );
+      await Promise.all([
+        setCmsDoc("page_hero_themes", nextPages as unknown as Record<string, unknown>),
+        setCmsDoc("about_cms", nextAbout as unknown as Record<string, unknown>),
+        setCmsDoc("product_landing_cms", nextProduct as unknown as Record<string, unknown>),
+        applyHeroThemeToAllCategories(uniform),
+      ]);
+      return res.json({
+        message: "Applied color theme across all site hero banners & product categories",
+        pageThemes: nextPages,
+        aboutHeroTheme: uniform,
+        productLandingHeroTheme: uniform,
+      });
+    }
+
+    const incomingPages = req.body?.pageThemes ?? req.body;
+    const mergedPages = normalizePageHeroThemes({
+      projects: incomingPages?.projects ?? currentPages.projects,
+      resources: incomingPages?.resources ?? currentPages.resources,
+      contact: incomingPages?.contact ?? currentPages.contact,
+    });
+    await setCmsDoc(
+      "page_hero_themes",
+      mergedPages as unknown as Record<string, unknown>
+    );
+
+    let aboutHeroTheme = normalizeHeroTheme(currentAbout.heroTheme, DEFAULT_HERO_THEME);
+    if (req.body?.aboutHeroTheme) {
+      aboutHeroTheme = normalizeHeroTheme(req.body.aboutHeroTheme, DEFAULT_HERO_THEME);
+      const nextAbout = normalizeAboutCmsPayload(
+        { ...currentAbout, heroTheme: aboutHeroTheme },
+        DEFAULT_ABOUT_FALLBACK
+      );
+      await setCmsDoc("about_cms", nextAbout as unknown as Record<string, unknown>);
+    }
+
+    let productLandingHeroTheme = normalizeHeroTheme(
+      currentProduct.heroTheme,
+      DEFAULT_HERO_THEME
+    );
+    if (req.body?.productLandingHeroTheme) {
+      productLandingHeroTheme = normalizeHeroTheme(
+        req.body.productLandingHeroTheme,
+        DEFAULT_HERO_THEME
+      );
+      const nextProduct = normalizeProductLandingCms(
+        { ...currentProduct, heroTheme: productLandingHeroTheme },
+        DEFAULT_PRODUCT_LANDING_CMS
+      );
+      await setCmsDoc(
+        "product_landing_cms",
+        nextProduct as unknown as Record<string, unknown>
+      );
+    }
+
+    return res.json({
+      message: "Page hero colors updated",
+      pageThemes: mergedPages,
+      aboutHeroTheme,
+      productLandingHeroTheme,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
 
 // ============================================================================
 // PAGE ADVERTISEMENT SLIDESHOW CMS ROUTES

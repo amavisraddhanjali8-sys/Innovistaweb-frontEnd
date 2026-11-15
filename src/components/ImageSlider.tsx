@@ -24,6 +24,7 @@ import {
   type HomeSlideshowCmsPayload,
 } from "../utils/homeSlideshowHelpers";
 import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
+import { buildHeroBackgroundCss } from "../utils/heroThemeHelpers";
 
 export default function ImageSlider() {
   const { user } = useAuth();
@@ -275,7 +276,18 @@ export default function ImageSlider() {
           );
         })}
 
-        <div className={styles.mediaScrim} aria-hidden="true" />
+        <div
+          className={styles.mediaScrim}
+          aria-hidden="true"
+          style={
+            cms.heroOverlayEnabled && cms.heroTheme
+              ? {
+                  background: buildHeroBackgroundCss(cms.heroTheme),
+                  opacity: 0.64,
+                }
+              : undefined
+          }
+        />
       </div>
 
       {/* Admin Quick Manage Entry */}
@@ -305,8 +317,26 @@ export default function ImageSlider() {
           </div>
         )}
 
-        <h1 className={styles.mainHeading}>{currentSlide.headline}</h1>
-        <p className={styles.description}>{currentSlide.description}</p>
+        <h1
+          className={styles.mainHeading}
+          style={
+            cms.heroOverlayEnabled && cms.heroTheme
+              ? { color: cms.heroTheme.headlineColor }
+              : undefined
+          }
+        >
+          {currentSlide.headline}
+        </h1>
+        <p
+          className={styles.description}
+          style={
+            cms.heroOverlayEnabled && cms.heroTheme
+              ? { color: cms.heroTheme.subheadlineColor }
+              : undefined
+          }
+        >
+          {currentSlide.description}
+        </p>
 
         <div className={styles.buttonGroup}>
           <TactileActionButton

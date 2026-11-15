@@ -1,7 +1,15 @@
-import { useState, useEffect, useCallback, useRef, type TouchEvent as ReactTouchEvent } from "react";
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  type TouchEvent as ReactTouchEvent,
+} from "react";
 import { Link } from "react-router-dom";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import {
   DEFAULT_SLIDESHOW_SPEED_MS,
@@ -11,6 +19,16 @@ import {
   type HeroSlide,
 } from "../utils/aboutContentHelpers";
 import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
+import {
+  DEFAULT_HERO_THEME,
+  buildHeroBackgroundCss,
+  buildHeroImageMaskCss,
+  getHeroBackdropBaseColor,
+  normalizeHeroTheme,
+  pickReadableTextColor,
+  type HeroThemeConfig,
+  type PageHeroThemeKey,
+} from "../utils/heroThemeHelpers";
 
 interface ShowcaseHeroSlideshowProps {
   slides: HeroSlide[];
@@ -21,6 +39,8 @@ interface ShowcaseHeroSlideshowProps {
   backLink?: { label: string; to: string };
   adminManageTo?: string;
   adminManageLabel?: string;
+  heroTheme?: HeroThemeConfig;
+  pageKey?: PageHeroThemeKey;
 }
 
 export default function ShowcaseHeroSlideshow({
@@ -32,11 +52,47 @@ export default function ShowcaseHeroSlideshow({
   backLink,
   adminManageTo,
   adminManageLabel = "Manage Slideshow",
+  heroTheme,
+  pageKey,
 }: ShowcaseHeroSlideshowProps) {
   const { user } = useAuth();
   const activeSlides = slides && slides.length > 0 ? slides : [];
   const speedMs = clampSlideshowSpeedMs(
     slideshowSpeedMs ?? DEFAULT_SLIDESHOW_SPEED_MS
+  );
+
+  const [fetchedTheme, setFetchedTheme] = useState<HeroThemeConfig | undefined>(
+    undefined
+  );
+
+  useEffect(() => {
+    if (!pageKey || heroTheme) return;
+    let active = true;
+    AxiosConfig.get("/api/hero-themes")
+      .then((res) => {
+        if (!active) return;
+        const candidate = res.data?.pageThemes?.[pageKey];
+        if (candidate) {
+          setFetchedTheme(normalizeHeroTheme(candidate, DEFAULT_HERO_THEME));
+        }
+      })
+      .catch(() => {
+        // Keep default Ocean theme on network error
+      });
+    return () => {
+      active = false;
+    };
+  }, [pageKey, heroTheme]);
+
+  const theme = useMemo(
+    () => normalizeHeroTheme(heroTheme ?? fetchedTheme, DEFAULT_HERO_THEME),
+    [heroTheme, fetchedTheme]
+  );
+  const backgroundCss = useMemo(() => buildHeroBackgroundCss(theme), [theme]);
+  const maskCss = useMemo(() => buildHeroImageMaskCss(theme), [theme]);
+  const isLightBackdrop = useMemo(
+    () => pickReadableTextColor(getHeroBackdropBaseColor(theme)) === "#0F172A",
+    [theme]
   );
 
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -108,13 +164,15 @@ export default function ShowcaseHeroSlideshow({
         aria-label={ariaLabel}
         aria-roledescription="carousel"
         data-speed-ms={speedMs}
+        data-hero-mode={theme.mode}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onFocusCapture={() => setIsPaused(true)}
         onBlurCapture={() => setIsPaused(false)}
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
-        className="relative w-full overflow-hidden bg-gradient-to-b from-[#3393B8] via-[#5CB6D2] to-white pt-8 sm:pt-11 pb-0 touch-pan-y"
+        style={{ background: backgroundCss }}
+        className="relative w-full overflow-hidden pt-8 sm:pt-11 pb-0 touch-pan-y transition-[background] duration-300"
       >
         {/* Top Utility Strip (Back link on Category pages / Admin Quick Edit) */}
         {(backLink || (user?.role === "admin" && adminManageTo)) && (
@@ -123,7 +181,11 @@ export default function ShowcaseHeroSlideshow({
               {backLink && (
                 <Link
                   to={backLink.to}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 text-xs font-semibold backdrop-blur-sm border border-white/30 transition-colors whitespace-nowrap no-underline"
+                  className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold backdrop-blur-sm border transition-colors whitespace-nowrap no-underline ${
+                    isLightBackdrop
+                      ? "bg-slate-900/10 hover:bg-slate-900/15 text-slate-900 border-slate-900/20"
+                      : "bg-white/20 hover:bg-white/30 text-white border-white/30"
+                  }`}
                 >
                   <LeftOutlined className="text-[10px]" />
                   <span>{backLink.label}</span>
@@ -134,7 +196,7 @@ export default function ShowcaseHeroSlideshow({
             {user?.role === "admin" && adminManageTo && (
               <Link
                 to={adminManageTo}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 hover:bg-white text-neutral-900 px-3.5 py-1.5 text-xs font-semibold shadow-sm border border-white/70 transition-colors whitespace-nowrap no-underline"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/95 hover:bg-white text-neutral-900 px-3.5 py-1.5 text-xs font-semibold shadow-sm border border-slate-200/80 transition-colors whitespace-nowrap no-underline"
               >
                 {adminManageLabel} ({(speedMs / 1000).toFixed(1)}s)
               </Link>
@@ -151,7 +213,10 @@ export default function ShowcaseHeroSlideshow({
           }`}
         >
           {eyebrowText && (
-            <div className="text-[11px] font-semibold tracking-[0.18em] uppercase text-white/90 mb-1.5">
+            <div
+              style={{ color: theme.subheadlineColor }}
+              className="text-[11px] font-semibold tracking-[0.18em] uppercase opacity-90 mb-1.5"
+            >
               {eyebrowText}
             </div>
           )}
@@ -167,15 +232,19 @@ export default function ShowcaseHeroSlideshow({
                 style={{
                   fontFamily: "'Plus Jakarta Sans', sans-serif",
                   textWrap: "balance",
+                  color: theme.headlineColor,
                 }}
-                className="text-[32px] sm:text-[44px] lg:text-[52px] font-semibold tracking-tight leading-[1.12] text-white"
+                className="text-[32px] sm:text-[44px] lg:text-[52px] font-semibold tracking-tight leading-[1.12]"
               >
                 {currentSlide.headline}
               </h1>
               {!hideSubheadline && currentSlide.subheadline?.trim() && (
                 <p
-                  style={{ textWrap: "balance" }}
-                  className="mt-2.5 text-[13.5px] sm:text-[15.5px] leading-relaxed text-white/95 max-w-[560px] mx-auto font-normal"
+                  style={{
+                    textWrap: "balance",
+                    color: theme.subheadlineColor,
+                  }}
+                  className="mt-2.5 text-[13.5px] sm:text-[15.5px] leading-relaxed max-w-[560px] mx-auto font-normal"
                 >
                   {currentSlide.subheadline}
                 </p>
@@ -205,10 +274,8 @@ export default function ShowcaseHeroSlideshow({
                   scale: { duration: Math.max(2, speedMs / 1000), ease: "easeOut" },
                 }}
                 style={{
-                  maskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 26%, black 80%, transparent 100%)",
-                  WebkitMaskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 26%, black 80%, transparent 100%)",
+                  maskImage: maskCss === "none" ? undefined : maskCss,
+                  WebkitMaskImage: maskCss === "none" ? undefined : maskCss,
                 }}
                 className={`absolute inset-0 w-full h-full object-cover object-center select-none pointer-events-none ${
                   isCurrent ? "z-10" : "z-0"
@@ -269,8 +336,11 @@ export default function ShowcaseHeroSlideshow({
                       initial={{ scaleX: 0 }}
                       animate={{ scaleX: 1 }}
                       transition={{ duration: speedMs / 1000, ease: "linear" }}
-                      style={{ transformOrigin: "left" }}
-                      className="h-full w-full bg-[#3393B8]"
+                      style={{
+                        transformOrigin: "left",
+                        backgroundColor: theme.accentColor,
+                      }}
+                      className="h-full w-full"
                     />
                   </div>
                 )}
@@ -282,3 +352,4 @@ export default function ShowcaseHeroSlideshow({
     </MotionConfig>
   );
 }
+

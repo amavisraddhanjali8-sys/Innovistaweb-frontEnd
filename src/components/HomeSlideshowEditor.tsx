@@ -33,6 +33,12 @@ import {
   type HomeSlideMediaType,
   type HomeSlideshowCmsPayload,
 } from "../utils/homeSlideshowHelpers";
+import HeroThemeEditor from "./HeroThemeEditor";
+import {
+  DEFAULT_HERO_THEME,
+  describeHeroThemeSummary,
+  normalizeHeroTheme,
+} from "../utils/heroThemeHelpers";
 
 interface HomeSlideshowEditorProps {
   onCountChange?: (count: number) => void;
@@ -763,6 +769,63 @@ export default function HomeSlideshowEditor({
             />
           </div>
         </div>
+      </div>
+
+      {/* Overlay */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 space-y-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-bold text-slate-900">Overlay</h4>
+            {cms.heroOverlayEnabled && (
+              <span className="text-xs text-slate-500">
+                {describeHeroThemeSummary(cms.heroTheme)}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+              <span>Enable</span>
+              <Switch
+                size="small"
+                checked={Boolean(cms.heroOverlayEnabled)}
+                onChange={(checked) =>
+                  setCms((prev) => ({
+                    ...prev,
+                    heroOverlayEnabled: checked,
+                    heroTheme: normalizeHeroTheme(prev.heroTheme, DEFAULT_HERO_THEME),
+                  }))
+                }
+              />
+            </label>
+            <button
+              type="button"
+              disabled={saving || loading}
+              onClick={handleSaveAllSettings}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-[#22577A] hover:bg-[#19435E] px-3.5 py-1.5 text-xs font-semibold text-white cursor-pointer disabled:opacity-60"
+            >
+              <FiSave className="text-xs" />
+              <span>Save</span>
+            </button>
+          </div>
+        </div>
+
+        {cms.heroOverlayEnabled && (
+          <HeroThemeEditor
+            compact
+            value={cms.heroTheme || DEFAULT_HERO_THEME}
+            onChange={(nextTheme) =>
+              setCms((prev) => ({
+                ...prev,
+                heroOverlayEnabled: true,
+                heroTheme: nextTheme,
+              }))
+            }
+            title="Colors"
+            previewHeadline={cms.slides[0]?.headline || DEFAULT_HOME_HEADLINE}
+            previewSubheadline={cms.slides[0]?.description || DEFAULT_HOME_DESCRIPTION}
+            previewImage={cms.slides[0]?.posterUrl || "/assets/homeslider/image1.jpg"}
+          />
+        )}
       </div>
 
       {/* Slide Deck Manager List */}

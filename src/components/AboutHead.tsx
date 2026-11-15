@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
@@ -11,16 +11,35 @@ import {
   getPrevSlideIndex,
   type HeroSlide,
 } from "../utils/aboutContentHelpers";
+import {
+  DEFAULT_HERO_THEME,
+  buildHeroBackgroundCss,
+  buildHeroImageMaskCss,
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "../utils/heroThemeHelpers";
 
 interface AboutHeadProps {
   slides?: HeroSlide[];
   slideshowSpeedMs?: number;
+  heroTheme?: HeroThemeConfig;
 }
 
-export default function AboutHead({ slides, slideshowSpeedMs }: AboutHeadProps) {
+export default function AboutHead({
+  slides,
+  slideshowSpeedMs,
+  heroTheme,
+}: AboutHeadProps) {
   const { user } = useAuth();
   const activeSlides = slides && slides.length > 0 ? slides : DEFAULT_HERO_SLIDES;
   const speedMs = clampSlideshowSpeedMs(slideshowSpeedMs ?? DEFAULT_SLIDESHOW_SPEED_MS);
+
+  const theme = useMemo(
+    () => normalizeHeroTheme(heroTheme, DEFAULT_HERO_THEME),
+    [heroTheme]
+  );
+  const backgroundCss = useMemo(() => buildHeroBackgroundCss(theme), [theme]);
+  const maskCss = useMemo(() => buildHeroImageMaskCss(theme), [theme]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -58,18 +77,20 @@ export default function AboutHead({ slides, slideshowSpeedMs }: AboutHeadProps) 
         aria-label="About Innovista Fabriconix Slideshow"
         aria-roledescription="carousel"
         data-speed-ms={speedMs}
+        data-hero-mode={theme.mode}
         onMouseEnter={() => setIsPaused(true)}
         onMouseLeave={() => setIsPaused(false)}
         onFocusCapture={() => setIsPaused(true)}
         onBlurCapture={() => setIsPaused(false)}
-        className="relative w-full overflow-hidden bg-gradient-to-b from-[#3393B8] via-[#5CB6D2] to-white pt-9 sm:pt-12 pb-0"
+        style={{ background: backgroundCss }}
+        className="relative w-full overflow-hidden pt-9 sm:pt-12 pb-0 transition-[background] duration-300"
       >
         {/* Quick Admin Slideshow Manage Link when signed in as Admin */}
         {user?.role === "admin" && (
           <div className="absolute top-4 right-4 sm:right-8 z-30">
             <Link
               to="/EditVisionMission?tab=slideshow"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-white/90 hover:bg-white text-neutral-900 px-3.5 py-1.5 text-xs font-semibold shadow-sm border border-white/60 transition-colors whitespace-nowrap"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-white/95 hover:bg-white text-neutral-900 px-3.5 py-1.5 text-xs font-semibold shadow-sm border border-slate-200/80 transition-colors whitespace-nowrap"
             >
               Manage Slideshow ({(speedMs / 1000).toFixed(1)}s)
             </Link>
@@ -87,14 +108,21 @@ export default function AboutHead({ slides, slideshowSpeedMs }: AboutHeadProps) 
               transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
             >
               <h1
-                style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", textWrap: "balance" }}
-                className="text-[36px] sm:text-[48px] lg:text-[54px] font-semibold tracking-tight leading-[1.12] text-white"
+                style={{
+                  fontFamily: "'Plus Jakarta Sans', sans-serif",
+                  textWrap: "balance",
+                  color: theme.headlineColor,
+                }}
+                className="text-[36px] sm:text-[48px] lg:text-[54px] font-semibold tracking-tight leading-[1.12]"
               >
                 {currentSlide.headline}
               </h1>
               <p
-                style={{ textWrap: "balance" }}
-                className="mt-3 text-[13.5px] sm:text-[15.5px] leading-relaxed text-white/95 max-w-[520px] mx-auto font-normal"
+                style={{
+                  textWrap: "balance",
+                  color: theme.subheadlineColor,
+                }}
+                className="mt-3 text-[13.5px] sm:text-[15.5px] leading-relaxed max-w-[520px] mx-auto font-normal"
               >
                 {currentSlide.subheadline}
               </p>
@@ -123,10 +151,8 @@ export default function AboutHead({ slides, slideshowSpeedMs }: AboutHeadProps) 
                   scale: { duration: Math.max(2, speedMs / 1000), ease: "easeOut" },
                 }}
                 style={{
-                  maskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 26%, black 80%, transparent 100%)",
-                  WebkitMaskImage:
-                    "linear-gradient(to bottom, transparent 0%, black 26%, black 80%, transparent 100%)",
+                  maskImage: maskCss === "none" ? undefined : maskCss,
+                  WebkitMaskImage: maskCss === "none" ? undefined : maskCss,
                 }}
                 className={`absolute inset-0 w-full h-full object-cover object-center select-none pointer-events-none ${
                   isCurrent ? "z-10" : "z-0"
@@ -189,8 +215,11 @@ export default function AboutHead({ slides, slideshowSpeedMs }: AboutHeadProps) 
                       initial={{ scaleX: 0 }}
                       animate={{ scaleX: 1 }}
                       transition={{ duration: speedMs / 1000, ease: "linear" }}
-                      style={{ transformOrigin: "left" }}
-                      className="h-full w-full bg-[#3393B8]"
+                      style={{
+                        transformOrigin: "left",
+                        backgroundColor: theme.accentColor,
+                      }}
+                      className="h-full w-full"
                     />
                   </div>
                 )}
@@ -202,3 +231,4 @@ export default function AboutHead({ slides, slideshowSpeedMs }: AboutHeadProps) 
     </MotionConfig>
   );
 }
+

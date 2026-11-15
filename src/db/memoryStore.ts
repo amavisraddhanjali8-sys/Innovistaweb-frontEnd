@@ -14,6 +14,10 @@ import {
   DEFAULT_TEAM_MEMBERS,
 } from "../utils/aboutContentHelpers.ts";
 import {
+  DEFAULT_HERO_THEME,
+  DEFAULT_PAGE_HERO_THEMES,
+} from "../utils/heroThemeHelpers.ts";
+import {
   DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
   DEFAULT_PRODUCT_LANDING_CMS,
@@ -76,6 +80,7 @@ import {
   inferMediaKindFromUrlOrMime,
   inferSourceTypeFromUrl,
 } from "../utils/mediaAssetHelpers.ts";
+import { hashPassword } from "../utils/securityHelpers.ts";
 
 export interface MemoryUserRecord {
   id: number;
@@ -280,7 +285,7 @@ function createInitialStore(): MemoryStoreState {
   const now = new Date();
   const store: MemoryStoreState = {
     initialized: true,
-    nextUserId: 1,
+    nextUserId: 2,
     nextChallengeId: 1,
     nextAuditLogId: 1,
     nextMediaId: 1,
@@ -288,7 +293,36 @@ function createInitialStore(): MemoryStoreState {
     nextFeedbackId: 1,
     nextRfqId: 1,
     nextRfqAttachmentId: 1,
-    users: [],
+    users: [
+      {
+        id: 1,
+        uid: "EMP-001",
+        username: "emp-001",
+        name: "Administrator (EMP-001)",
+        email: "emp-001@innovistafabriconix.lk",
+        phone: "",
+        company: "Innovista Fabriconix HQ",
+        role: "admin",
+        passwordHash: hashPassword("admin29"),
+        avatarUrl: "/assets/about/director.jpg",
+        isVerified: true,
+        emailVerified: true,
+        accountStatus: "ACTIVE",
+        emailVerificationTokenHash: null,
+        emailVerificationCodeHash: null,
+        emailVerificationExpiresAt: null,
+        totpSecretEncrypted: null,
+        totpEnabled: false,
+        failedLoginAttempts: 0,
+        lockedUntil: null,
+        lastLoginAt: null,
+        lastLoginIp: "",
+        isActive: true,
+        purchaseGoods: [],
+        createdAt: now,
+        updatedAt: now,
+      },
+    ],
     securityChallenges: [],
     auditLogs: [],
     mediaAssets: [],
@@ -412,11 +446,14 @@ function createInitialStore(): MemoryStoreState {
     partners: DEFAULT_PARTNERS,
     clients: DEFAULT_CLIENTS,
     clientFeedbacks: DEFAULT_CLIENT_FEEDBACKS,
+    heroTheme: { ...DEFAULT_HERO_THEME },
   });
   store.cmsDocs.set(
     "product_landing_cms",
     normalizeProductLandingCms(DEFAULT_PRODUCT_LANDING_CMS) as unknown as Record<string, unknown>
   );
+  store.cmsDocs.set("page_hero_themes", DEFAULT_PAGE_HERO_THEMES as unknown as Record<string, unknown>);
+  store.cmsDocs.set("category_hero_themes", {});
   store.cmsDocs.set("page_ads_cms", DEFAULT_PAGE_ADS_CMS as unknown as Record<string, unknown>);
   store.cmsDocs.set("blogger_config", DEFAULT_BLOGGER_CONFIG as unknown as Record<string, unknown>);
   store.cmsDocs.set("site_settings", defaultSiteSettings as unknown as Record<string, unknown>);

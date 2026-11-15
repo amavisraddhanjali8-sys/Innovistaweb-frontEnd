@@ -67,6 +67,7 @@ export default function Contact() {
       <ShowcaseHeroSlideshow
         slides={CONTACT_HERO_SLIDES}
         slideshowSpeedMs={5000}
+        pageKey="contact"
         ariaLabel="Contact Innovista locations"
         eyebrowText="Direct Channels"
       />

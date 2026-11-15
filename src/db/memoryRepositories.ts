@@ -6,6 +6,10 @@ import {
   type ProductCategory,
 } from "../utils/productCatalogHelpers.ts";
 import {
+  normalizeHeroTheme,
+  type HeroThemeConfig,
+} from "../utils/heroThemeHelpers.ts";
+import {
   applyMonthlyTemplateToSchedule,
   computeDefaultEndTime,
   deleteMonthlyTemplateFromSchedule,
@@ -294,6 +298,18 @@ export function updateCategoryRecordMem(
   ensureMediaAssetIdForUrlMem(normalized.coverImage, normalized.name, "category");
   store.categories[idx] = normalized;
   return normalized;
+}
+
+export function applyHeroThemeToAllCategoriesMem(
+  rawTheme: Partial<HeroThemeConfig>
+): ProductCategory[] {
+  const store = getMemoryStore();
+  const normalizedTheme = normalizeHeroTheme(rawTheme);
+  store.categories = store.categories.map((cat) => ({
+    ...cat,
+    heroTheme: { ...normalizedTheme },
+  }));
+  return listCategoriesMem();
 }
 
 export function reorderCategoryRecordsMem(orderedIds: string[]): ProductCategory[] {
