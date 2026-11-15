@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import { Modal } from "antd";
 import { FiChevronLeft, FiChevronRight, FiMaximize2 } from "react-icons/fi";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 
 interface SafeImageProps {
   src?: string;
@@ -80,7 +81,7 @@ export function SafeImage({
           onCancel={() => setOpen(false)}
           footer={null}
           centered
-          width={760}
+          width="min(760px, calc(100vw - 24px))"
           title={
             <span className="text-sm font-semibold text-slate-800">{alt}</span>
           }
@@ -117,6 +118,7 @@ export function SafeImageGalleryModal({
 }: SafeImageGalleryModalProps) {
   const safeImages = images.filter(Boolean);
   const activeSrc = safeImages[currentIndex] || safeImages[0];
+  const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const handlePrev = () => {
     if (safeImages.length <= 1) return;
@@ -128,13 +130,35 @@ export function SafeImageGalleryModal({
     onIndexChange((currentIndex + 1) % safeImages.length);
   };
 
+  const handleTouchStart = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    const touch = e.changedTouches[0];
+    if (!start || !touch || safeImages.length <= 1) return;
+    const dir = detectHorizontalSwipe(
+      start.x,
+      start.y,
+      touch.clientX,
+      touch.clientY,
+      Date.now() - start.t
+    );
+    if (dir === "left") handleNext();
+    else if (dir === "right") handlePrev();
+  };
+
   return (
     <Modal
       open={open}
       onCancel={onClose}
       footer={null}
       centered
-      width={860}
+      width="min(860px, calc(100vw - 24px))"
       title={
         <div className="flex items-center justify-between pr-6">
           <span className="text-sm font-semibold text-slate-900">{title}</span>
@@ -148,11 +172,15 @@ export function SafeImageGalleryModal({
     >
       {activeSrc && (
         <div className="space-y-3">
-          <div className="relative flex items-center justify-center bg-slate-900/95 rounded-xl overflow-hidden min-h-[320px] max-h-[68vh]">
+          <div
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+            className="relative flex items-center justify-center bg-slate-900/95 rounded-xl overflow-hidden min-h-[260px] sm:min-h-[320px] max-h-[68vh] touch-pan-y"
+          >
             <img
               src={activeSrc}
               alt={`${title} ${currentIndex + 1}`}
-              className="max-h-[68vh] w-auto object-contain"
+              className="max-h-[68vh] w-auto object-contain select-none"
             />
 
             {safeImages.length > 1 && (
@@ -161,7 +189,7 @@ export function SafeImageGalleryModal({
                   type="button"
                   onClick={handlePrev}
                   aria-label="Previous image"
-                  className="absolute left-3 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-900 flex items-center justify-center shadow-md cursor-pointer"
+                  className="absolute left-2.5 w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-white/90 hover:bg-white text-slate-900 flex items-center justify-center shadow-md cursor-pointer"
                 >
                   <FiChevronLeft />
                 </button>
@@ -169,7 +197,7 @@ export function SafeImageGalleryModal({
                   type="button"
                   onClick={handleNext}
                   aria-label="Next image"
-                  className="absolute right-3 w-9 h-9 rounded-full bg-white/90 hover:bg-white text-slate-900 flex items-center justify-center shadow-md cursor-pointer"
+                  className="absolute right-2.5 w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-white/90 hover:bg-white text-slate-900 flex items-center justify-center shadow-md cursor-pointer"
                 >
                   <FiChevronRight />
                 </button>

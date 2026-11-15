@@ -54,8 +54,10 @@ const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
 
   type AdminValues = {
     Admin_Name: string;
+    Admin_Username?: string;
     Admin_Email: string;
     Admin_Phone: string;
+    Admin_Password: string;
     Admin_Profile: string;
   };
 
@@ -64,8 +66,10 @@ const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
       setSubmitting(true);
       await AxiosConfig.post("/auth/register", {
         Admin_Name: values.Admin_Name,
+        Admin_Username: values.Admin_Username?.trim() || undefined,
         Admin_Email: values.Admin_Email,
         Admin_Phone: values.Admin_Phone,
+        Admin_Password: values.Admin_Password,
         Admin_Profile: imageUrl,
       });
 
@@ -73,8 +77,10 @@ const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
       form.resetFields();
       setImageUrl(null);
       onSuccess?.();
-    } catch {
-      message.error("Registration failed.");
+    } catch (err: unknown) {
+      const serverMsg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      message.error(serverMsg || "Registration failed.");
     } finally {
       setSubmitting(false);
     }
@@ -97,6 +103,32 @@ const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
         </Form.Item>
 
         <Form.Item
+          name="Admin_Username"
+          label="Username (Optional)"
+          rules={[
+            {
+              pattern: /^[a-zA-Z0-9._-]{3,32}$/,
+              message: "3-32 letters, numbers, ., _, or -",
+            },
+          ]}
+        >
+          <Input placeholder="e.g. chief.admin" />
+        </Form.Item>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4">
+        <Form.Item
+          name="Admin_Email"
+          label="Admin Email"
+          rules={[
+            { type: "email", message: "Invalid email format." },
+            { required: true, message: "Please input Admin Email." },
+          ]}
+        >
+          <Input placeholder="operator@innovista.com" />
+        </Form.Item>
+
+        <Form.Item
           name="Admin_Phone"
           label="Phone Number"
           rules={[{ required: true, message: "Please input Admin Phone." }]}
@@ -106,14 +138,18 @@ const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
       </div>
 
       <Form.Item
-        name="Admin_Email"
-        label="Admin Email"
+        name="Admin_Password"
+        label="Initial Strong Password"
         rules={[
-          { type: "email", message: "Invalid email format." },
-          { required: true, message: "Please input Admin Email." },
+          { required: true, message: "Please input a strong password." },
+          { min: 8, message: "Must be at least 8 characters." },
+          {
+            pattern: /(?=.*[A-Za-z])(?=.*\d)/,
+            message: "Must include both letters and numbers.",
+          },
         ]}
       >
-        <Input placeholder="operator@innovista.com" />
+        <Input.Password placeholder="At least 8 characters with letters & numbers" />
       </Form.Item>
 
       <Form.Item label="Profile Avatar">

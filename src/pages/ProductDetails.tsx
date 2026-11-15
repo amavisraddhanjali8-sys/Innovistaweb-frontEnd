@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { App as AntdApp, Modal } from "antd";
 import {
@@ -27,6 +27,7 @@ import {
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
 import ProductSystemCard from "../components/ProductSystemCard";
 import ConfigurationDiagramSvg from "../components/ConfigurationDiagramSvg";
@@ -109,6 +110,7 @@ export default function ProductDetails() {
   const [inCart, setInCart] = useState(false);
   const [quoteModalOpen, setQuoteModalOpen] = useState(false);
   const [quoteAccessory, setQuoteAccessory] = useState<string | undefined>(undefined);
+  const photoTouchRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const openQuoteModal = (accessory?: string) => {
     if (!isLoggedIn) {
@@ -292,6 +294,27 @@ export default function ProductDetails() {
     setActivePhotoIndex((prev) => (prev + 1) % photos.length);
   };
 
+  const handlePhotoTouchStart = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const t = e.changedTouches[0];
+    if (t) photoTouchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  };
+
+  const handlePhotoTouchEnd = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const start = photoTouchRef.current;
+    photoTouchRef.current = null;
+    const t = e.changedTouches[0];
+    if (!start || !t || photos.length <= 1) return;
+    const dir = detectHorizontalSwipe(
+      start.x,
+      start.y,
+      t.clientX,
+      t.clientY,
+      Date.now() - start.t
+    );
+    if (dir === "left") handleNextPhoto();
+    else if (dir === "right") handlePrevPhoto();
+  };
+
   const certifications = design.certifications || [];
   const certificationImages = design.certificationImages || [];
   const hasAnyCertifications =
@@ -370,32 +393,36 @@ export default function ProductDetails() {
                 ))}
               </div>
 
-              {/* Main Stage with Arrows & Zoom Icon */}
-              <div className="relative flex-1 flex items-center gap-2">
+              {/* Main Stage with Arrows, Touch Swipe & Zoom Icon */}
+              <div className="relative flex-1 flex items-center gap-1.5 sm:gap-2">
                 {photos.length > 1 && (
                   <button
                     type="button"
                     onClick={handlePrevPhoto}
                     aria-label="Previous product image"
-                    className="w-8 h-8 rounded-full text-slate-500 hover:text-[#22577A] hover:bg-slate-100 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                    className="w-10 h-10 sm:w-9 sm:h-9 rounded-full text-slate-600 hover:text-[#22577A] hover:bg-slate-100 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
                   >
                     <FiChevronLeft className="text-lg" />
                   </button>
                 )}
 
-                <div className="relative flex-1 aspect-[4/3] bg-slate-100 border border-slate-200 overflow-hidden rounded-xl shadow-[0_14px_38px_-22px_rgba(34,87,122,0.2)]">
+                <div
+                  onTouchStart={handlePhotoTouchStart}
+                  onTouchEnd={handlePhotoTouchEnd}
+                  className="relative flex-1 aspect-[4/3] bg-slate-100 border border-slate-200 overflow-hidden rounded-xl shadow-[0_14px_38px_-22px_rgba(34,87,122,0.2)] touch-pan-y"
+                >
                   <img
                     src={photos[activePhotoIndex] || photos[0]}
                     alt={design.Design_Name}
                     referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover block"
+                    className="w-full h-full object-cover block select-none"
                   />
 
                   <button
                     type="button"
                     onClick={() => setLightboxOpen(true)}
                     aria-label="Zoom product image"
-                    className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-[#22577A] shadow-sm border border-slate-200/80 flex items-center justify-center cursor-pointer transition-colors"
+                    className="absolute top-3 right-3 w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-white/95 hover:bg-white text-slate-700 hover:text-[#22577A] shadow-sm border border-slate-200/80 flex items-center justify-center cursor-pointer transition-colors"
                   >
                     <FiMaximize2 className="text-sm" />
                   </button>
@@ -406,7 +433,7 @@ export default function ProductDetails() {
                     type="button"
                     onClick={handleNextPhoto}
                     aria-label="Next product image"
-                    className="w-8 h-8 rounded-full text-slate-500 hover:text-[#22577A] hover:bg-slate-100 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
+                    className="w-10 h-10 sm:w-9 sm:h-9 rounded-full text-slate-600 hover:text-[#22577A] hover:bg-slate-100 flex items-center justify-center shrink-0 cursor-pointer transition-colors"
                   >
                     <FiChevronRight className="text-lg" />
                   </button>
@@ -488,9 +515,10 @@ export default function ProductDetails() {
               )}
 
               {/* Primary & Secondary Action Buttons */}
-              <div className="pt-2 flex flex-wrap items-center gap-3">
+              <div className="pt-2 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3">
                 <RequestQuoteButton
                   size="lg"
+                  className="w-full sm:w-auto justify-center min-h-[44px]"
                   onClick={() => openQuoteModal()}
                 >
                   <FiMail className="text-base" />
@@ -500,7 +528,7 @@ export default function ProductDetails() {
                 <button
                   type="button"
                   onClick={handleAddToCart}
-                  className={`px-5 py-3 rounded-lg border text-sm font-semibold inline-flex items-center gap-2 cursor-pointer transition-colors ${
+                  className={`w-full sm:w-auto min-h-[44px] px-5 py-3 rounded-lg border text-sm font-semibold inline-flex items-center justify-center gap-2 cursor-pointer transition-colors ${
                     inCart
                       ? "bg-sky-50 border-[#3393B8] text-[#22577A]"
                       : "bg-white border-slate-300 hover:border-[#22577A] text-slate-800 hover:text-[#22577A]"
@@ -574,9 +602,35 @@ export default function ProductDetails() {
                         {featureTable.title}
                       </h3>
                     )}
+
+                    {/* Mobile Stacked Spec Cards (Zero Horizontal Scroll) */}
+                    <div className="sm:hidden space-y-2.5" data-feature-mobile-cards="true">
+                      {featureTable.rows.map((row, rIdx) => (
+                        <div
+                          key={rIdx}
+                          className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-2"
+                        >
+                          {featureTable.headers.map((header, cIdx) => (
+                            <div
+                              key={cIdx}
+                              className="flex items-start justify-between gap-3 text-xs border-b last:border-b-0 border-slate-100 pb-1.5 last:pb-0"
+                            >
+                              <span className="font-semibold text-[#22577A] shrink-0">
+                                {header}
+                              </span>
+                              <span className="text-slate-700 text-right font-medium">
+                                {row[cIdx] || "—"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Desktop / Tablet Full Engineering Table */}
                     <div
                       data-feature-table="true"
-                      className="overflow-x-auto rounded-xl border border-slate-200 shadow-[0_8px_24px_-16px_rgba(34,87,122,0.18)]"
+                      className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200 shadow-[0_8px_24px_-16px_rgba(34,87,122,0.18)]"
                     >
                       <table className="w-full min-w-[600px] border-collapse text-left text-xs sm:text-[13px]">
                         <thead>
@@ -615,100 +669,129 @@ export default function ProductDetails() {
               </div>
             )}
 
-            {/* Tab 2: Product Performance Spec Table */}
+            {/* Tab 2: Product Performance Spec Table (Mobile Cards + Desktop Matrix) */}
             {activeTab === "performance" && hasPerfTab && (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                <table className="w-full min-w-[700px] border-collapse text-left text-xs sm:text-[13px]">
-                  <tbody>
-                    <tr className="bg-[#22577A] text-white font-semibold">
-                      <th className="p-3.5 border-b border-r border-white/15 w-1/5">
-                        Airtightness
-                      </th>
-                      <th className="p-3.5 border-b border-r border-white/15 w-1/5">
-                        Water-tightness
-                      </th>
-                      <th className="p-3.5 border-b border-r border-white/15 w-1/5">
-                        Sound Insulation
-                      </th>
-                      <th className="p-3.5 border-b border-r border-white/15 w-1/5">
-                        Thermal Insulation
-                      </th>
-                      <th className="p-3.5 border-b border-white/15 w-1/5">
-                        Wind Resistance
-                      </th>
-                    </tr>
-                    <tr className="bg-white text-slate-700">
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.airtightness || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.watertightness || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.soundInsulation || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.thermalInsulation || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-slate-200">
-                        {perf.windResistance || "—"}
-                      </td>
-                    </tr>
+              <>
+                <div className="sm:hidden grid grid-cols-1 gap-2.5">
+                  {[
+                    { label: "Airtightness", value: perf.airtightness },
+                    { label: "Water-tightness", value: perf.watertightness },
+                    { label: "Sound Insulation", value: perf.soundInsulation },
+                    { label: "Thermal Insulation", value: perf.thermalInsulation },
+                    { label: "Wind Resistance", value: perf.windResistance },
+                    { label: "System Type", value: perf.productType },
+                    { label: "Visible Surface", value: perf.visibleSurface },
+                    { label: "Wall Thickness", value: perf.wallThickness },
+                    { label: "Frame Thickness", value: perf.frameThickness },
+                    { label: "Size Range (mm)", value: perf.sizeRange },
+                    { label: "Glass Thickness", value: perf.glassThickness },
+                    { label: "Maximum Load-Bearing", value: perf.maxLoadBearing },
+                  ].map((spec) => (
+                    <div
+                      key={spec.label}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] px-3.5 py-2.5 text-xs"
+                    >
+                      <span className="font-semibold text-[#22577A]">{spec.label}</span>
+                      <span className="font-semibold text-slate-800 text-right tabular-nums">
+                        {spec.value || "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
 
-                    <tr className="bg-[#F1F5F9] text-[#22577A] font-semibold">
-                      <th className="p-3.5 border-b border-r border-slate-200">
-                        System Type
-                      </th>
-                      <th className="p-3.5 border-b border-r border-slate-200">
-                        Visible Surface
-                      </th>
-                      <th className="p-3.5 border-b border-r border-slate-200">
-                        Wall Thickness
-                      </th>
-                      <th className="p-3.5 border-b border-r border-slate-200">
-                        Frame Thickness
-                      </th>
-                      <th className="p-3.5 border-b border-slate-200">
-                        Size Range (mm)
-                      </th>
-                    </tr>
-                    <tr className="bg-white text-slate-700">
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.productType || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.visibleSurface || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.wallThickness || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-r border-slate-200">
-                        {perf.frameThickness || "—"}
-                      </td>
-                      <td className="p-3.5 border-b border-slate-200">
-                        {perf.sizeRange || "—"}
-                      </td>
-                    </tr>
+                <div className="hidden sm:block overflow-x-auto rounded-xl border border-slate-200">
+                  <table className="w-full min-w-[700px] border-collapse text-left text-xs sm:text-[13px]">
+                    <tbody>
+                      <tr className="bg-[#22577A] text-white font-semibold">
+                        <th className="p-3.5 border-b border-r border-white/15 w-1/5">
+                          Airtightness
+                        </th>
+                        <th className="p-3.5 border-b border-r border-white/15 w-1/5">
+                          Water-tightness
+                        </th>
+                        <th className="p-3.5 border-b border-r border-white/15 w-1/5">
+                          Sound Insulation
+                        </th>
+                        <th className="p-3.5 border-b border-r border-white/15 w-1/5">
+                          Thermal Insulation
+                        </th>
+                        <th className="p-3.5 border-b border-white/15 w-1/5">
+                          Wind Resistance
+                        </th>
+                      </tr>
+                      <tr className="bg-white text-slate-700">
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.airtightness || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.watertightness || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.soundInsulation || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.thermalInsulation || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-slate-200">
+                          {perf.windResistance || "—"}
+                        </td>
+                      </tr>
 
-                    <tr className="bg-[#F1F5F9] text-[#22577A] font-semibold">
-                      <th className="p-3.5 border-b border-r border-slate-200" colSpan={3}>
-                        Glass Thickness
-                      </th>
-                      <th className="p-3.5 border-b border-slate-200" colSpan={2}>
-                        Maximum Load-Bearing
-                      </th>
-                    </tr>
-                    <tr className="bg-white text-slate-700">
-                      <td className="p-3.5 border-r border-slate-200" colSpan={3}>
-                        {perf.glassThickness || "—"}
-                      </td>
-                      <td className="p-3.5" colSpan={2}>
-                        {perf.maxLoadBearing || "—"}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+                      <tr className="bg-[#F1F5F9] text-[#22577A] font-semibold">
+                        <th className="p-3.5 border-b border-r border-slate-200">
+                          System Type
+                        </th>
+                        <th className="p-3.5 border-b border-r border-slate-200">
+                          Visible Surface
+                        </th>
+                        <th className="p-3.5 border-b border-r border-slate-200">
+                          Wall Thickness
+                        </th>
+                        <th className="p-3.5 border-b border-r border-slate-200">
+                          Frame Thickness
+                        </th>
+                        <th className="p-3.5 border-b border-slate-200">
+                          Size Range (mm)
+                        </th>
+                      </tr>
+                      <tr className="bg-white text-slate-700">
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.productType || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.visibleSurface || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.wallThickness || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-r border-slate-200">
+                          {perf.frameThickness || "—"}
+                        </td>
+                        <td className="p-3.5 border-b border-slate-200">
+                          {perf.sizeRange || "—"}
+                        </td>
+                      </tr>
+
+                      <tr className="bg-[#F1F5F9] text-[#22577A] font-semibold">
+                        <th className="p-3.5 border-b border-r border-slate-200" colSpan={3}>
+                          Glass Thickness
+                        </th>
+                        <th className="p-3.5 border-b border-slate-200" colSpan={2}>
+                          Maximum Load-Bearing
+                        </th>
+                      </tr>
+                      <tr className="bg-white text-slate-700">
+                        <td className="p-3.5 border-r border-slate-200" colSpan={3}>
+                          {perf.glassThickness || "—"}
+                        </td>
+                        <td className="p-3.5" colSpan={2}>
+                          {perf.maxLoadBearing || "—"}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
 
             {/* Tab 3: Opening Configuration Diagrams */}
@@ -1084,7 +1167,7 @@ export default function ProductDetails() {
             />
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-              <div className="lg:col-span-3 flex flex-col gap-2.5">
+              <div className="lg:col-span-3 flex flex-nowrap lg:flex-col gap-2.5 overflow-x-auto no-scrollbar pb-1 lg:pb-0">
                 {showcases.map((sc, idx) => {
                   const isSelected = idx === activeShowcaseIdx;
                   return (
@@ -1092,7 +1175,7 @@ export default function ProductDetails() {
                       key={sc.id}
                       type="button"
                       onClick={() => setActiveShowcaseIdx(idx)}
-                      className={`w-full px-4 py-3.5 rounded-lg text-left text-xs sm:text-[13px] font-semibold transition-all cursor-pointer border ${
+                      className={`shrink-0 lg:w-full min-h-[44px] px-4 py-3 rounded-lg text-left text-xs sm:text-[13px] font-semibold transition-all cursor-pointer border whitespace-nowrap lg:whitespace-normal ${
                         isSelected
                           ? "bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white border-transparent shadow-xs"
                           : "bg-[#F1F5F9] text-[#22577A] border-slate-200 hover:bg-slate-200/70"
@@ -1185,26 +1268,30 @@ export default function ProductDetails() {
         onCancel={() => setLightboxOpen(false)}
         footer={null}
         centered
-        width={860}
+        width="min(860px, calc(100vw - 24px))"
         title={<span className="font-bold text-slate-900">{design.Design_Name}</span>}
       >
         <div className="space-y-3 pt-2">
-          <div className="aspect-[16/10] w-full bg-slate-100 overflow-hidden rounded-lg">
+          <div
+            onTouchStart={handlePhotoTouchStart}
+            onTouchEnd={handlePhotoTouchEnd}
+            className="aspect-[16/10] w-full bg-slate-900 overflow-hidden rounded-lg touch-pan-y"
+          >
             <img
               src={photos[activePhotoIndex] || photos[0]}
               alt={design.Design_Name}
               referrerPolicy="no-referrer"
-              className="w-full h-full object-contain bg-slate-900"
+              className="w-full h-full object-contain bg-slate-900 select-none"
             />
           </div>
           {photos.length > 1 && (
-            <div className="flex items-center justify-center gap-2">
+            <div className="flex items-center justify-center gap-2 overflow-x-auto pb-1">
               {photos.map((url, idx) => (
                 <button
                   key={idx}
                   type="button"
                   onClick={() => setActivePhotoIndex(idx)}
-                  className={`w-16 h-12 rounded overflow-hidden border-2 cursor-pointer ${
+                  className={`w-16 h-12 shrink-0 rounded overflow-hidden border-2 cursor-pointer ${
                     idx === activePhotoIndex
                       ? "border-[#22577A]"
                       : "border-transparent opacity-65 hover:opacity-100"
@@ -1228,7 +1315,7 @@ export default function ProductDetails() {
         onCancel={() => setCertLightboxImg(null)}
         footer={null}
         centered
-        width={760}
+        width="min(760px, calc(100vw - 24px))"
         title={
           <span className="font-bold text-[#22577A]">
             {certLightboxImg?.title || "Certificate"}

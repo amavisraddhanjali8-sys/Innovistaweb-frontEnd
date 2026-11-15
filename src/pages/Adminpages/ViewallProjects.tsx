@@ -183,6 +183,7 @@ function ViewallProjects({
         current: currentPage,
         pageSize: pageSize,
         total: total,
+        responsive: true,
         showSizeChanger: true,
         pageSizeOptions: ["5", "10", "20", "50"],
         onChange: (page, limit) => {

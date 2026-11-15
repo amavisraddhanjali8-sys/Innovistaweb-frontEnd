@@ -1,12 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { App as AntdApp, Modal } from "antd";
 import {
   EyeOutlined,
   EyeInvisibleOutlined,
-  UserOutlined,
-  SafetyCertificateOutlined,
   LoadingOutlined,
+  CheckCircleOutlined,
 } from "@ant-design/icons";
 import axios from "axios";
 import { useAuth } from "../Context/AuthContext";
@@ -17,10 +16,18 @@ import { signInWithPopup } from "firebase/auth";
 import { auth, googleAuthProvider } from "../lib/firebase";
 import GoogleSignInButton from "../components/GoogleSignInButton";
 import {
+  AccountStatusBanner,
+  AdminSecretKeyStepPanel,
+  CaptchaWidget,
+  CustomerTotpStepPanel,
+  LoginSecurityStepper,
+  useCaptchaChallenge,
+  type AccountClassification,
+  type LoginFlowStep,
+} from "../components/SecurityAuthWidgets";
+import {
   getAuthActionFromSearch,
   getAuthModeFromSearch,
-  getDemoAccountCredentials,
-  isAdminEmail,
   parsePostAuthRedirect,
   validateLoginInput,
   validateSignupInput,
@@ -31,7 +38,7 @@ export default function ProfileLogin() {
   const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const location = useLocation();
-  const { loginCustomer, loginAdmin, user } = useAuth();
+  const { loginCustomer, loginAdmin, updateUser, user } = useAuth();
 
   const [mode, setMode] = useState<"login" | "signup">(() =>
     getAuthModeFromSearch(location.search)
@@ -46,13 +53,40 @@ export default function ProfileLogin() {
 
   const redirectAction = getAuthActionFromSearch(location.search);
 
-  // Login state
-  const [email, setEmail] = useState("duminda@zenithcapital.lk");
-  const [password, setPassword] = useState("customer123");
+  // Login state (zero hardcoded demo credentials)
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  const [classification, setClassification] = useState<AccountClassification | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const lastCheckedIdRef = useRef("");
+
+  // Server SVG CAPTCHA & anti-bot honeypot
+  const captcha = useCaptchaChallenge();
+
+  // Multi-step login state: Step 1 Credentials -> Step 2 Robot Check -> Step 3 Customer TOTP or Admin Secret Key
+  const [loginStep, setLoginStep] = useState<LoginFlowStep>("credentials");
+  const [stepToken, setStepToken] = useState("");
+  const [mfaToken, setMfaToken] = useState("");
+  const [mfaUserEmail, setMfaUserEmail] = useState("");
+  const [customerTotpMeta, setCustomerTotpMeta] = useState<{
+    totpEnrolled: boolean;
+    qrDataUrl?: string | null;
+    manualSecret?: string | null;
+  } | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [adminSecretKey, setAdminSecretKey] = useState("");
+
+  // Post-signup immediate browse + optional email verification modal
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [verifyCode, setVerifyCode] = useState("");
+  const [issuedCodePreview, setIssuedCodePreview] = useState<string | null>(null);
+  const [verifyingEmail, setVerifyingEmail] = useState(false);
+  const [signedUpRedirect, setSignedUpRedirect] = useState<string>("/profile");
 
   // Signup state
   const [signupFields, setSignupFields] = useState<SignupFields>({
     name: "",
+    username: "",
     company: "",
     email: "",
     phone: "",
@@ -65,51 +99,98 @@ export default function ProfileLogin() {
   const [resetEmail, setResetEmail] = useState("");
   const [resetSending, setResetSending] = useState(false);
 
-  const performLogin = async (identifier: string, secret: string) => {
+  const checkAccountStatus = useCallback(async (rawId: string) => {
+    const clean = rawId.trim();
+    if (!clean || clean.length < 2) {
+      setClassification(null);
+      lastCheckedIdRef.current = "";
+      return null;
+    }
+    if (lastCheckedIdRef.current === clean) {
+      return classification;
+    }
+    setCheckingStatus(true);
+    try {
+      const res = await axios.post<{ classification: AccountClassification }>(
+        "/api/auth/check-status",
+        { identifier: clean }
+      );
+      lastCheckedIdRef.current = clean;
+      setClassification(res.data.classification);
+      return res.data.classification;
+    } catch {
+      return null;
+    } finally {
+      setCheckingStatus(false);
+    }
+  }, [classification]);
+
+  // Debounced live status recognition when user enters email, username, or user ID
+  useEffect(() => {
+    if (mode !== "login") return;
+    const clean = identifier.trim();
+    if (!clean || clean.length < 2) {
+      setClassification(null);
+      lastCheckedIdRef.current = "";
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void checkAccountStatus(clean);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [identifier, mode, checkAccountStatus]);
+
+  const resetLoginFlow = useCallback(() => {
+    setLoginStep("credentials");
+    setStepToken("");
+    setMfaToken("");
+    setMfaUserEmail("");
+    setCustomerTotpMeta(null);
+    setMfaCode("");
+    setAdminSecretKey("");
     setErrorMessage(null);
-    const check = validateLoginInput(identifier, secret);
+  }, []);
+
+  // Step 1: Validate ID/Email/Username + Password -> transition to Step 2 Robot Verification
+  const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrorMessage(null);
+
+    const check = validateLoginInput(identifier, password);
     if (!check.valid) {
-      setErrorMessage(check.error || "Please enter valid credentials.");
+      setErrorMessage(check.error || "Please enter your ID and password.");
       return;
     }
 
     setLoading(true);
     try {
-      if (isAdminEmail(identifier)) {
-        const response = await axios.post(
-          `/auth/login?email=${encodeURIComponent(identifier.trim())}&password=${encodeURIComponent(secret)}`
-        );
+      const response = await axios.post("/api/auth/login", {
+        identifier: identifier.trim(),
+        password,
+      });
 
-        if (response.data?.tokens) {
-          loginAdmin(
-            response.data.admin || {
-              Admin_Name: "Super Admin",
-              Admin_Email: identifier.trim(),
-            },
-            response.data.tokens.accessToken
-          );
-          message.success("Authenticated");
-          navigate(parsePostAuthRedirect(location.search, "admin"));
-        } else {
-          setErrorMessage("Invalid admin credentials.");
-        }
-      } else {
-        const response = await axios.post("/customer/login", {
-          email: identifier.trim(),
-          password: secret,
-        });
-
-        if (response.data?.customer) {
-          loginCustomer(response.data.customer, response.data.tokens?.accessToken || "mock-token");
-          message.success("Logged in");
-          navigate(parsePostAuthRedirect(location.search, "customer"));
-        } else {
-          setErrorMessage("Account not found.");
-        }
+      if (response.data?.classification) {
+        setClassification(response.data.classification);
       }
+
+      if (response.data?.nextStep === "ROBOT_VERIFICATION" && response.data?.stepToken) {
+        setStepToken(response.data.stepToken);
+        setMfaUserEmail(response.data?.user?.email || identifier.trim());
+        setLoginStep("robot");
+        void captcha.refreshCaptcha();
+        message.info("Credentials verified. Complete robot verification to continue.");
+        return;
+      }
+
+      setErrorMessage("Unexpected verification response. Please try again.");
     } catch (err: unknown) {
-      if (axios.isAxiosError(err) && err.response?.data?.message) {
-        setErrorMessage(String(err.response.data.message));
+      if (axios.isAxiosError(err)) {
+        if (err.response?.data?.classification) {
+          setClassification(err.response.data.classification as AccountClassification);
+        }
+        setErrorMessage(
+          String(err.response?.data?.message || "Login failed. Please verify your details.")
+        );
       } else {
         setErrorMessage("Login failed. Please check your credentials.");
       }
@@ -118,16 +199,135 @@ export default function ProfileLogin() {
     }
   };
 
-  const handleLoginSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  // Step 2: Verify Robot CAPTCHA -> transition to Customer Google Authenticator OR Admin Secret Key
+  const handleRobotVerifySubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    await performLogin(email, password);
+    setErrorMessage(null);
+
+    const captchaReadyErr = captcha.validateReady();
+    if (captchaReadyErr) {
+      setErrorMessage(captchaReadyErr);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await axios.post("/api/auth/login/verify-captcha", {
+        stepToken,
+        ...captcha.getSubmissionPayload(),
+      });
+
+      if (response.data?.classification) {
+        setClassification(response.data.classification);
+      }
+      if (response.data?.user?.email) {
+        setMfaUserEmail(response.data.user.email);
+      }
+
+      if (response.data?.nextStep === "ADMIN_SECRET_KEY" && response.data?.mfaToken) {
+        setMfaToken(response.data.mfaToken);
+        setAdminSecretKey("");
+        setLoginStep("admin_secret");
+        message.info("Robot verification passed. Enter the Admin Secret Key.");
+        return;
+      }
+
+      if (response.data?.nextStep === "CUSTOMER_TOTP" && response.data?.mfaToken) {
+        setMfaToken(response.data.mfaToken);
+        setCustomerTotpMeta({
+          totpEnrolled: Boolean(response.data.totpEnrolled),
+          qrDataUrl: response.data.qrDataUrl || null,
+          manualSecret: response.data.manualSecret || null,
+        });
+        setMfaCode("");
+        setLoginStep("customer_totp");
+        message.info(
+          response.data.totpEnrolled
+            ? "Robot verification passed. Enter your 6-digit Google Authenticator code."
+            : "Scan the QR code in Google Authenticator and enter the 6-digit code."
+        );
+        return;
+      }
+
+      setErrorMessage("Unexpected verification step response. Please start again.");
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setErrorMessage(String(err.response.data.message));
+      } else {
+        setErrorMessage("Robot verification failed. Please check the code and try again.");
+      }
+      void captcha.refreshCaptcha();
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleQuickDemo = async (kind: "client" | "admin") => {
-    const creds = getDemoAccountCredentials(kind);
-    setEmail(creds.email);
-    setPassword(creds.password);
-    await performLogin(creds.email, creds.password);
+  // Step 3A: Verify Customer 6-digit Google Authenticator code
+  const handleCustomerTotpSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    if (!/^\d{6}$/.test(mfaCode.trim())) {
+      setErrorMessage("Enter the 6-digit code from Google Authenticator.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await axios.post("/api/auth/verify-totp", {
+        mfaToken,
+        code: mfaCode.trim(),
+      });
+      if (res.data?.tokens?.accessToken && res.data?.customer) {
+        loginCustomer(res.data.customer, res.data.tokens.accessToken, res.data.tokens.refreshToken);
+        message.success(res.data?.message || "Google Authenticator verified!");
+        navigate(parsePostAuthRedirect(location.search, "customer"));
+      } else if (res.data?.tokens?.accessToken && res.data?.admin) {
+        loginAdmin(res.data.admin, res.data.tokens.accessToken, res.data.tokens.refreshToken);
+        message.success("Authenticated!");
+        navigate(parsePostAuthRedirect(location.search, "admin"));
+      } else {
+        setErrorMessage("Verification response incomplete.");
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setErrorMessage(String(err.response.data.message));
+      } else {
+        setErrorMessage("Invalid 6-digit Google Authenticator code.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Step 3B: Verify Admin Secret Key
+  const handleAdminSecretSubmit = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    if (!adminSecretKey.trim()) {
+      setErrorMessage("Please enter the Admin Secret Key.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await axios.post("/api/auth/login/verify-admin-secret", {
+        mfaToken,
+        secretKey: adminSecretKey.trim(),
+      });
+      if (res.data?.tokens?.accessToken && res.data?.admin) {
+        loginAdmin(res.data.admin, res.data.tokens.accessToken, res.data.tokens.refreshToken);
+        message.success(res.data?.message || "Admin Secret Key verified!");
+        navigate(parsePostAuthRedirect(location.search, "admin"));
+      } else {
+        setErrorMessage("Admin verification response incomplete.");
+      }
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        setErrorMessage(String(err.response.data.message));
+      } else {
+        setErrorMessage("Invalid Admin Secret Key.");
+      }
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -150,6 +350,9 @@ export default function ProfileLogin() {
             Admin_Email: dbUser.email,
             Admin_Phone: dbUser.phone,
             Admin_Profile: dbUser.avatarUrl,
+            isVerified: Boolean(dbUser.isVerified),
+            emailVerified: Boolean(dbUser.emailVerified),
+            totpEnabled: Boolean(dbUser.totpEnabled),
           },
           idToken
         );
@@ -162,9 +365,10 @@ export default function ProfileLogin() {
             Cus_Name: dbUser?.name || cred.user.displayName || "Client",
             Cus_Email: dbUser?.email || cred.user.email || "",
             Cus_PhoneNumber: dbUser?.phone || "",
-            Cus_CompanyName: dbUser?.company || "Google Workspace Client",
+            Cus_CompanyName: dbUser?.company || "",
             Cus_Logo: dbUser?.avatarUrl || cred.user.photoURL || "",
-            Verify_State: true,
+            Verify_State: Boolean(dbUser?.isVerified),
+            Email_Verified: Boolean(dbUser?.emailVerified ?? cred.user.emailVerified),
           },
           idToken
         );
@@ -187,37 +391,86 @@ export default function ProfileLogin() {
       setSignupErrors(result.errors);
       return;
     }
+    const captchaReadyErr = captcha.validateReady();
+    if (captchaReadyErr) {
+      setErrorMessage(captchaReadyErr);
+      return;
+    }
     setSignupErrors({});
     setLoading(true);
 
     try {
       const payload = {
         Cus_Name: signupFields.name.trim(),
+        Cus_Username: signupFields.username?.trim() || undefined,
         Cus_Email: signupFields.email.trim(),
         Cus_PhoneNumber: signupFields.phone.trim(),
         Cus_CompanyName: signupFields.company.trim(),
         Cus_Password: signupFields.password,
         Cus_Logo: brandIcon,
+        ...captcha.getSubmissionPayload(),
       };
 
       const response = await axios.post("/customer/Customer_register", payload);
-      if (response.data?.data) {
-        loginCustomer(response.data.data, "mock-cus-token-" + Date.now());
-        message.success("Account created");
-        navigate(parsePostAuthRedirect(location.search, "customer"));
+      const customerData = response.data?.customer || response.data?.data;
+      const tokens = response.data?.tokens;
+
+      if (customerData && tokens?.accessToken) {
+        loginCustomer(customerData, tokens.accessToken, tokens.refreshToken);
+        const targetDest = parsePostAuthRedirect(location.search, "customer");
+        setSignedUpRedirect(targetDest);
+        const previewCode = response.data?.verification?.verificationPreview?.code || null;
+        setIssuedCodePreview(previewCode);
+        setVerifyCode("");
+        setVerifyModalOpen(true);
+        message.success("Account created! You can browse the site right away.");
       } else {
         message.success("Account created");
         setMode("login");
       }
     } catch (err: unknown) {
-      console.error(err);
       if (axios.isAxiosError(err) && err.response?.data?.message) {
         setErrorMessage(String(err.response.data.message));
       } else {
         setErrorMessage("Registration failed. Please try again.");
       }
+      void captcha.refreshCaptcha();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConfirmEmailVerification = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!verifyCode.trim()) {
+      message.warning("Enter the 6-digit email verification code.");
+      return;
+    }
+    setVerifyingEmail(true);
+    try {
+      const token = sessionStorage.getItem("accessToken");
+      const res = await axios.post(
+        "/api/auth/verify-email",
+        { email: user?.email || signupFields.email.trim(), code: verifyCode.trim() },
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+      );
+      if (res.data?.customer) {
+        updateUser({
+          emailVerified: true,
+          classification: res.data.classification?.statusCode,
+        });
+      }
+      message.success("Email verified successfully!");
+      setVerifyModalOpen(false);
+      navigate(signedUpRedirect);
+    } catch (err: unknown) {
+      if (axios.isAxiosError(err) && err.response?.data?.message) {
+        message.error(String(err.response.data.message));
+      } else {
+        message.error("Invalid verification code.");
+      }
+    } finally {
+      setVerifyingEmail(false);
     }
   };
 
@@ -230,7 +483,7 @@ export default function ProfileLogin() {
     setResetSending(true);
     try {
       const res = await axios.post("/auth/ResetPassword", { email: resetEmail.trim() });
-      message.success(res.data?.message || "Password reset instructions sent.");
+      message.success(res.data?.message || "Password reset instructions issued.");
       setResetOpen(false);
       setResetEmail("");
     } catch {
@@ -243,11 +496,16 @@ export default function ProfileLogin() {
   const switchMode = (nextMode: "login" | "signup") => {
     setErrorMessage(null);
     setSignupErrors({});
+    setClassification(null);
+    resetLoginFlow();
     setMode(nextMode);
+    if (nextMode === "signup") {
+      void captcha.refreshCaptcha();
+    }
   };
 
   return (
-    <div className="flex-1 w-full bg-[#F2F4F7] flex items-center justify-center px-4 py-3 sm:px-6 sm:py-5 lg:px-8 lg:py-6">
+    <div className="flex-1 w-full bg-[#F2F4F7] flex items-center justify-center px-4 py-4 pb-24 sm:px-6 sm:py-6 md:pb-8 lg:px-8">
       <PageMetadata
         title={mode === "login" ? "Client & Admin Login" : "Create Client Account"}
         description="Sign in to manage Innovista Fabriconix architectural fabrication orders, milestones, and specifications."
@@ -255,9 +513,7 @@ export default function ProfileLogin() {
         noIndex
       />
       {/* Main Split Card */}
-      <div
-        className="w-full max-w-[960px] bg-white rounded-[32px] p-3.5 sm:p-5 shadow-[0_24px_60px_-15px_rgba(15,23,42,0.10)] border border-slate-100/90 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-stretch"
-      >
+      <div className="w-full max-w-[980px] bg-white rounded-[32px] p-3.5 sm:p-5 shadow-[0_24px_60px_-15px_rgba(15,23,42,0.10)] border border-slate-100/90 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-5 items-stretch">
         {/* Left Orange Brand Panel */}
         <section
           aria-label="Innovista Dashboard Highlight"
@@ -288,11 +544,11 @@ export default function ProfileLogin() {
               </span>
             </h2>
             <p className="mt-2.5 sm:mt-3.5 text-[13px] sm:text-[13.5px] leading-relaxed text-white/90 max-w-[330px] font-normal">
-              Simplify your fabrication management with our user-friendly client &amp; admin dashboard.
+              Protected client &amp; administrator portal with real-time account status detection,
+              robot verification, and administrator 2FA.
             </p>
           </div>
 
-          {/* 3D Character Duo Anchored to Bottom */}
           <div className="hidden lg:flex relative z-10 mt-2 -mx-6 justify-center items-end overflow-hidden">
             <img
               src={loginCharacters}
@@ -316,7 +572,7 @@ export default function ProfileLogin() {
           aria-label={mode === "login" ? "Account Login" : "Create Client Account"}
           className="lg:col-span-6 flex flex-col justify-center px-3 py-3 sm:px-7 sm:py-5"
         >
-          <div className="w-full max-w-[360px] mx-auto">
+          <div className="w-full max-w-[380px] mx-auto">
             {/* Brand Lockup */}
             <div className="flex items-center justify-center gap-2.5">
               <span className="w-9 h-9 rounded-full bg-[#FF6B1E] flex items-center justify-center shadow-sm shadow-[#FF6B1E]/25 shrink-0">
@@ -340,22 +596,21 @@ export default function ProfileLogin() {
             </div>
 
             {/* Title & Subtitle */}
-            <div className="text-center mt-4 mb-5">
+            <div className="text-center mt-3.5 mb-4">
               <h1 className="text-[26px] sm:text-[28px] font-bold tracking-tight text-neutral-900 leading-tight">
                 {mode === "login" ? "Welcome Back" : "Create Account"}
               </h1>
-              <p className="text-[13px] text-neutral-400 mt-1">
+              <p className="text-[13px] text-neutral-500 mt-1">
                 {mode === "login"
-                  ? "Please login to your account"
-                  : "Sign up for your client workspace"}
+                  ? "Sign in with your email, username, or user ID"
+                  : "Create your client workspace and browse immediately"}
               </p>
             </div>
 
-            {/* Contextual Auth Gate Banner when redirected from Add to Cart or Request Quote */}
             {redirectAction && (
               <div
                 data-testid="auth-gate-notice"
-                className="mb-4 rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2.5 text-xs font-medium text-[#22577A]"
+                className="mb-3.5 rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2.5 text-xs font-medium text-[#22577A]"
               >
                 {redirectAction === "cart"
                   ? "Sign up for a customer account (or login) to save systems and place fabrication orders."
@@ -363,9 +618,8 @@ export default function ProfileLogin() {
               </div>
             )}
 
-            {/* Active Session Quick Return */}
             {user && (
-              <div className="mb-4 rounded-xl bg-orange-50/80 border border-orange-100 px-3.5 py-2.5 flex items-center justify-between gap-2">
+              <div className="mb-3.5 rounded-xl bg-orange-50/80 border border-orange-100 px-3.5 py-2.5 flex items-center justify-between gap-2">
                 <span className="text-xs font-medium text-neutral-700 truncate">
                   Signed in as <strong className="text-neutral-900">{user.name}</strong>
                 </span>
@@ -379,10 +633,10 @@ export default function ProfileLogin() {
               </div>
             )}
 
-            {/* Inline Error Alert */}
             {errorMessage && (
               <div
                 role="alert"
+                data-testid="login-error-alert"
                 className="mb-3.5 rounded-xl bg-red-50 border border-red-200 px-3.5 py-2.5 text-xs font-medium text-red-700"
               >
                 {errorMessage}
@@ -391,116 +645,187 @@ export default function ProfileLogin() {
 
             {mode === "login" ? (
               <>
-                <form onSubmit={handleLoginSubmit} noValidate className="space-y-3.5">
-                  <div>
-                    <label htmlFor="login-email" className="sr-only">
-                      Email address
-                    </label>
-                    <input
-                      id="login-email"
-                      name="email"
-                      type="text"
-                      autoComplete="username"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      placeholder="Email address"
-                      className="w-full h-12 rounded-xl bg-[#F4F5F7] px-4 text-[13.5px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
-                    />
-                  </div>
+                <LoginSecurityStepper step={loginStep} role={classification?.role} />
 
-                  <div>
-                    <label htmlFor="login-password" className="sr-only">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="login-password"
-                        name="password"
-                        type={showPassword ? "text" : "password"}
-                        autoComplete="current-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Password"
-                        className="w-full h-12 rounded-xl bg-[#F4F5F7] pl-4 pr-11 text-[13.5px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
-                      />
+                {loginStep === "credentials" && (
+                  <>
+                    <form onSubmit={handleLoginSubmit} noValidate className="space-y-3">
+                      <div>
+                        <label htmlFor="login-identifier" className="sr-only">
+                          Email address, username, or user ID
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="login-identifier"
+                            data-testid="login-identifier-input"
+                            name="identifier"
+                            type="text"
+                            autoComplete="username"
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
+                            onBlur={() => {
+                              if (identifier.trim().length >= 2) {
+                                void checkAccountStatus(identifier);
+                              }
+                            }}
+                            placeholder="Email address, username, or user ID"
+                            className="w-full h-11 rounded-xl bg-[#F4F5F7] pl-4 pr-20 text-[13.5px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                          />
+                          <button
+                            type="button"
+                            data-testid="check-account-status-btn"
+                            onClick={() => void checkAccountStatus(identifier)}
+                            disabled={!identifier.trim() || checkingStatus}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 min-h-[34px] px-3 py-1 rounded-lg bg-white border border-slate-200 text-xs font-semibold text-[#22577A] hover:border-[#22577A] cursor-pointer disabled:opacity-40"
+                          >
+                            {checkingStatus ? "..." : "Status"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Real-time Account Classification & Verification Recognition Banner */}
+                      {(checkingStatus || classification) && (
+                        <AccountStatusBanner
+                          classification={classification}
+                          checking={checkingStatus}
+                        />
+                      )}
+
+                      <div>
+                        <label htmlFor="login-password" className="sr-only">
+                          Password
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="login-password"
+                            data-testid="login-password-input"
+                            name="password"
+                            type={showPassword ? "text" : "password"}
+                            autoComplete="current-password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Password"
+                            className="w-full h-11 rounded-xl bg-[#F4F5F7] pl-4 pr-11 text-[13.5px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            aria-label={showPassword ? "Hide password" : "Show password"}
+                            className="absolute right-1.5 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-neutral-400 hover:text-neutral-600 cursor-pointer transition-colors"
+                          >
+                            {showPassword ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end -mt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetEmail(identifier.includes("@") ? identifier : "");
+                            setResetOpen(true);
+                          }}
+                          className="text-[12px] font-medium text-neutral-500 hover:text-[#E55309] transition-colors cursor-pointer"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        data-testid="login-submit-btn"
+                        className="w-full h-11 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] active:scale-[0.99] text-white font-semibold text-sm shadow-md shadow-[#FF6B1E]/25 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+                      >
+                        {loading && <LoadingOutlined />}
+                        <span>Login</span>
+                      </button>
+                    </form>
+
+                    {/* Divider */}
+                    <div className="relative my-4 flex items-center justify-center">
+                      <div className="w-full border-t border-neutral-200" />
+                      <span className="bg-white px-3 text-[12px] text-neutral-400 whitespace-nowrap shrink-0">
+                        Or Continue with
+                      </span>
+                      <div className="w-full border-t border-neutral-200" />
+                    </div>
+
+                    <GoogleSignInButton
+                      onClick={handleGoogleSignIn}
+                      loading={loading}
+                      className="w-full h-11"
+                    />
+                  </>
+                )}
+
+                {loginStep === "robot" && (
+                  <form
+                    onSubmit={handleRobotVerifySubmit}
+                    data-testid="login-robot-step-form"
+                    className="space-y-3.5"
+                  >
+                    {classification && (
+                      <AccountStatusBanner classification={classification} />
+                    )}
+
+                    <CaptchaWidget captcha={captcha} testIdPrefix="login-captcha" />
+
+                    <div className="flex flex-col-reverse sm:flex-row gap-2">
                       <button
                         type="button"
-                        onClick={() => setShowPassword((prev) => !prev)}
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1 cursor-pointer transition-colors"
+                        onClick={resetLoginFlow}
+                        disabled={loading}
+                        data-testid="login-robot-back-btn"
+                        className="min-h-[44px] px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 cursor-pointer disabled:opacity-50"
                       >
-                        {showPassword ? <EyeOutlined /> : <EyeInvisibleOutlined />}
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        data-testid="login-robot-submit-btn"
+                        className="flex-1 min-h-[44px] rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] text-white font-semibold text-sm shadow-md shadow-[#FF6B1E]/25 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2"
+                      >
+                        {loading && <LoadingOutlined />}
+                        <span>Verify &amp; Continue</span>
                       </button>
                     </div>
-                  </div>
+                  </form>
+                )}
 
-                  <div className="flex justify-end -mt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setResetEmail(email.includes("@") ? email : "");
-                        setResetOpen(true);
-                      }}
-                      className="text-[12px] font-medium text-neutral-400 hover:text-[#E55309] transition-colors cursor-pointer"
-                    >
-                      Forgot password?
-                    </button>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full h-12 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] active:scale-[0.99] text-white font-semibold text-sm shadow-md shadow-[#FF6B1E]/25 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
-                  >
-                    {loading && <LoadingOutlined />}
-                    <span>Login</span>
-                  </button>
-                </form>
-
-                {/* Divider */}
-                <div className="relative my-4.5 flex items-center justify-center">
-                  <div className="w-full border-t border-neutral-200" />
-                  <span className="bg-white px-3 text-[12px] text-neutral-400 whitespace-nowrap shrink-0">
-                    Or Login with
-                  </span>
-                  <div className="w-full border-t border-neutral-200" />
-                </div>
-
-                {/* Secondary Quick Auth Actions */}
-                <div className="space-y-2.5">
-                  <GoogleSignInButton
-                    onClick={handleGoogleSignIn}
+                {loginStep === "customer_totp" && (
+                  <CustomerTotpStepPanel
+                    email={mfaUserEmail || identifier}
+                    totpEnrolled={Boolean(customerTotpMeta?.totpEnrolled)}
+                    qrDataUrl={customerTotpMeta?.qrDataUrl}
+                    manualSecret={customerTotpMeta?.manualSecret}
+                    code={mfaCode}
+                    onCodeChange={setMfaCode}
                     loading={loading}
-                    className="w-full h-11"
+                    onBack={resetLoginFlow}
+                    onSubmit={handleCustomerTotpSubmit}
+                    accentHex="#FF6B1E"
                   />
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => handleQuickDemo("client")}
-                      className="h-11 rounded-xl border border-neutral-200 bg-white hover:border-[#FF6B1E]/45 hover:bg-orange-50/40 flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-800 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
-                    >
-                      <UserOutlined className="text-[#FF6B1E]" />
-                      <span>Client Demo</span>
-                    </button>
+                )}
 
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => handleQuickDemo("admin")}
-                      className="h-11 rounded-xl border border-neutral-200 bg-white hover:border-neutral-300 hover:bg-neutral-50 flex items-center justify-center gap-2 text-[13px] font-medium text-neutral-800 transition-all cursor-pointer disabled:opacity-60 whitespace-nowrap shrink-0"
-                    >
-                      <SafetyCertificateOutlined className="text-[#22577a]" />
-                      <span>Admin Demo</span>
-                    </button>
-                  </div>
-                </div>
+                {loginStep === "admin_secret" && (
+                  <AdminSecretKeyStepPanel
+                    email={mfaUserEmail || identifier}
+                    secretKey={adminSecretKey}
+                    onSecretKeyChange={setAdminSecretKey}
+                    loading={loading}
+                    onBack={resetLoginFlow}
+                    onSubmit={handleAdminSecretSubmit}
+                    accentHex="#22577A"
+                  />
+                )}
 
-                {/* Footer Toggle */}
-                <p className="mt-5 text-center text-[12.5px] text-neutral-400">
+                <p className="mt-4 text-center text-[12.5px] text-neutral-500">
                   Don&apos;t have an account?{" "}
                   <button
                     type="button"
+                    data-testid="switch-to-signup-btn"
                     onClick={() => switchMode("signup")}
                     className="font-semibold text-[#E55309] hover:text-[#c74404] hover:underline cursor-pointer"
                   >
@@ -510,7 +835,7 @@ export default function ProfileLogin() {
               </>
             ) : (
               <>
-                <form onSubmit={handleSignupSubmit} noValidate className="space-y-3">
+                <form onSubmit={handleSignupSubmit} noValidate className="space-y-2.5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <div>
                       <label htmlFor="signup-name" className="sr-only">
@@ -518,13 +843,14 @@ export default function ProfileLogin() {
                       </label>
                       <input
                         id="signup-name"
+                        data-testid="signup-name-input"
                         type="text"
                         value={signupFields.name}
                         onChange={(e) =>
                           setSignupFields((prev) => ({ ...prev, name: e.target.value }))
                         }
-                        placeholder="Full name"
-                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                        placeholder="Full name *"
+                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-base sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
                       />
                       {signupErrors.name && (
                         <p className="text-[11px] text-red-600 mt-0.5 pl-1">{signupErrors.name}</p>
@@ -532,21 +858,22 @@ export default function ProfileLogin() {
                     </div>
 
                     <div>
-                      <label htmlFor="signup-company" className="sr-only">
-                        Company Name
+                      <label htmlFor="signup-username" className="sr-only">
+                        Username
                       </label>
                       <input
-                        id="signup-company"
+                        id="signup-username"
+                        data-testid="signup-username-input"
                         type="text"
-                        value={signupFields.company}
+                        value={signupFields.username || ""}
                         onChange={(e) =>
-                          setSignupFields((prev) => ({ ...prev, company: e.target.value }))
+                          setSignupFields((prev) => ({ ...prev, username: e.target.value }))
                         }
-                        placeholder="Company"
-                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                        placeholder="Username (optional)"
+                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-base sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
                       />
-                      {signupErrors.company && (
-                        <p className="text-[11px] text-red-600 mt-0.5 pl-1">{signupErrors.company}</p>
+                      {signupErrors.username && (
+                        <p className="text-[11px] text-red-600 mt-0.5 pl-1">{signupErrors.username}</p>
                       )}
                     </div>
                   </div>
@@ -558,13 +885,14 @@ export default function ProfileLogin() {
                       </label>
                       <input
                         id="signup-email"
+                        data-testid="signup-email-input"
                         type="email"
                         value={signupFields.email}
                         onChange={(e) =>
                           setSignupFields((prev) => ({ ...prev, email: e.target.value }))
                         }
-                        placeholder="Email address"
-                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                        placeholder="Email address *"
+                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-base sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
                       />
                       {signupErrors.email && (
                         <p className="text-[11px] text-red-600 mt-0.5 pl-1">{signupErrors.email}</p>
@@ -577,18 +905,39 @@ export default function ProfileLogin() {
                       </label>
                       <input
                         id="signup-phone"
+                        data-testid="signup-phone-input"
                         type="tel"
                         value={signupFields.phone}
                         onChange={(e) =>
                           setSignupFields((prev) => ({ ...prev, phone: e.target.value }))
                         }
-                        placeholder="Phone number"
-                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                        placeholder="Phone number *"
+                        className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-base sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
                       />
                       {signupErrors.phone && (
                         <p className="text-[11px] text-red-600 mt-0.5 pl-1">{signupErrors.phone}</p>
                       )}
                     </div>
+                  </div>
+
+                  <div>
+                    <label htmlFor="signup-company" className="sr-only">
+                      Company Name
+                    </label>
+                    <input
+                      id="signup-company"
+                      data-testid="signup-company-input"
+                      type="text"
+                      value={signupFields.company}
+                      onChange={(e) =>
+                        setSignupFields((prev) => ({ ...prev, company: e.target.value }))
+                      }
+                      placeholder="Company / Organization *"
+                      className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-base sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
+                    />
+                    {signupErrors.company && (
+                      <p className="text-[11px] text-red-600 mt-0.5 pl-1">{signupErrors.company}</p>
+                    )}
                   </div>
 
                   <div>
@@ -598,19 +947,20 @@ export default function ProfileLogin() {
                     <div className="relative">
                       <input
                         id="signup-password"
+                        data-testid="signup-password-input"
                         type={showPassword ? "text" : "password"}
                         value={signupFields.password}
                         onChange={(e) =>
                           setSignupFields((prev) => ({ ...prev, password: e.target.value }))
                         }
-                        placeholder="Password (min 6 characters)"
-                        className="w-full h-11 rounded-xl bg-[#F4F5F7] pl-3.5 pr-11 text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+                        placeholder="Password (min 8 chars, letters + numbers) *"
+                        className="w-full h-11 rounded-xl bg-[#F4F5F7] pl-3.5 pr-11 text-base sm:text-[13px] text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword((prev) => !prev)}
                         aria-label={showPassword ? "Hide password" : "Show password"}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600 p-1 cursor-pointer transition-colors"
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 min-w-[40px] min-h-[40px] flex items-center justify-center text-neutral-400 hover:text-neutral-600 cursor-pointer"
                       >
                         {showPassword ? <EyeOutlined /> : <EyeInvisibleOutlined />}
                       </button>
@@ -620,20 +970,24 @@ export default function ProfileLogin() {
                     )}
                   </div>
 
+                  <CaptchaWidget captcha={captcha} testIdPrefix="signup-captcha" />
+
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full h-12 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] active:scale-[0.99] text-white font-semibold text-sm shadow-md shadow-[#FF6B1E]/25 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 whitespace-nowrap shrink-0 mt-1"
+                    data-testid="signup-submit-btn"
+                    className="w-full h-11 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] active:scale-[0.99] text-white font-semibold text-sm shadow-md shadow-[#FF6B1E]/25 transition-all cursor-pointer disabled:opacity-60 flex items-center justify-center gap-2 whitespace-nowrap shrink-0 mt-1"
                   >
                     {loading && <LoadingOutlined />}
                     <span>Create Account</span>
                   </button>
                 </form>
 
-                <p className="mt-5 text-center text-[12.5px] text-neutral-400">
+                <p className="mt-4 text-center text-[12.5px] text-neutral-500">
                   Already have an account?{" "}
                   <button
                     type="button"
+                    data-testid="switch-to-login-btn"
                     onClick={() => switchMode("login")}
                     className="font-semibold text-[#E55309] hover:text-[#c74404] hover:underline cursor-pointer"
                   >
@@ -646,17 +1000,91 @@ export default function ProfileLogin() {
         </section>
       </div>
 
+      {/* Post-Signup Immediate Browse + Email Verification Modal */}
+      <Modal
+        open={verifyModalOpen}
+        onCancel={() => {
+          setVerifyModalOpen(false);
+          navigate(signedUpRedirect);
+        }}
+        footer={null}
+        centered
+        width="min(480px, calc(100vw - 24px))"
+        title={
+          <span className="text-base font-bold text-neutral-900 flex items-center gap-2">
+            <CheckCircleOutlined className="text-emerald-600" />
+            <span>Account Active — Verify Your Email</span>
+          </span>
+        }
+      >
+        <form onSubmit={handleConfirmEmailVerification} className="space-y-4 pt-2">
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 px-3.5 py-2.5 text-xs text-emerald-900">
+            Your client account is active and you can browse the site right away. Confirm your email address below (an administrator may also verify your account in Customer Manager).
+          </div>
+
+          {issuedCodePreview && (
+            <div
+              data-testid="signup-email-code-preview"
+              className="rounded-xl bg-sky-50 border border-sky-200 px-3.5 py-2.5 text-xs text-sky-900"
+            >
+              Email verification code:{" "}
+              <strong className="font-mono tracking-widest text-sm">{issuedCodePreview}</strong>
+            </div>
+          )}
+
+          <div>
+            <label htmlFor="signup-verify-code" className="block text-xs font-bold text-slate-700 mb-1">
+              6-Digit Email Verification Code
+            </label>
+            <input
+              id="signup-verify-code"
+              data-testid="signup-verify-code-input"
+              type="text"
+              inputMode="numeric"
+              maxLength={6}
+              value={verifyCode}
+              onChange={(e) => setVerifyCode(e.target.value.replace(/\D/g, ""))}
+              placeholder="Enter 6-digit code"
+              className="w-full h-11 rounded-xl bg-slate-50 border border-slate-200 px-4 font-mono text-base font-bold tracking-widest text-slate-900 focus:outline-none focus:border-[#22577A]"
+            />
+          </div>
+
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-between gap-2 pt-1">
+            <button
+              type="button"
+              data-testid="browse-site-now-btn"
+              onClick={() => {
+                setVerifyModalOpen(false);
+                navigate(signedUpRedirect);
+              }}
+              className="min-h-[44px] sm:min-h-[40px] px-4 rounded-xl border border-neutral-200 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 cursor-pointer"
+            >
+              Verify Later &amp; Browse Site
+            </button>
+            <button
+              type="submit"
+              disabled={verifyingEmail}
+              data-testid="confirm-signup-email-btn"
+              className="min-h-[44px] sm:min-h-[40px] px-5 rounded-xl bg-[#22577A] hover:bg-[#19435E] text-xs font-semibold text-white cursor-pointer disabled:opacity-60"
+            >
+              {verifyingEmail ? "Verifying..." : "Verify Email Now"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
       {/* Password Reset Modal */}
       <Modal
         open={resetOpen}
         onCancel={() => setResetOpen(false)}
         footer={null}
         centered
+        width="min(460px, calc(100vw - 24px))"
         title={<span className="text-base font-bold text-neutral-900">Reset Password</span>}
       >
         <form onSubmit={handlePasswordReset} className="space-y-4 pt-2">
           <p className="text-xs text-neutral-500">
-            Enter your registered email address and we will send password reset instructions.
+            Enter your registered email address and we will issue password recovery instructions.
           </p>
           <div>
             <label htmlFor="reset-email" className="sr-only">
@@ -668,7 +1096,7 @@ export default function ProfileLogin() {
               value={resetEmail}
               onChange={(e) => setResetEmail(e.target.value)}
               placeholder="name@company.com"
-              className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-sm text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#FF6B1E]/15 transition-all"
+              className="w-full h-11 rounded-xl bg-[#F4F5F7] px-3.5 text-sm text-neutral-900 placeholder:text-neutral-400 border border-transparent focus:border-[#FF6B1E]/45 focus:bg-white focus:outline-none"
             />
           </div>
           <div className="flex justify-end gap-2">
@@ -685,7 +1113,7 @@ export default function ProfileLogin() {
               className="h-10 px-5 rounded-xl bg-[#FF6B1E] hover:bg-[#F25D10] text-xs font-semibold text-white cursor-pointer disabled:opacity-60 flex items-center gap-1.5"
             >
               {resetSending && <LoadingOutlined />}
-              <span>Send Link</span>
+              <span>Send Instructions</span>
             </button>
           </div>
         </form>

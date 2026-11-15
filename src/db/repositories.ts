@@ -3,6 +3,7 @@ import { db, markDatabaseOffline, isMemoryFallbackActive } from "./index.ts";
 import {
   addAppointmentSlotRecordMem,
   createAppointmentRecordMem,
+  createAuditLogMem,
   createCategoryRecordMem,
   createFeedbackRecordMem,
   createMediaAssetRecordMem,
@@ -10,6 +11,7 @@ import {
   createProductRecordMem,
   createProjectRecordMem,
   createRfqRecordMem,
+  createSecurityChallengeMem,
   createUserAccountMem,
   deleteAppointmentDateRecordMem,
   deleteAppointmentSlotRecordMem,
@@ -26,7 +28,10 @@ import {
   getAppointmentScheduleConfigMem,
   getCmsDocMem,
   getProductByAnyIdMem,
+  getSecurityChallengeMem,
+  incrementChallengeAttemptsMem,
   listAppointmentsMem,
+  listAuditLogsMem,
   listBlogPostsMem,
   listCategoriesMem,
   listChatbotFaqsMem,
@@ -39,6 +44,7 @@ import {
   listRelatedPortalsMem,
   listRfqRecordsMem,
   listUsersByRolesMem,
+  markChallengeConsumedMem,
   markNotificationReadMem,
   reorderCategoryRecordsMem,
   reorderFeedbackRecordsMem,
@@ -63,6 +69,7 @@ import {
   appointmentDates,
   appointments,
   appointmentSlots,
+  auditLogs,
   blogPosts,
   categories,
   chatbotFaqs,
@@ -80,6 +87,7 @@ import {
   relatedPortals,
   rfqAttachments,
   rfqRequests,
+  securityChallenges,
   users,
 } from "./schema.ts";
 import { ensureDatabaseSeeded } from "./seed.ts";
@@ -259,6 +267,7 @@ export async function listUsersByRoles(roles?: string[]) {
 
 export async function createUserAccount(payload: {
   uid?: string;
+  username?: string | null;
   name: string;
   email: string;
   phone?: string;
@@ -267,6 +276,13 @@ export async function createUserAccount(payload: {
   passwordHash?: string;
   avatarUrl?: string;
   isVerified?: boolean;
+  emailVerified?: boolean;
+  accountStatus?: string;
+  emailVerificationTokenHash?: string | null;
+  emailVerificationCodeHash?: string | null;
+  emailVerificationExpiresAt?: Date | null;
+  totpSecretEncrypted?: string | null;
+  totpEnabled?: boolean;
   purchaseGoods?: string[];
 }) {
   if (isMemoryFallbackActive()) return createUserAccountMem(payload);
@@ -277,15 +293,23 @@ export async function createUserAccount(payload: {
       .insert(users)
       .values({
         uid: payload.uid || `${payload.role || "customer"}-${Date.now()}`,
+        username: payload.username ? payload.username.trim().toLowerCase() : null,
         name: payload.name.trim(),
         email: cleanEmail,
         phone: payload.phone || "",
         company: payload.company || "",
         role: payload.role || "customer",
         passwordHash: payload.passwordHash || "",
-        avatarUrl: payload.avatarUrl || "/assets/about/director.jpg",
-        isVerified: payload.isVerified ?? payload.role !== "customer",
-        isActive: true,
+        avatarUrl: payload.avatarUrl || "",
+        isVerified: payload.isVerified ?? false,
+        emailVerified: payload.emailVerified ?? false,
+        accountStatus: payload.accountStatus || "ACTIVE",
+        emailVerificationTokenHash: payload.emailVerificationTokenHash ?? null,
+        emailVerificationCodeHash: payload.emailVerificationCodeHash ?? null,
+        emailVerificationExpiresAt: payload.emailVerificationExpiresAt ?? null,
+        totpSecretEncrypted: payload.totpSecretEncrypted ?? null,
+        totpEnabled: payload.totpEnabled ?? false,
+        isActive: (payload.accountStatus || "ACTIVE") !== "SUSPENDED",
         purchaseGoods: payload.purchaseGoods || [],
       })
       .returning();
@@ -299,13 +323,26 @@ export async function createUserAccount(payload: {
 export async function updateUserAccount(
   id: number,
   patch: Partial<{
+    username: string | null;
     name: string;
     email: string;
     phone: string;
     company: string;
     role: string;
+    passwordHash: string;
     avatarUrl: string;
     isVerified: boolean;
+    emailVerified: boolean;
+    accountStatus: string;
+    emailVerificationTokenHash: string | null;
+    emailVerificationCodeHash: string | null;
+    emailVerificationExpiresAt: Date | null;
+    totpSecretEncrypted: string | null;
+    totpEnabled: boolean;
+    failedLoginAttempts: number;
+    lockedUntil: Date | null;
+    lastLoginAt: Date | null;
+    lastLoginIp: string;
     isActive: boolean;
     purchaseGoods: string[];
   }>
@@ -316,13 +353,43 @@ export async function updateUserAccount(
     const [updated] = await db
       .update(users)
       .set({
+        ...(patch.username !== undefined
+          ? { username: patch.username ? patch.username.trim().toLowerCase() : null }
+          : {}),
         ...(patch.name !== undefined ? { name: patch.name } : {}),
         ...(patch.email !== undefined ? { email: patch.email.trim().toLowerCase() } : {}),
         ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
         ...(patch.company !== undefined ? { company: patch.company } : {}),
         ...(patch.role !== undefined ? { role: patch.role } : {}),
+        ...(patch.passwordHash !== undefined ? { passwordHash: patch.passwordHash } : {}),
         ...(patch.avatarUrl !== undefined ? { avatarUrl: patch.avatarUrl } : {}),
         ...(patch.isVerified !== undefined ? { isVerified: patch.isVerified } : {}),
+        ...(patch.emailVerified !== undefined ? { emailVerified: patch.emailVerified } : {}),
+        ...(patch.accountStatus !== undefined
+          ? {
+              accountStatus: patch.accountStatus,
+              isActive: patch.accountStatus !== "SUSPENDED",
+            }
+          : {}),
+        ...(patch.emailVerificationTokenHash !== undefined
+          ? { emailVerificationTokenHash: patch.emailVerificationTokenHash }
+          : {}),
+        ...(patch.emailVerificationCodeHash !== undefined
+          ? { emailVerificationCodeHash: patch.emailVerificationCodeHash }
+          : {}),
+        ...(patch.emailVerificationExpiresAt !== undefined
+          ? { emailVerificationExpiresAt: patch.emailVerificationExpiresAt }
+          : {}),
+        ...(patch.totpSecretEncrypted !== undefined
+          ? { totpSecretEncrypted: patch.totpSecretEncrypted }
+          : {}),
+        ...(patch.totpEnabled !== undefined ? { totpEnabled: patch.totpEnabled } : {}),
+        ...(patch.failedLoginAttempts !== undefined
+          ? { failedLoginAttempts: patch.failedLoginAttempts }
+          : {}),
+        ...(patch.lockedUntil !== undefined ? { lockedUntil: patch.lockedUntil } : {}),
+        ...(patch.lastLoginAt !== undefined ? { lastLoginAt: patch.lastLoginAt } : {}),
+        ...(patch.lastLoginIp !== undefined ? { lastLoginIp: patch.lastLoginIp } : {}),
         ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
         ...(patch.purchaseGoods !== undefined ? { purchaseGoods: patch.purchaseGoods } : {}),
         updatedAt: new Date(),
@@ -2233,5 +2300,174 @@ export async function resetSeedDataCheck() {
   } catch (error) {
     markDatabaseOffline(error);
     return resetSeedDataCheckMem();
+  }
+}
+
+// ============================================================================
+// SECURITY CHALLENGES REPOSITORY (CAPTCHA, Admin MFA, Verification Tokens)
+// ============================================================================
+export async function createSecurityChallenge(input: {
+  challengeId: string;
+  purpose: string;
+  userId?: number | null;
+  identifier?: string;
+  answerHash: string;
+  maxAttempts?: number;
+  expiresAt: Date;
+}) {
+  if (isMemoryFallbackActive()) return createSecurityChallengeMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const [created] = await db
+      .insert(securityChallenges)
+      .values({
+        challengeId: input.challengeId,
+        purpose: input.purpose,
+        userId: input.userId ?? null,
+        identifier: input.identifier || "",
+        answerHash: input.answerHash,
+        attempts: 0,
+        maxAttempts: input.maxAttempts ?? 5,
+        consumed: false,
+        expiresAt: input.expiresAt,
+      })
+      .returning();
+    return created;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return createSecurityChallengeMem(input);
+  }
+}
+
+export async function getSecurityChallenge(challengeId: string) {
+  if (!challengeId) return null;
+  if (isMemoryFallbackActive()) return getSecurityChallengeMem(challengeId);
+  try {
+    const rows = await db
+      .select()
+      .from(securityChallenges)
+      .where(eq(securityChallenges.challengeId, challengeId))
+      .limit(1);
+    return rows[0] || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return getSecurityChallengeMem(challengeId);
+  }
+}
+
+export async function incrementChallengeAttempts(challengeId: string) {
+  if (isMemoryFallbackActive()) return incrementChallengeAttemptsMem(challengeId);
+  try {
+    const cur = await getSecurityChallenge(challengeId);
+    if (!cur) return null;
+    const [updated] = await db
+      .update(securityChallenges)
+      .set({ attempts: cur.attempts + 1 })
+      .where(eq(securityChallenges.challengeId, challengeId))
+      .returning();
+    return updated || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return incrementChallengeAttemptsMem(challengeId);
+  }
+}
+
+export async function markChallengeConsumed(challengeId: string) {
+  if (isMemoryFallbackActive()) return markChallengeConsumedMem(challengeId);
+  try {
+    const [updated] = await db
+      .update(securityChallenges)
+      .set({ consumed: true })
+      .where(eq(securityChallenges.challengeId, challengeId))
+      .returning();
+    return updated || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return markChallengeConsumedMem(challengeId);
+  }
+}
+
+// ============================================================================
+// AUDIT LOGS REPOSITORY (Persistent Security & Web Audit Trail)
+// ============================================================================
+export async function createAuditLog(input: {
+  eventId: string;
+  actorUserId?: number | null;
+  actorEmail?: string;
+  actorRole?: string;
+  targetUserId?: number | null;
+  targetIdentifier?: string;
+  action: string;
+  category: string;
+  status: string;
+  severity: string;
+  accountClassification?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  details?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  if (isMemoryFallbackActive()) return createAuditLogMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const [created] = await db
+      .insert(auditLogs)
+      .values({
+        eventId: input.eventId,
+        actorUserId: input.actorUserId ?? null,
+        actorEmail: input.actorEmail || "",
+        actorRole: input.actorRole || "anonymous",
+        targetUserId: input.targetUserId ?? null,
+        targetIdentifier: input.targetIdentifier || "",
+        action: input.action,
+        category: input.category,
+        status: input.status,
+        severity: input.severity,
+        accountClassification: input.accountClassification || "",
+        ipAddress: input.ipAddress || "",
+        userAgent: input.userAgent || "",
+        details: input.details || "",
+        metadata: input.metadata || {},
+      })
+      .returning();
+    return created;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return createAuditLogMem(input);
+  }
+}
+
+export async function listAuditLogs(filters?: {
+  category?: string;
+  status?: string;
+  severity?: string;
+  action?: string;
+  search?: string;
+  limit?: number;
+}) {
+  if (isMemoryFallbackActive()) return listAuditLogsMem(filters);
+  try {
+    await ensureDatabaseSeeded();
+    const rows = await db
+      .select()
+      .from(auditLogs)
+      .orderBy(desc(auditLogs.createdAt), desc(auditLogs.id));
+    const q = (filters?.search || "").trim().toLowerCase();
+    const filtered = rows.filter((row) => {
+      if (filters?.category && row.category.toUpperCase() !== filters.category.toUpperCase()) return false;
+      if (filters?.status && row.status.toUpperCase() !== filters.status.toUpperCase()) return false;
+      if (filters?.severity && row.severity.toUpperCase() !== filters.severity.toUpperCase()) return false;
+      if (filters?.action && !row.action.toLowerCase().includes(filters.action.toLowerCase())) return false;
+      if (q) {
+        const hay = `${row.eventId} ${row.action} ${row.actorEmail || ""} ${row.targetIdentifier || ""} ${row.details || ""} ${row.ipAddress || ""} ${row.accountClassification || ""}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const limit = filters?.limit && filters.limit > 0 ? filters.limit : 1000;
+    return filtered.slice(0, limit);
+  } catch (error) {
+    markDatabaseOffline(error);
+    return listAuditLogsMem(filters);
   }
 }

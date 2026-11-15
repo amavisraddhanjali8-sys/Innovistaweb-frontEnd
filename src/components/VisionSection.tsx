@@ -319,7 +319,7 @@ export default function VisionSection({ content: externalContent }: VisionSectio
         onCancel={() => setInspectedCard(null)}
         footer={null}
         centered
-        width={640}
+        width="min(640px, calc(100vw - 24px))"
         title={
           inspectedCard ? (
             <span className="text-base font-semibold text-[#14171A]">{inspectedCard.title}</span>
@@ -342,14 +342,14 @@ export default function VisionSection({ content: externalContent }: VisionSectio
               <span>{inspectedCard.spec}</span>
             </div>
             <p className="text-sm leading-relaxed text-slate-600">{inspectedCard.description}</p>
-            <div className="flex justify-end gap-2.5 pt-2">
+            <div className="flex flex-col-reverse sm:flex-row justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => {
                   setInspectedCard(null);
                   navigate("/products");
                 }}
-                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                className="min-h-[42px] px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 Browse Products
               </button>
@@ -359,7 +359,7 @@ export default function VisionSection({ content: externalContent }: VisionSectio
                   setInspectedCard(null);
                   navigate("/request-quote");
                 }}
-                className="request-quote-fx px-4 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer"
+                className="request-quote-fx min-h-[42px] px-4 py-2 rounded-xl text-xs font-semibold text-white cursor-pointer"
               >
                 <span className="relative z-10">Request Quote</span>
               </button>

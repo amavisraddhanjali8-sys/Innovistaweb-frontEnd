@@ -347,7 +347,7 @@ function ViewAllDesigns() {
           placeholder="Search name or category..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ maxWidth: 260 }}
+          className="w-full sm:max-w-[260px]"
         />
       </div>
 
@@ -362,6 +362,7 @@ function ViewAllDesigns() {
           current: currentPage,
           pageSize: pageSize,
           total: total,
+          responsive: true,
           showSizeChanger: true,
           pageSizeOptions: ["5", "10", "20", "50"],
           onChange: (page, limit) => {
@@ -377,7 +378,7 @@ function ViewAllDesigns() {
           </span>
         }
         open={isModalVisible}
-        width={1060}
+        width="min(1060px, calc(100vw - 24px))"
         onOk={handleUpdate}
         confirmLoading={savingEdit}
         okText="Save Changes"

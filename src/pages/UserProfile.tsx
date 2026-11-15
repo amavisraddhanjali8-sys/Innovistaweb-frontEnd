@@ -29,9 +29,10 @@ import {
   PaperClipOutlined,
   PlusOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
+import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import PageMetadata from "../components/PageMetadata";
+import PasswordReset from "../components/PasswordReset";
 import {
   buildDraftCartOrderPayload,
   computeSiteVisitCountdown,
@@ -62,6 +63,10 @@ export default function UserProfile() {
   const [savingProfile, setSavingProfile] = useState<boolean>(false);
   const [avatarUploading, setAvatarUploading] = useState<boolean>(false);
   const [submittingDraftOrder, setSubmittingDraftOrder] = useState<boolean>(false);
+  const [sendingVerifyCode, setSendingVerifyCode] = useState<boolean>(false);
+  const [verifyingCode, setVerifyingCode] = useState<boolean>(false);
+  const [verifyCodeInput, setVerifyCodeInput] = useState<string>("");
+  const [previewVerifyCode, setPreviewVerifyCode] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
   const [draftCartIds, setDraftCartIds] = useState<string[]>(() => {
     try {
@@ -106,15 +111,19 @@ export default function UserProfile() {
     return () => window.removeEventListener("innovista-cart-updated", syncCart);
   }, []);
 
+  const userId = user?.id;
+  const userRole = user?.role;
+  const userEmail = user?.email;
+
   const fetchCustomerPortalData = useCallback(async () => {
-    if (!user) return;
+    if (!userId || !userRole) return;
     setLoadingPortal(true);
     try {
-      if (user.role === "admin") {
+      if (userRole === "admin") {
         const [ordersRes, rfqRes, visitsRes] = await Promise.all([
-          axios.get("/order/getAllOrders?limit=50"),
-          axios.get("/api/rfq"),
-          axios.get("/api/site-visits"),
+          AxiosConfig.get("/order/getAllOrders?limit=50"),
+          AxiosConfig.get("/api/rfq"),
+          AxiosConfig.get("/api/site-visits"),
         ]);
         setOrders(Array.isArray(ordersRes.data?.data) ? ordersRes.data.data : []);
         setRfqs(Array.isArray(rfqRes.data?.data) ? rfqRes.data.data : []);
@@ -126,9 +135,19 @@ export default function UserProfile() {
             : []
         );
       } else {
-        const res = await axios.get(
-          `/customer/profile?customerId=${encodeURIComponent(String(user.id || ""))}&email=${encodeURIComponent(user.email || "")}`
+        const res = await AxiosConfig.get(
+          `/customer/profile?customerId=${encodeURIComponent(String(userId || ""))}&email=${encodeURIComponent(userEmail || "")}`
         );
+        if (res.data?.customer) {
+          const c = res.data.customer;
+          updateUser({
+            verified: Boolean(c.Verify_State),
+            emailVerified: Boolean(c.Email_Verified),
+            accountStatus: c.Account_Status || "ACTIVE",
+            username: c.Cus_Username ?? undefined,
+            classification: res.data?.classification?.statusCode,
+          });
+        }
         const filtered = filterCustomerPortalRecords({
           orders: (Array.isArray(res.data?.orders)
             ? res.data.orders
@@ -139,8 +158,8 @@ export default function UserProfile() {
           siteVisits: (Array.isArray(res.data?.siteVisits)
             ? res.data.siteVisits
             : []) as CustomerSiteVisitItem[],
-          email: user.email,
-          userId: user.id,
+          email: userEmail || "",
+          userId,
           isAdmin: false,
         });
         setOrders(filtered.orders);
@@ -152,13 +171,13 @@ export default function UserProfile() {
     } finally {
       setLoadingPortal(false);
     }
-  }, [user]);
+  }, [userId, userRole, userEmail, updateUser]);
 
   useEffect(() => {
-    if (user) {
+    if (userId) {
       fetchCustomerPortalData();
     }
-  }, [user, fetchCustomerPortalData]);
+  }, [userId, fetchCustomerPortalData]);
 
   const sortedSiteVisits = useMemo(() => {
     return [...siteVisits].sort((a, b) => {
@@ -197,7 +216,7 @@ export default function UserProfile() {
         customerPhone: user.phone,
         designIds: draftCartIds,
       });
-      await axios.post("/order/createOrder", payload);
+      await AxiosConfig.post("/order/createOrder", payload);
       localStorage.removeItem("cart");
       setDraftCartIds([]);
       window.dispatchEvent(new Event("innovista-cart-updated"));
@@ -222,7 +241,7 @@ export default function UserProfile() {
     setSavingProfile(true);
     try {
       if (user?.role === "customer") {
-        await axios.put("/customer/updateProfile", {
+        await AxiosConfig.put("/customer/updateProfile", {
           CustomerId: user.id,
           Cus_Name: values.name,
           Cus_PhoneNumber: values.phone,
@@ -251,13 +270,13 @@ export default function UserProfile() {
     formData.append("file", file);
 
     try {
-      const res = await axios.post("/api/upload", formData);
+      const res = await AxiosConfig.post("/api/upload", formData);
 
       const uploadedUrl = res.data?.secure_url || res.data?.url;
       if (uploadedUrl) {
         updateUser({ logo: uploadedUrl });
         if (user?.role === "customer") {
-          await axios.put("/customer/updateProfile", {
+          await AxiosConfig.put("/customer/updateProfile", {
             CustomerId: user.id,
             Cus_Logo: uploadedUrl,
           });
@@ -273,7 +292,56 @@ export default function UserProfile() {
     return false;
   };
 
-  const handleSignOut = () => {
+  const handleSendEmailVerification = async () => {
+    if (!user?.email) return;
+    setSendingVerifyCode(true);
+    try {
+      const res = await AxiosConfig.post("/api/auth/send-verification-email", {
+        email: user.email,
+      });
+      if (res.data?.verificationPreview?.code) {
+        setPreviewVerifyCode(res.data.verificationPreview.code);
+      }
+      message.success(res.data?.message || "Verification code sent.");
+    } catch (err) {
+      console.error(err);
+      message.error("Could not send verification code.");
+    } finally {
+      setSendingVerifyCode(false);
+    }
+  };
+
+  const handleVerifyEmailCode = async () => {
+    if (!user?.email || !verifyCodeInput.trim()) {
+      message.warning("Please enter your 6-digit verification code.");
+      return;
+    }
+    setVerifyingCode(true);
+    try {
+      const res = await AxiosConfig.post("/api/auth/verify-email", {
+        email: user.email,
+        code: verifyCodeInput.trim(),
+      });
+      updateUser({
+        emailVerified: true,
+        classification: res.data?.classification?.statusCode || user.classification,
+      });
+      setPreviewVerifyCode(null);
+      setVerifyCodeInput("");
+      message.success(res.data?.message || "Email verified successfully.");
+    } catch {
+      message.error("Invalid or expired verification code.");
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await AxiosConfig.post("/auth/logout");
+    } catch {
+      // ignore logout audit failure
+    }
     logout();
     message.success("Signed out");
     navigate("/profile-login");
@@ -288,16 +356,16 @@ export default function UserProfile() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-8 sm:py-10 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F8FAFC] py-6 pb-24 sm:py-10 md:pb-10 px-4 sm:px-6 lg:px-8">
       <PageMetadata
         title={`${user.name} — Customer Portal`}
         description="View your Innovista Fabriconix fabrication orders, Request for Quotation (RFQ) submissions, and upcoming site visit countdowns."
         canonicalPath="/profile"
         noIndex
       />
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-5 sm:space-y-6">
         {/* Profile Header Card */}
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200/90 p-6 sm:p-8">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200/90 p-5 sm:p-8">
           <div className="flex flex-col sm:flex-row items-center sm:items-start justify-between gap-6">
             <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 text-center sm:text-left">
               <div className="relative group">
@@ -338,11 +406,21 @@ export default function UserProfile() {
                   <h1 className="text-xl sm:text-2xl font-bold text-slate-900 m-0">
                     {user.name}
                   </h1>
-                  {user.verified && (
+                  {user.verified ? (
                     <Tag color="success" className="rounded-full px-2 py-0.5 text-xs font-semibold border-0">
-                      <CheckCircleFilled className="mr-1" /> Verified
+                      <CheckCircleFilled className="mr-1" /> Admin Verified
+                    </Tag>
+                  ) : (
+                    <Tag color="gold" className="rounded-full px-2 py-0.5 text-xs font-semibold border-0">
+                      Pending Admin Approval
                     </Tag>
                   )}
+                  <Tag
+                    color={user.emailVerified ? "cyan" : "orange"}
+                    className="rounded-full px-2 py-0.5 text-xs font-semibold border-0"
+                  >
+                    {user.emailVerified ? "Email Verified" : "Email Unverified"}
+                  </Tag>
                   <Tag
                     color={user.role === "admin" ? "volcano" : "blue"}
                     className="rounded-full px-2 py-0.5 text-xs font-semibold border-0"
@@ -352,7 +430,9 @@ export default function UserProfile() {
                 </div>
                 <p className="text-xs font-medium text-slate-600 flex items-center justify-center sm:justify-start gap-1.5 m-0">
                   <BankOutlined className="text-slate-400" />
-                  {user.company || "Partner"}
+                  {user.company || "Client Account"}
+                  {user.username ? ` · @${user.username}` : ""}
+                  {` · ID #${user.id}`}
                 </p>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 text-xs text-slate-400 pt-0.5">
                   <span className="flex items-center gap-1">
@@ -468,7 +548,7 @@ export default function UserProfile() {
         </div>
 
         {/* Workspace Dashboard Tabs */}
-        <div className="bg-white rounded-3xl shadow-sm border border-slate-200/90 p-5 sm:p-8">
+        <div className="bg-white rounded-3xl shadow-sm border border-slate-200/90 p-4 sm:p-8">
           <Tabs
             activeKey={activeTab}
             onChange={handleTabChange}
@@ -866,7 +946,7 @@ export default function UserProfile() {
                               <div
                                 data-testid="visit-countdown"
                                 id={`site-visit-countdown-${visit.id}`}
-                                className={`shrink-0 rounded-2xl px-4 py-3 border text-center min-w-[230px] ${
+                                className={`shrink-0 rounded-2xl px-4 py-3 border text-center w-full lg:w-auto lg:min-w-[240px] ${
                                   countdown.state === "upcoming"
                                     ? countdown.isUrgent
                                       ? "bg-amber-50 border-amber-200 text-amber-900"
@@ -943,8 +1023,8 @@ export default function UserProfile() {
                       initialValues={{
                         name: user.name,
                         email: user.email,
-                        phone: user.phone || "+94 77 455 1200",
-                        company: user.company || "Zenith Capital Residencies",
+                        phone: user.phone || "",
+                        company: user.company || "",
                         logo: user.logo,
                       }}
                     >
@@ -959,16 +1039,15 @@ export default function UserProfile() {
                       <Form.Item
                         label={<span className="text-xs font-bold text-neutral-600">Company</span>}
                         name="company"
-                        rules={[{ required: true, message: "Required" }]}
                       >
-                        <Input size="large" className="rounded-xl" />
+                        <Input size="large" placeholder="Optional company or project name" className="rounded-xl" />
                       </Form.Item>
 
                       <Form.Item
                         label={<span className="text-xs font-bold text-neutral-600">Phone</span>}
                         name="phone"
                       >
-                        <Input size="large" className="rounded-xl" />
+                        <Input size="large" placeholder="e.g. +94 77 123 4567" className="rounded-xl" />
                       </Form.Item>
 
                       <Form.Item
@@ -999,24 +1078,101 @@ export default function UserProfile() {
                   </span>
                 ),
                 children: (
-                  <div className="pt-4 max-w-sm space-y-4">
-                    <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-200 text-xs space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-neutral-500">Role:</span>
-                        <span className="font-bold text-neutral-800 uppercase">{user.role}</span>
+                  <div className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs space-y-2.5">
+                        <div className="font-bold text-slate-900 text-sm">Account Verification &amp; Status</div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Account ID:</span>
+                          <span className="font-semibold text-slate-800">#{user.id}</span>
+                        </div>
+                        {user.username && (
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Username:</span>
+                            <span className="font-semibold text-slate-800">@{user.username}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Account Type:</span>
+                          <span className="font-bold text-slate-800 uppercase">{user.role}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Email Verification:</span>
+                          <span className={`font-bold ${user.emailVerified ? "text-emerald-600" : "text-amber-600"}`}>
+                            {user.emailVerified ? "Verified" : "Unverified"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Admin Verification:</span>
+                          <span className={`font-bold ${user.verified ? "text-emerald-600" : "text-amber-600"}`}>
+                            {user.verified ? "Verified by Admin" : "Pending Admin Review"}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-500">Account State:</span>
+                          <span className={`font-bold ${user.accountStatus === "SUSPENDED" ? "text-red-600" : "text-emerald-600"}`}>
+                            {user.accountStatus || "ACTIVE"}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span className="text-neutral-500">Status:</span>
-                        <span className="font-bold text-emerald-600">Active</span>
-                      </div>
+
+                      {!user.emailVerified && (
+                        <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/70 space-y-3">
+                          <div className="text-xs font-bold text-amber-900">
+                            Verify Your Email Address
+                          </div>
+                          <p className="text-[11px] text-amber-800 m-0">
+                            Verify your email using a 6-digit security code. You can continue browsing while pending admin approval.
+                          </p>
+                          {previewVerifyCode && (
+                            <div className="rounded-lg bg-white border border-amber-300 px-3 py-2 text-xs text-slate-700">
+                              Verification Code:{" "}
+                              <strong data-testid="profile-verify-code-preview" className="font-mono tracking-widest text-[#22577A]">
+                                {previewVerifyCode}
+                              </strong>
+                            </div>
+                          )}
+                          <div className="flex flex-col sm:flex-row gap-2">
+                            <Input
+                              value={verifyCodeInput}
+                              onChange={(e) => setVerifyCodeInput(e.target.value)}
+                              placeholder="6-digit code"
+                              maxLength={6}
+                              className="rounded-xl h-11 sm:h-9"
+                            />
+                            <Button
+                              type="primary"
+                              loading={verifyingCode}
+                              onClick={handleVerifyEmailCode}
+                              className="bg-[#22577A] rounded-xl font-semibold min-h-[44px] sm:min-h-[36px]"
+                            >
+                              Verify
+                            </Button>
+                          </div>
+                          <Button
+                            size="middle"
+                            loading={sendingVerifyCode}
+                            onClick={handleSendEmailVerification}
+                            className="rounded-lg text-xs min-h-[40px] sm:min-h-[32px]"
+                          >
+                            Send / Resend Verification Code
+                          </Button>
+                        </div>
+                      )}
+
+                      <Button
+                        danger
+                        onClick={handleSignOut}
+                        className="w-full rounded-xl text-xs font-semibold"
+                      >
+                        Logout
+                      </Button>
                     </div>
-                    <Button
-                      danger
-                      onClick={handleSignOut}
-                      className="w-full rounded-xl text-xs font-semibold"
-                    >
-                      Logout
-                    </Button>
+
+                    <div className="p-5 bg-white rounded-2xl border border-slate-200">
+                      <h3 className="text-sm font-bold text-slate-900 mb-3">Change Password</h3>
+                      <PasswordReset />
+                    </div>
                   </div>
                 ),
               },

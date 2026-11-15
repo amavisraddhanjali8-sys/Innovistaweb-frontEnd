@@ -18,6 +18,7 @@ import {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   uid: text("uid").notNull().unique(), // Firebase Auth UID or deterministic internal UID
+  username: text("username").unique(), // Optional unique username for login & status recognition
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
   phone: text("phone").default(""),
@@ -25,11 +26,62 @@ export const users = pgTable("users", {
   role: text("role").notNull().default("customer"), // 'admin' | 'staff' | 'customer'
   passwordHash: text("password_hash"),
   avatarUrl: text("avatar_url").default(""),
-  isVerified: boolean("is_verified").notNull().default(false),
+  isVerified: boolean("is_verified").notNull().default(false), // Admin verification state
+  emailVerified: boolean("email_verified").notNull().default(false),
+  accountStatus: text("account_status").notNull().default("ACTIVE"), // 'ACTIVE' | 'SUSPENDED'
+  emailVerificationTokenHash: text("email_verification_token_hash"),
+  emailVerificationCodeHash: text("email_verification_code_hash"),
+  emailVerificationExpiresAt: timestamp("email_verification_expires_at", { withTimezone: true }),
+  totpSecretEncrypted: text("totp_secret_encrypted"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  failedLoginAttempts: integer("failed_login_attempts").notNull().default(0),
+  lockedUntil: timestamp("locked_until", { withTimezone: true }),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
+  lastLoginIp: text("last_login_ip").default(""),
   isActive: boolean("is_active").notNull().default(true),
   purchaseGoods: jsonb("purchase_goods").$type<string[]>().notNull().default([]),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================================
+// 1B. SECURITY CHALLENGES (CAPTCHA, Admin MFA Step-Up, Email/Reset Tokens)
+// ============================================================================
+export const securityChallenges = pgTable("security_challenges", {
+  id: serial("id").primaryKey(),
+  challengeId: text("challenge_id").notNull().unique(),
+  purpose: text("purpose").notNull(), // 'CAPTCHA' | 'ADMIN_MFA' | 'EMAIL_VERIFY' | 'PASSWORD_RESET'
+  userId: integer("user_id").references(() => users.id, { onDelete: "cascade" }),
+  identifier: text("identifier").default(""),
+  answerHash: text("answer_hash").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  consumed: boolean("consumed").notNull().default(false),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// ============================================================================
+// 1C. WEB AUDIT LOGS (Comprehensive Security & Operations Trail for CSV Export)
+// ============================================================================
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  eventId: text("event_id").notNull().unique(),
+  actorUserId: integer("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+  actorEmail: text("actor_email").default(""),
+  actorRole: text("actor_role").default("anonymous"),
+  targetUserId: integer("target_user_id").references(() => users.id, { onDelete: "set null" }),
+  targetIdentifier: text("target_identifier").default(""),
+  action: text("action").notNull(),
+  category: text("category").notNull().default("AUTH"), // 'AUTH' | 'SECURITY' | 'ACCOUNT' | 'ADMIN' | 'COMMERCE' | 'SYSTEM'
+  status: text("status").notNull().default("SUCCESS"), // 'SUCCESS' | 'FAILURE' | 'BLOCKED' | 'INFO'
+  severity: text("severity").notNull().default("LOW"), // 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+  accountClassification: text("account_classification").default(""),
+  ipAddress: text("ip_address").default(""),
+  userAgent: text("user_agent").default(""),
+  details: text("details").default(""),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 // ============================================================================

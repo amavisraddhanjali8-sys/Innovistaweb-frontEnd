@@ -11,8 +11,8 @@ function CustomerManager() {
   const [activeTab, setActiveTab] = useState<"directory" | "register">("directory");
   const [refreshTick, setRefreshTick] = useState(0);
   const [metrics, setMetrics] = useState<CustomerMetrics>({
-    total: 2,
-    verified: 2,
+    total: 0,
+    verified: 0,
     unverified: 0,
   });
 

@@ -8,6 +8,7 @@ import {
 } from "react-icons/fi";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
 import AboutTaglineHeading from "../components/AboutTaglineHeading";
+import CallDesk3DButton from "../components/CallDesk3DButton";
 import InteractiveContactSection from "../components/InteractiveContactSection";
 import PageMetadata from "../components/PageMetadata";
 import RequestQuoteModal from "../components/RequestQuoteModal";
@@ -118,16 +119,15 @@ export default function Contact() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
-                    <a
-                      href={`tel:${displayPhone.replace(/\s+/g, "")}`}
-                      className="flex-1 text-center px-3 py-2 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold no-underline"
-                    >
-                      Call Desk
-                    </a>
+                  <div className="flex items-center gap-2.5 pt-3 border-t border-slate-100">
+                    <CallDesk3DButton
+                      phone={displayPhone}
+                      departmentTitle={dept.title}
+                      className="flex-1"
+                    />
                     <a
                       href={`mailto:${displayEmail}`}
-                      className="flex-1 text-center px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold text-[#14171A] no-underline"
+                      className="flex-1 min-h-[44px] inline-flex items-center justify-center text-center px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] hover:-translate-y-0.5 active:translate-y-[2px] shadow-[0_3px_0_#cbd5e1] active:shadow-[0_1px_0_#cbd5e1] text-xs font-bold !text-[#14171A] no-underline transition-all"
                     >
                       Email
                     </a>
@@ -188,7 +188,7 @@ export default function Contact() {
                     href={loc.mapUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold text-[#14171A] no-underline"
+                    className="flex-1 min-h-[42px] inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold !text-[#14171A] no-underline"
                   >
                     <span>Directions</span>
                     <FiExternalLink className="text-xs" />
@@ -196,7 +196,7 @@ export default function Contact() {
                   <button
                     type="button"
                     onClick={() => setQuoteModalOpen(true)}
-                    className="flex-1 px-3 py-2 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 text-white text-xs font-semibold cursor-pointer"
+                    className="flex-1 min-h-[42px] px-3 py-2 rounded-xl bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] hover:brightness-105 !text-white text-xs font-semibold cursor-pointer"
                   >
                     Book Visit
                   </button>

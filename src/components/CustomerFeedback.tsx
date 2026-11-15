@@ -209,6 +209,7 @@ function CustomerFeedback() {
         open={reviewModalOpen}
         onCancel={() => setReviewModalOpen(false)}
         footer={null}
+        width="min(540px, calc(100vw - 24px))"
         title="Share Your Experience with Innovista"
         centered
       >

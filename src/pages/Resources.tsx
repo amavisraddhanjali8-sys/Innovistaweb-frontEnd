@@ -309,6 +309,29 @@ export default function Resources() {
             align="center"
           />
 
+          {/* Mobile / Tablet Step Quick Switcher */}
+          <div className="lg:hidden flex items-center gap-2 overflow-x-auto no-scrollbar pb-2 mb-5">
+            {ENGINEERING_GUIDELINES.map((item, idx) => {
+              const isActive = idx === activeStepIdx;
+              return (
+                <button
+                  key={`mobile-${item.code}`}
+                  type="button"
+                  onClick={() => setActiveStepCode(item.code)}
+                  aria-pressed={isActive}
+                  className={`shrink-0 min-h-[44px] inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-semibold whitespace-nowrap cursor-pointer transition-all ${
+                    isActive
+                      ? "bg-gradient-to-r from-[#22577A] to-[#3393B8] text-white border-transparent shadow-xs"
+                      : "bg-[#F8FAFC] text-slate-700 border-slate-200 hover:border-[#3393B8]"
+                  }`}
+                >
+                  <span className="tabular-nums font-bold">{item.code}</span>
+                  <span>{item.stepLabel}</span>
+                </button>
+              );
+            })}
+          </div>
+
           {/* Connected Step Progress Track (Desktop) */}
           <div className="hidden lg:grid lg:grid-cols-4 gap-5 mb-6 relative">
             {ENGINEERING_GUIDELINES.map((item, idx) => {

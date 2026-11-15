@@ -889,7 +889,8 @@ export default function Blogs() {
         onCancel={closeArticleReader}
         footer={null}
         centered
-        width={780}
+        width="min(780px, calc(100vw - 24px))"
+        styles={{ body: { maxHeight: "76dvh", overflowY: "auto" } }}
         destroyOnHidden
         title={
           activeArticle ? (
@@ -925,7 +926,7 @@ export default function Blogs() {
             </div>
 
             <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-slate-200 text-xs text-[#6E675F]">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="inline-flex items-center gap-1.5 font-semibold text-[#181715]">
                   <FiUser className="text-[#22577A]" />
                   {activeArticle.author}
@@ -966,7 +967,7 @@ export default function Blogs() {
                 <button
                   type="button"
                   onClick={() => handleSharePost(activeArticle)}
-                  className="min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 bg-white hover:border-[#22577A] text-xs font-semibold text-[#181715] cursor-pointer"
+                  className="min-h-[42px] inline-flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 bg-white hover:border-[#22577A] text-xs font-semibold text-[#181715] cursor-pointer"
                 >
                   {copiedId === activeArticle.id ? (
                     <>
@@ -985,7 +986,7 @@ export default function Blogs() {
                     href={activeArticle.bloggerUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-h-[38px] inline-flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 bg-white hover:border-[#22577A] text-xs font-semibold text-[#22577A] no-underline"
+                    className="min-h-[42px] inline-flex items-center gap-1.5 px-3.5 py-2 border border-slate-300 bg-white hover:border-[#22577A] text-xs font-semibold text-[#22577A] no-underline"
                   >
                     <span>Open on Blogger.com</span>
                     <FiExternalLink className="text-xs" />
@@ -994,7 +995,7 @@ export default function Blogs() {
                 <button
                   type="button"
                   onClick={closeArticleReader}
-                  className="min-h-[38px] px-4 py-2 bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-semibold cursor-pointer border-0"
+                  className="min-h-[42px] px-4 py-2 bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-semibold cursor-pointer border-0"
                 >
                   Close Essay
                 </button>

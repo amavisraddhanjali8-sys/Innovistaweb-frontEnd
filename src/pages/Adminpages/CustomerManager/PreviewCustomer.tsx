@@ -17,12 +17,15 @@ import { computeCustomerMetrics, type CustomerMetrics } from "../../../utils/adm
 type Customer = {
   CustomerId: number;
   Cus_Name: string;
+  Cus_Username?: string | null;
   Cus_Email: string;
   Cus_PhoneNumber: string;
   Cus_CompanyName: string;
   Cus_Logo: string;
-  Cus_Password: string;
+  Cus_Password?: string;
   Verify_State: boolean;
+  Email_Verified?: boolean;
+  Account_Status?: "ACTIVE" | "SUSPENDED";
   Purchase_Goods?: string[];
 };
 
@@ -38,6 +41,7 @@ function PreviewCustomer({
   const { message } = AntdApp.useApp();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [updatingId, setUpdatingId] = useState<number | null>(null);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -94,6 +98,39 @@ function PreviewCustomer({
     }
   };
 
+  const handleToggleAdminVerify = async (record: Customer) => {
+    try {
+      setUpdatingId(record.CustomerId);
+      const res = await AxiosConfig.patch(
+        `/api/admin/customers/${record.CustomerId}/status`,
+        { isVerified: !record.Verify_State }
+      );
+      message.success(res.data?.message || "Verification status updated.");
+      fetchCustomers(currentPage, pageSize);
+    } catch {
+      message.error("Could not update verification status.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
+  const handleToggleSuspend = async (record: Customer) => {
+    const isSuspended = record.Account_Status === "SUSPENDED";
+    try {
+      setUpdatingId(record.CustomerId);
+      const res = await AxiosConfig.patch(
+        `/api/admin/customers/${record.CustomerId}/status`,
+        { accountStatus: isSuspended ? "ACTIVE" : "SUSPENDED" }
+      );
+      message.success(res.data?.message || "Account status updated.");
+      fetchCustomers(currentPage, pageSize);
+    } catch {
+      message.error("Could not update account status.");
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const handleEdit = (customer: Customer) => {
     setEditingCustomer(customer);
     form.setFieldsValue({
@@ -113,7 +150,6 @@ function PreviewCustomer({
         Cus_PhoneNumber: values.Cus_PhoneNumber,
         Cus_CompanyName: values.Cus_CompanyName,
         Cus_Logo: values.Cus_Logo,
-        Cus_Password: editingCustomer?.Cus_Password ?? "",
         Verify_State: editingCustomer?.Verify_State ?? false,
         Purchase_Goods: values.Purchase_Goods
           ? values.Purchase_Goods.split(",").map((item: string) => item.trim()).filter(Boolean)
@@ -151,7 +187,14 @@ function PreviewCustomer({
             <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 shrink-0" />
           )}
           <div>
-            <div className="text-xs font-semibold text-slate-900">{name}</div>
+            <div className="text-xs font-semibold text-slate-900">
+              {name}{" "}
+              {record.Cus_Username && (
+                <span className="text-[11px] font-normal text-slate-500">
+                  @{record.Cus_Username}
+                </span>
+              )}
+            </div>
             <div className="text-[11px] text-slate-500">{record.Cus_Email}</div>
           </div>
         </div>
@@ -163,56 +206,85 @@ function PreviewCustomer({
       key: "Cus_CompanyName",
       render: (company: string, record: Customer) => (
         <div>
-          <div className="text-xs font-medium text-slate-800">{company}</div>
+          <div className="text-xs font-medium text-slate-800">{company || "Individual"}</div>
           <div className="text-[11px] text-slate-500 tabular-nums">
-            {record.Cus_PhoneNumber}
+            {record.Cus_PhoneNumber || "—"}
           </div>
         </div>
       ),
     },
     {
-      title: "Purchased Suites",
-      dataIndex: "Purchase_Goods",
-      key: "Purchase_Goods",
-      render: (goods: string[]) =>
-        goods?.length ? (
-          <span className="text-xs text-slate-600">{goods.join(", ")}</span>
-        ) : (
-          <Tag color="default">None</Tag>
-        ),
-    },
-    {
-      title: "Status",
-      dataIndex: "Verify_State",
-      key: "Verify_State",
-      render: (verified: boolean) =>
-        verified ? (
-          <Tag color="green">Verified</Tag>
-        ) : (
-          <Tag color="red">Pending</Tag>
-        ),
+      title: "Email & Approval Status",
+      key: "status",
+      render: (_: unknown, record: Customer) => {
+        const isSuspended = record.Account_Status === "SUSPENDED";
+        return (
+          <div className="flex flex-wrap gap-1">
+            {isSuspended ? (
+              <Tag color="red">Suspended</Tag>
+            ) : (
+              <Tag color="green">Active</Tag>
+            )}
+            <Tag color={record.Verify_State ? "blue" : "gold"}>
+              {record.Verify_State ? "Admin Verified" : "Unverified Client"}
+            </Tag>
+            <Tag color={record.Email_Verified ? "cyan" : "orange"}>
+              {record.Email_Verified ? "Email Verified" : "Email Unverified"}
+            </Tag>
+          </div>
+        );
+      },
     },
     {
       title: "Actions",
       key: "actions",
       align: "right" as const,
-      render: (_: unknown, record: Customer) => (
-        <Space size="small">
-          <Button size="small" type="primary" onClick={() => handleEdit(record)}>
-            Edit
-          </Button>
-          <Popconfirm
-            title="Remove this customer?"
-            onConfirm={() => handleDelete(record.CustomerId)}
-            okText="Remove"
-            cancelText="Cancel"
-          >
-            <Button size="small" danger>
-              Delete
+      render: (_: unknown, record: Customer) => {
+        const isSuspended = record.Account_Status === "SUSPENDED";
+        const busy = updatingId === record.CustomerId;
+        return (
+          <Space size="small" wrap>
+            <Button
+              size="small"
+              loading={busy}
+              onClick={() => handleToggleAdminVerify(record)}
+              style={{
+                borderColor: record.Verify_State ? "#d97706" : "#059669",
+                color: record.Verify_State ? "#b45309" : "#047857",
+              }}
+            >
+              {record.Verify_State ? "Unverify" : "Verify"}
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Popconfirm
+              title={
+                isSuspended
+                  ? `Reactivate ${record.Cus_Email}?`
+                  : `Suspend ${record.Cus_Email}? Suspended clients cannot log in.`
+              }
+              onConfirm={() => handleToggleSuspend(record)}
+              okText={isSuspended ? "Reactivate" : "Suspend"}
+              cancelText="Cancel"
+            >
+              <Button size="small" danger={!isSuspended} loading={busy}>
+                {isSuspended ? "Reactivate" : "Suspend"}
+              </Button>
+            </Popconfirm>
+            <Button size="small" type="primary" onClick={() => handleEdit(record)}>
+              Edit
+            </Button>
+            <Popconfirm
+              title="Remove this customer?"
+              onConfirm={() => handleDelete(record.CustomerId)}
+              okText="Remove"
+              cancelText="Cancel"
+            >
+              <Button size="small" danger>
+                Delete
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -229,6 +301,7 @@ function PreviewCustomer({
           current: currentPage,
           pageSize: pageSize,
           total: total,
+          responsive: true,
           showSizeChanger: true,
           pageSizeOptions: ["5", "10", "20", "50"],
           onChange: (page, limit) => {
@@ -240,6 +313,7 @@ function PreviewCustomer({
       <Modal
         title={<span className="font-bold text-slate-900">Edit Customer</span>}
         open={isModalVisible}
+        width="min(520px, calc(100vw - 24px))"
         onCancel={() => {
           setIsModalVisible(false);
           setEditingCustomer(null);

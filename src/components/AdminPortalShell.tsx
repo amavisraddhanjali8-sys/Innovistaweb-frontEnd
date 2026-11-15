@@ -14,11 +14,11 @@ import {
   FiMenu,
   FiMessageCircle,
   FiMessageSquare,
+  FiShield,
   FiShoppingBag,
   FiSliders,
   FiUsers,
 } from "react-icons/fi";
-import axios from "axios";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 import Notification from "../pages/Adminpages/Notification";
@@ -29,6 +29,7 @@ import {
   getActiveAdminNavKey,
   getAdminBreadcrumb,
 } from "../utils/adminPortalHelpers";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 
 export interface AdminSummaryStats {
   admins: number;
@@ -84,18 +85,19 @@ interface AdminPortalShellProps {
 }
 
 const NAV_ICONS: Record<string, React.ReactNode> = {
-  overview: <FiGrid className="text-[15px]" />,
-  designs: <FiLayers className="text-[15px]" />,
-  categories: <FiFolder className="text-[15px]" />,
-  customers: <FiUsers className="text-[15px]" />,
-  orders: <FiShoppingBag className="text-[15px]" />,
-  projects: <FiBriefcase className="text-[15px]" />,
-  feedback: <FiMessageSquare className="text-[15px]" />,
-  "about-cms": <FiSliders className="text-[15px]" />,
-  ads: <FiImage className="text-[15px]" />,
-  portals: <FiExternalLink className="text-[15px]" />,
-  blogs: <FiBookOpen className="text-[15px]" />,
-  chatbot: <FiMessageCircle className="text-[15px]" />,
+  overview: <FiGrid className="text-[13px]" />,
+  designs: <FiLayers className="text-[13px]" />,
+  categories: <FiFolder className="text-[13px]" />,
+  customers: <FiUsers className="text-[13px]" />,
+  orders: <FiShoppingBag className="text-[13px]" />,
+  projects: <FiBriefcase className="text-[13px]" />,
+  feedback: <FiMessageSquare className="text-[13px]" />,
+  "about-cms": <FiSliders className="text-[13px]" />,
+  ads: <FiImage className="text-[13px]" />,
+  portals: <FiExternalLink className="text-[13px]" />,
+  blogs: <FiBookOpen className="text-[13px]" />,
+  chatbot: <FiMessageCircle className="text-[13px]" />,
+  security: <FiShield className="text-[13px]" />,
 };
 
 const DEFAULT_AVATAR = "/assets/about/director.jpg";
@@ -135,18 +137,19 @@ export default function AdminPortalShell({
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
+  const drawerTouchRef = React.useRef<{ x: number; y: number; time: number } | null>(null);
   const [summary, setSummary] = useState<AdminSummaryStats>({
-    admins: 2,
-    designs: 4,
-    customers: 2,
-    verifiedCustomers: 2,
-    orders: 2,
-    pendingOrders: 1,
-    completedOrders: 1,
-    projects: 4,
-    totalProjectBudget: 44000000,
-    feedbacks: 2,
-    unreadNotifications: 2,
+    admins: 0,
+    designs: 0,
+    customers: 0,
+    verifiedCustomers: 0,
+    orders: 0,
+    pendingOrders: 0,
+    completedOrders: 0,
+    projects: 0,
+    totalProjectBudget: 0,
+    feedbacks: 0,
+    unreadNotifications: 0,
   });
 
   useEffect(() => {
@@ -168,8 +171,8 @@ export default function AdminPortalShell({
   const activeNavKey = getActiveAdminNavKey(location.pathname);
   const breadcrumb = getAdminBreadcrumb(location.pathname);
 
-  const adminName = user?.name || "Super Admin";
-  const adminEmail = user?.email || "admin@innovista.com";
+  const adminName = user?.name || "Administrator";
+  const adminEmail = user?.email || "";
   const adminOrg = user?.company || "Innovista Fabriconix HQ";
   const adminPhoto = contextAvatar || user?.logo || DEFAULT_AVATAR;
 
@@ -181,12 +184,12 @@ export default function AdminPortalShell({
 
   const handleLogout = async () => {
     try {
-      await axios.post(`/auth/logout?adminId=${user?.id || 1}`);
+      await AxiosConfig.post("/auth/logout");
     } catch {
       // Ignore network errors on logout cleanup
     } finally {
       logout();
-      navigate("/profile-login", { replace: true });
+      navigate("/admin-login", { replace: true });
     }
   };
 
@@ -237,23 +240,23 @@ export default function AdminPortalShell({
         <div className="min-h-screen bg-[#F5F7FA] text-[#14171A] flex flex-col">
         {/* Top Horizontal Navigation Header */}
         <header className="sticky top-0 z-40 bg-white border-b border-slate-200/90">
-          <div className="max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2">
+          <div className="max-w-[1640px] mx-auto px-4 sm:px-5 lg:px-6 h-16 flex items-center justify-between gap-2">
             {/* Left Brand Wordmark */}
             <div className="flex items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(true)}
                 aria-label="Open admin menu"
-                className="lg:hidden w-9 h-9 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-slate-700 cursor-pointer"
+                className="lg:hidden w-11 h-11 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-slate-700 cursor-pointer"
               >
-                <FiMenu className="text-[18px]" />
+                <FiMenu className="text-[20px]" />
               </button>
 
               <Link
                 to="/admin-home"
                 className="flex items-center gap-2 no-underline group"
               >
-                <span className="text-[19px] font-bold tracking-tight text-[#22577A]">
+                <span className="text-[18px] xl:text-[19px] font-bold tracking-tight text-[#22577A]">
                   Innovista<span className="text-[#E60000]">.</span>
                 </span>
               </Link>
@@ -263,7 +266,7 @@ export default function AdminPortalShell({
             <div
               role="navigation"
               aria-label="Admin Portal Navigation"
-              className="hidden lg:flex items-center h-full gap-0.5 min-w-0 overflow-x-auto"
+              className="hidden lg:flex items-center justify-start xl:justify-center h-full gap-0 min-w-0 overflow-x-auto"
             >
               {ADMIN_NAV_ITEMS.map((item) => {
                 const isActive = activeNavKey === item.key;
@@ -271,7 +274,7 @@ export default function AdminPortalShell({
                   <Link
                     key={item.key}
                     to={item.path}
-                    className={`relative h-full inline-flex items-center gap-1 px-1.5 text-[11px] xl:text-xs whitespace-nowrap shrink-0 no-underline transition-colors ${
+                    className={`relative h-full inline-flex items-center gap-1 px-1 xl:px-1.5 text-[11px] whitespace-nowrap shrink-0 no-underline transition-colors ${
                       isActive
                         ? "text-[#22577A] font-semibold"
                         : "text-slate-500 font-medium hover:text-[#22577A]"
@@ -284,7 +287,7 @@ export default function AdminPortalShell({
                     {isActive && (
                       <span
                         aria-hidden="true"
-                        className="absolute bottom-0 left-1 right-1 h-[2.5px] rounded-t-full bg-[#22577A]"
+                        className="absolute bottom-0 left-0.5 right-0.5 h-[2.5px] rounded-t-full bg-[#22577A]"
                       />
                     )}
                   </Link>
@@ -293,16 +296,16 @@ export default function AdminPortalShell({
             </div>
 
             {/* Right Utility Zone */}
-            <div className="flex items-center gap-2.5 shrink-0">
+            <div className="flex items-center gap-2 shrink-0">
               <Notification />
 
               <Link
                 to="/"
                 title="View Public Storefront"
                 aria-label="View Public Storefront"
-                className="w-9 h-9 rounded-full bg-slate-50 border border-slate-200/90 hover:border-[#3393B8] hover:bg-white text-slate-600 hover:text-[#22577A] flex items-center justify-center transition-colors no-underline"
+                className="w-10 h-10 sm:w-8 sm:h-8 rounded-full bg-slate-50 border border-slate-200/90 hover:border-[#3393B8] hover:bg-white text-slate-600 hover:text-[#22577A] flex items-center justify-center transition-colors no-underline"
               >
-                <FiExternalLink className="text-[15px]" />
+                <FiExternalLink className="text-[15px] sm:text-[14px]" />
               </Link>
 
               <button
@@ -310,26 +313,27 @@ export default function AdminPortalShell({
                 onClick={() => setResetOpen(true)}
                 title="Reset Admin Password"
                 aria-label="Reset Admin Password"
-                className="hidden sm:flex w-9 h-9 rounded-full bg-slate-50 border border-slate-200/90 hover:border-[#3393B8] hover:bg-white text-slate-600 hover:text-[#22577A] items-center justify-center transition-colors cursor-pointer"
+                className="hidden sm:flex w-8 h-8 rounded-full bg-slate-50 border border-slate-200/90 hover:border-[#3393B8] hover:bg-white text-slate-600 hover:text-[#22577A] items-center justify-center transition-colors cursor-pointer"
               >
-                <FiKey className="text-[15px]" />
+                <FiKey className="text-[14px]" />
               </button>
 
-              <div className="h-6 w-px bg-slate-200 mx-0.5 hidden sm:block" />
+              <div className="h-5 w-px bg-slate-200 mx-0.5 hidden sm:block" />
 
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <img
                   src={adminPhoto}
                   alt={adminName}
                   referrerPolicy="no-referrer"
-                  className="w-9 h-9 rounded-full object-cover border border-slate-200 bg-slate-100 shrink-0"
+                  className="w-9 h-9 sm:w-8 sm:h-8 rounded-full object-cover border border-slate-200 bg-slate-100 shrink-0"
                 />
                 <button
                   type="button"
                   onClick={handleLogout}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-[#E60000] hover:text-[#E60000] text-xs font-semibold text-slate-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  aria-label="Logout"
+                  className="inline-flex items-center justify-center gap-1 min-h-[40px] min-w-[40px] sm:min-h-[32px] sm:min-w-0 px-2.5 py-1.5 rounded-xl sm:rounded-lg border border-slate-200 bg-white hover:border-[#E60000] hover:text-[#E60000] text-xs font-semibold text-slate-700 transition-colors cursor-pointer whitespace-nowrap shrink-0"
                 >
-                  <FiLogOut className="text-[13px]" />
+                  <FiLogOut className="text-[14px] sm:text-[13px]" />
                   <span className="hidden sm:inline">Logout</span>
                 </button>
               </div>
@@ -368,10 +372,10 @@ export default function AdminPortalShell({
         </div>
 
         {/* Main 2-Column SaaS Workspace Grid */}
-        <div className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 pb-12 flex-1">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        <div className="w-full max-w-[1640px] mx-auto px-3.5 sm:px-6 lg:px-8 pb-12 flex-1">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-6 items-start">
             {/* Left Primary Workspace Card (8 Columns) */}
-            <section className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-5 sm:p-7 min-w-0">
+            <section className="lg:col-span-8 bg-white rounded-2xl border border-slate-200/80 shadow-[0_1px_3px_rgba(15,23,42,0.04)] p-4 sm:p-7 min-w-0">
               {/* Workspace Identity Row */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6">
                 <div className="flex items-center gap-3.5 min-w-0">
@@ -627,57 +631,81 @@ export default function AdminPortalShell({
           placement="left"
           open={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
-          width={270}
+          width={286}
         >
-          <div className="space-y-1.5">
-            {ADMIN_NAV_ITEMS.map((item) => {
-              const isActive = activeNavKey === item.key;
-              return (
-                <Link
-                  key={item.key}
-                  to={item.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium no-underline transition-colors ${
-                    isActive
-                      ? "bg-[#22577A] text-white font-semibold"
-                      : "text-slate-700 hover:bg-slate-100"
-                  }`}
-                >
-                  <span>{NAV_ICONS[item.key]}</span>
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
-          </div>
-
-          <div className="mt-6 pt-5 border-t border-slate-200 space-y-2.5">
-            <button
-              type="button"
-              onClick={() => {
+          <div
+            onTouchStart={(e) => {
+              const t = e.touches[0];
+              if (t) drawerTouchRef.current = { x: t.clientX, y: t.clientY, time: Date.now() };
+            }}
+            onTouchEnd={(e) => {
+              const start = drawerTouchRef.current;
+              const t = e.changedTouches[0];
+              drawerTouchRef.current = null;
+              if (!start || !t) return;
+              if (
+                detectHorizontalSwipe(
+                  start.x,
+                  start.y,
+                  t.clientX,
+                  t.clientY,
+                  Date.now() - start.time
+                ) === "left"
+              ) {
                 setMobileMenuOpen(false);
-                setResetOpen(true);
-              }}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer bg-white"
-            >
-              <FiKey />
-              <span>Reset Password</span>
-            </button>
-            <Link
-              to="/"
-              onClick={() => setMobileMenuOpen(false)}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 no-underline bg-white"
-            >
-              <FiExternalLink />
-              <span>View Public Site</span>
-            </Link>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-[#E60000] text-white text-xs font-semibold cursor-pointer border-0"
-            >
-              <FiLogOut />
-              <span>Logout</span>
-            </button>
+              }
+            }}
+          >
+            <div className="space-y-1.5">
+              {ADMIN_NAV_ITEMS.map((item) => {
+                const isActive = activeNavKey === item.key;
+                return (
+                  <Link
+                    key={item.key}
+                    to={item.path}
+                    onClick={() => setMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 px-3.5 py-3 min-h-[44px] rounded-xl text-sm font-medium no-underline transition-colors ${
+                      isActive
+                        ? "bg-[#22577A] text-white font-semibold"
+                        : "text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span>{NAV_ICONS[item.key]}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+
+            <div className="mt-6 pt-5 border-t border-slate-200 space-y-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setResetOpen(true);
+                }}
+                className="w-full min-h-[44px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer bg-white"
+              >
+                <FiKey />
+                <span>Reset Password</span>
+              </button>
+              <Link
+                to="/"
+                onClick={() => setMobileMenuOpen(false)}
+                className="w-full min-h-[44px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 no-underline bg-white"
+              >
+                <FiExternalLink />
+                <span>View Public Site</span>
+              </Link>
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="w-full min-h-[44px] flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl bg-[#E60000] text-white text-xs font-semibold cursor-pointer border-0"
+              >
+                <FiLogOut />
+                <span>Logout</span>
+              </button>
+            </div>
           </div>
         </Drawer>
 
@@ -688,6 +716,7 @@ export default function AdminPortalShell({
           onCancel={() => setResetOpen(false)}
           footer={null}
           centered
+          width="min(480px, calc(100vw - 24px))"
         >
           <PasswordReset onSuccess={() => setResetOpen(false)} />
         </Modal>

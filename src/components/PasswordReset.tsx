@@ -3,6 +3,7 @@ import { App as AntdApp, Form, Input, Button } from "antd";
 import AxiosConfig from "../Context/AxiosConfig";
 
 interface PasswordResetFormValues {
+  currentPassword: string;
   password: string;
   confirm: string;
 }
@@ -19,15 +20,18 @@ function PasswordReset({ onSuccess }: PasswordResetProps) {
   const onFinish = async (values: PasswordResetFormValues) => {
     try {
       setSubmitting(true);
-      await AxiosConfig.post(
-        `/auth/forgot-password?newPassword=${encodeURIComponent(values.password)}`
-      );
+      await AxiosConfig.post("/api/auth/change-password", {
+        currentPassword: values.currentPassword,
+        newPassword: values.password,
+      });
       message.success("Password updated successfully.");
       form.resetFields();
       onSuccess?.();
-    } catch (error) {
-      console.error("Password reset failed", error);
-      message.error("Could not reset password. Please try again.");
+    } catch (error: unknown) {
+      const msg =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        "Could not update password. Check your current password and strength rules.";
+      message.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -43,15 +47,23 @@ function PasswordReset({ onSuccess }: PasswordResetProps) {
       scrollToFirstError
     >
       <Form.Item
+        name="currentPassword"
+        label="Current Password"
+        rules={[{ required: true, message: "Please enter your current password." }]}
+      >
+        <Input.Password placeholder="Enter current password" />
+      </Form.Item>
+
+      <Form.Item
         name="password"
         label="New Password"
         rules={[
           { required: true, message: "Please enter a new password." },
-          { min: 6, message: "Password must be at least 6 characters." },
+          { min: 8, message: "Password must be at least 8 characters with letters and numbers." },
         ]}
         hasFeedback
       >
-        <Input.Password placeholder="Enter new password" />
+        <Input.Password placeholder="Min 8 chars (letters + numbers)" />
       </Form.Item>
 
       <Form.Item

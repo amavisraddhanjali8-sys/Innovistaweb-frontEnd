@@ -151,12 +151,12 @@ export default function InteractiveContactShuffleCards({
           {onSelectIntent && isFront && (
             <div className="pt-0.5 flex items-center justify-between gap-2">
               <TactileActionButton
-                size="xs"
+                size="sm"
                 tone={buttonTone}
                 surface="dark"
                 loading={isActionLoading}
                 loadingText="Selecting..."
-                icon={<FiArrowRight className="text-xs" />}
+                icon={<FiPhoneCall className="text-xs" />}
                 onClick={() => handleCardAction(card)}
                 ariaLabel={`Select ${card.title}`}
               >
@@ -221,10 +221,10 @@ export default function InteractiveContactShuffleCards({
           <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
             <a
               href={`mailto:${card.detailPrimary}`}
-              className="inline-flex items-center gap-1.5 text-white font-semibold no-underline hover:underline truncate max-w-full"
+              className="inline-flex items-center gap-1.5 !text-white font-semibold no-underline hover:underline truncate max-w-full"
             >
-              <FiMail className="shrink-0 text-white/85" />
-              <span className="truncate">{card.detailPrimary}</span>
+              <FiMail className="shrink-0 text-white/90" />
+              <span className="truncate text-white">{card.detailPrimary}</span>
             </a>
             <div className="inline-flex items-center gap-1.5 text-white/85 truncate max-w-full">
               <FiMapPin className="shrink-0 text-white/80" />

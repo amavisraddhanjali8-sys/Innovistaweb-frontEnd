@@ -1,30 +1,15 @@
 import { useNavigate } from "react-router-dom";
-import { jwtDecode } from "jwt-decode";
-import { useEffect, useState } from "react";
 import { FiLogOut } from "react-icons/fi";
-import axios from "axios";
+import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
 
 function LogoutButton() {
-  const [userID, setUserID] = useState<string | null>(null);
   const navigate = useNavigate();
   const { logout } = useAuth();
 
-  useEffect(() => {
-    const token = sessionStorage.getItem("accessToken");
-    if (token) {
-      try {
-        const decodedToken = jwtDecode<{ sub?: string }>(token);
-        setUserID(decodedToken?.sub || "1");
-      } catch {
-        setUserID("1");
-      }
-    }
-  }, []);
-
   const handleLogout = async () => {
     try {
-      await axios.post(`/auth/logout?adminId=${userID || 1}`);
+      await AxiosConfig.post("/auth/logout");
     } catch (error) {
       console.error("Logout failed", error);
     } finally {

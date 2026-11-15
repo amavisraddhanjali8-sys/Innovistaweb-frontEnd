@@ -123,8 +123,8 @@ export default function SilentRingingPhone({
             onClick={() => setIsRingingActive(true)}
             className={`text-sm font-bold no-underline transition-colors block truncate mt-0.5 tabular-nums ${
               isCard
-                ? "text-white/95 hover:text-[#FED7AA]"
-                : "text-[#22577A] hover:text-[#3393B8] text-xs sm:text-[13px]"
+                ? "!text-white hover:!text-[#FED7AA] drop-shadow-[0_1px_1px_rgba(7,36,62,0.45)]"
+                : "!text-[#22577A] hover:!text-[#3393B8] text-xs sm:text-[13px]"
             }`}
           >
             {phone}
@@ -141,19 +141,19 @@ export default function SilentRingingPhone({
         >
           <a
             href={telHref}
-            className="tactile-pill-btn inline-flex items-center gap-1 px-3 py-1 rounded-xl text-[11px] font-bold no-underline cursor-pointer"
+            className="tactile-pill-btn inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-bold !text-white no-underline cursor-pointer"
           >
             <FiPhoneCall className="relative z-10 text-[11px]" />
-            <span className="relative z-10">Call Now</span>
+            <span className="relative z-10 text-white">Call Now</span>
           </a>
           <a
             href={waHref}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center gap-1 px-3 py-1 rounded-xl border text-[11px] font-bold no-underline transition-all ${
+            className={`inline-flex items-center gap-1 px-3 py-1.5 rounded-xl border text-[11px] font-bold no-underline transition-all ${
               isCard
-                ? "bg-emerald-500/30 border-emerald-200/70 text-white shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.45),0_4px_10px_-4px_rgba(0,0,0,0.28)] hover:bg-emerald-400 hover:text-slate-950"
-                : "bg-[#25D366]/12 border-[#25D366]/35 text-[#15803d] hover:bg-[#25D366]/20"
+                ? "bg-emerald-500/35 border-emerald-200/80 !text-white shadow-[inset_0_1.5px_1px_rgba(255,255,255,0.45),0_4px_10px_-4px_rgba(0,0,0,0.28)] hover:bg-emerald-400 hover:!text-slate-950"
+                : "bg-[#25D366]/12 border-[#25D366]/35 !text-[#15803d] hover:bg-[#25D366]/20"
             }`}
           >
             <FaWhatsapp className="text-[11px]" />

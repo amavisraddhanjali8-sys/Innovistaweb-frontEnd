@@ -5,19 +5,18 @@ import {
   resolvePostAuthRoute,
   validateLoginInput,
   validateSignupInput,
-  getDemoAccountCredentials,
   buildSignupRedirectUrl,
   getAuthModeFromSearch,
   getAuthActionFromSearch,
   parsePostAuthRedirect,
-} from "./authHelpers";
+} from "./authHelpers.ts";
 
 describe("authHelpers", () => {
   it("routes @innovista.com emails to admin and others to customer", () => {
-    assert.equal(isAdminEmail("admin@innovista.com"), true);
+    assert.equal(isAdminEmail("security@innovista.com"), true);
     assert.equal(isAdminEmail("  STAFF@INNOVISTA.COM "), true);
-    assert.equal(isAdminEmail("duminda@zenithcapital.lk"), false);
-    assert.equal(isAdminEmail("+94 77 123 4567"), false);
+    assert.equal(isAdminEmail("client@architecture.lk"), false);
+    assert.equal(isAdminEmail("client_handle"), false);
   });
 
   it("resolves destination routes by role", () => {
@@ -25,47 +24,42 @@ describe("authHelpers", () => {
     assert.equal(resolvePostAuthRoute("customer"), "/profile");
   });
 
-  it("validates login identifier and password", () => {
-    assert.equal(validateLoginInput("", "123456").valid, false);
+  it("validates login identifier, password, and optional CAPTCHA input", () => {
+    assert.equal(validateLoginInput("", "Passw0rd!").valid, false);
     assert.equal(validateLoginInput("user@site.com", "   ").valid, false);
-    assert.deepEqual(validateLoginInput("duminda@zenithcapital.lk", "customer123"), {
+    assert.deepEqual(validateLoginInput("EMP-001", "admin297333"), { valid: true });
+    assert.equal(validateLoginInput("user@site.com", "Passw0rd!", "").valid, false);
+    assert.deepEqual(validateLoginInput("user_id_10", "Passw0rd!", "7K4M9Q"), {
       valid: true,
     });
   });
 
-  it("validates signup fields including email format and password length", () => {
+  it("validates signup fields including email, optional username, and strong password", () => {
     const invalid = validateSignupInput({
       name: "",
+      username: "x",
       company: "Studio",
       email: "not-an-email",
       phone: "",
-      password: "123",
+      password: "weak",
     });
     assert.equal(invalid.valid, false);
     assert.ok(invalid.errors.name);
+    assert.ok(invalid.errors.username);
     assert.ok(invalid.errors.email);
     assert.ok(invalid.errors.phone);
     assert.ok(invalid.errors.password);
 
     const valid = validateSignupInput({
       name: "Nadeesha Silva",
+      username: "nadeesha.silva",
       company: "Lanka GlassWorks",
       email: "nadeesha@glassworks.lk",
       phone: "+94 77 555 8899",
-      password: "secret123",
+      password: "SecurePass2026",
     });
     assert.equal(valid.valid, true);
     assert.deepEqual(valid.errors, {});
-  });
-
-  it("returns expected demo credentials", () => {
-    const client = getDemoAccountCredentials("client");
-    assert.equal(client.role, "customer");
-    assert.equal(client.email, "duminda@zenithcapital.lk");
-
-    const admin = getDemoAccountCredentials("admin");
-    assert.equal(admin.role, "admin");
-    assert.equal(admin.email, "admin@innovista.com");
   });
 
   it("builds signup redirect URLs and parses modes, actions, and safe redirects", () => {
@@ -84,7 +78,6 @@ describe("authHelpers", () => {
       parsePostAuthRedirect("?redirect=%2Frequest-quote%3Fproduct%3DDoor", "customer"),
       "/request-quote?product=Door"
     );
-    // Reject external / protocol-relative open redirects and login loops
     assert.equal(parsePostAuthRedirect("?redirect=https://evil.com", "customer"), "/profile");
     assert.equal(parsePostAuthRedirect("?redirect=//evil.com", "customer"), "/profile");
     assert.equal(parsePostAuthRedirect("?redirect=/profile-login", "customer"), "/profile");

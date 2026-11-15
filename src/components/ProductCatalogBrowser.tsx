@@ -137,8 +137,8 @@ export default function ProductCatalogBrowser({
             )}
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-2.5 shrink-0 w-full lg:w-auto">
+            <div className="flex items-center gap-2 flex-1 sm:flex-none min-w-[160px]">
               <span className="text-xs font-semibold text-slate-500 whitespace-nowrap">
                 Sort:
               </span>
@@ -148,7 +148,7 @@ export default function ProductCatalogBrowser({
                 onChange={(val: ProductSortOption) =>
                   setFilter((prev) => ({ ...prev, sortBy: val }))
                 }
-                style={{ width: 175 }}
+                className="flex-1 sm:w-[175px] sm:flex-none"
                 options={[
                   { label: "Featured Order", value: "featured" },
                   { label: "Price: Low to High", value: "price-asc" },
@@ -163,7 +163,7 @@ export default function ProductCatalogBrowser({
               type="button"
               onClick={() => setShowAdvancedFilters((prev) => !prev)}
               aria-expanded={showAdvancedFilters}
-              className={`h-9 px-3.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`min-h-[44px] sm:min-h-0 sm:h-9 px-3.5 rounded-xl border text-xs font-semibold inline-flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                 showAdvancedFilters ||
                 filter.colorFamily !== "all" ||
                 filter.sizeFilter !== "all" ||
@@ -180,7 +180,7 @@ export default function ProductCatalogBrowser({
               <button
                 type="button"
                 onClick={handleResetFilters}
-                className="h-9 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
+                className="min-h-[44px] sm:min-h-0 sm:h-9 px-3 rounded-xl border border-slate-200 bg-slate-50 hover:bg-white text-xs font-semibold text-slate-700 inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0 transition-colors"
               >
                 <FiRotateCcw className="text-xs" />
                 <span>Reset ({activeFilterCount})</span>
@@ -189,13 +189,13 @@ export default function ProductCatalogBrowser({
           </div>
         </div>
 
-        {/* Category Filter Strip */}
+        {/* Category Filter Strip (horizontally scrollable snap rail on mobile, wrapping chips on tablet/desktop) */}
         {!lockedCategorySlug && categories.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 sm:pb-0 snap-x snap-mandatory touch-pan-x">
             <button
               type="button"
               onClick={() => handleCategoryChange("all")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border tabular-nums ${
+              className={`snap-start min-h-[40px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border tabular-nums ${
                 filter.categorySlug === "all"
                   ? "bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white border-transparent shadow-xs"
                   : "bg-slate-50 text-slate-700 border-slate-200/80 hover:bg-white hover:border-[#3393B8]"
@@ -212,7 +212,7 @@ export default function ProductCatalogBrowser({
                   key={cat.CategoryID}
                   type="button"
                   onClick={() => handleCategoryChange(cat.slug)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border tabular-nums ${
+                  className={`snap-start min-h-[40px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border tabular-nums ${
                     isSelected
                       ? "bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white border-transparent shadow-xs"
                       : "bg-slate-50 text-slate-700 border-slate-200/80 hover:bg-white hover:border-[#3393B8]"

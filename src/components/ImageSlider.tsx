@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type TouchEvent as ReactTouchEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   FiArrowRight,
@@ -23,6 +23,7 @@ import {
   parseVideoEmbedUrl,
   type HomeSlideshowCmsPayload,
 } from "../utils/homeSlideshowHelpers";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 
 export default function ImageSlider() {
   const { user } = useAuth();
@@ -39,6 +40,7 @@ export default function ImageSlider() {
 
   const videoRefs = useRef<Record<string, HTMLVideoElement | null>>({});
   const lastActiveSlideIdRef = useRef<string | null>(null);
+  const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -174,6 +176,28 @@ export default function ImageSlider() {
     }
   };
 
+  const handleTouchStart = (e: ReactTouchEvent<HTMLElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e: ReactTouchEvent<HTMLElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    const touch = e.changedTouches[0];
+    if (!start || !touch || visibleSlides.length <= 1) return;
+    const dir = detectHorizontalSwipe(
+      start.x,
+      start.y,
+      touch.clientX,
+      touch.clientY,
+      Date.now() - start.t
+    );
+    if (dir === "left") nextSlide();
+    else if (dir === "right") prevSlide();
+  };
+
   return (
     <section
       aria-label="Home Architectural Showcase Slideshow"
@@ -181,6 +205,8 @@ export default function ImageSlider() {
       className={styles.sliderContainer}
       onMouseEnter={() => setIsPausedByHover(true)}
       onMouseLeave={() => setIsPausedByHover(false)}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Background Stage: Mixed Images, Uploaded MP4/WebM Videos, & Video Embeds */}
       <div className={styles.imageWrapper}>

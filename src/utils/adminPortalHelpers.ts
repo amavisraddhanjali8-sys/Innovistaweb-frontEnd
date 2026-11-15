@@ -78,6 +78,12 @@ export const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     path: "/ChatbotAdmin",
     matchPaths: ["/ChatbotAdmin"],
   },
+  {
+    key: "security",
+    label: "Security",
+    path: "/AdminSecurity",
+    matchPaths: ["/AdminSecurity"],
+  },
 ];
 
 export const ADMIN_SHELL_PATHS: string[] = [
@@ -200,6 +206,13 @@ export function getAdminBreadcrumb(pathname: string): AdminBreadcrumbMeta {
         current: "Chatbot & Site Visits",
         title: "Chatbot Training & Site Visit Slots",
         subtitle: "Train FAQ questions & answers, customize WhatsApp handoff, and manage visit slots.",
+      };
+    case "/adminsecurity":
+      return {
+        parent: "Security",
+        current: "Security, 2FA & Audit CSV",
+        title: "Admin Security & Audit Governance",
+        subtitle: "Manage Admin-only Google Authenticator 2FA and download detailed web audit CSV reports.",
       };
     default:
       return {

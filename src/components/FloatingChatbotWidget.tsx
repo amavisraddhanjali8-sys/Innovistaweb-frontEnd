@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type FormEvent, type TouchEvent as ReactTouchEvent } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { FiChevronLeft, FiChevronRight, FiSend, FiSmartphone, FiX } from "react-icons/fi";
@@ -8,6 +8,7 @@ import { useAuth } from "../Context/AuthContext";
 import { useSiteSettings } from "../Context/SiteSettingsContext";
 import { useSiteVisitSlots } from "../Context/SiteVisitSlotContext";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
+import { detectVerticalSwipeDown } from "../utils/touchGestureHelpers";
 import {
   DEFAULT_CHATBOT_CONFIG,
   buildSmsHref,
@@ -110,6 +111,19 @@ export default function FloatingChatbotWidget() {
   const [quickSubmitting, setQuickSubmitting] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const sheetTouchRef = useRef<{ x: number; y: number; t: number } | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowRequestModal(false);
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
 
   useEffect(() => {
     let active = true;
@@ -399,11 +413,46 @@ export default function FloatingChatbotWidget() {
     }
   };
 
+  const handleHeaderTouchStart = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    sheetTouchRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
+  };
+
+  const handleHeaderTouchEnd = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const start = sheetTouchRef.current;
+    sheetTouchRef.current = null;
+    const touch = e.changedTouches[0];
+    if (!start || !touch) return;
+    if (
+      detectVerticalSwipeDown(
+        start.x,
+        start.y,
+        touch.clientX,
+        touch.clientY,
+        Date.now() - start.t
+      )
+    ) {
+      setShowRequestModal(false);
+      setIsOpen(false);
+    }
+  };
+
   return (
     <MotionConfig reducedMotion="user">
+      {isOpen && (
+        <div
+          aria-hidden="true"
+          onClick={() => {
+            setShowRequestModal(false);
+            setIsOpen(false);
+          }}
+          className="sm:hidden fixed inset-0 z-[1240] bg-slate-900/35 backdrop-blur-[2px]"
+        />
+      )}
       <div
         data-testid="floating-chatbot-root"
-        className={`fixed right-4 sm:right-6 bottom-20 md:bottom-6 ${
+        className={`fixed right-3 sm:right-6 bottom-[82px] md:bottom-6 ${
           isOpen ? "z-[1250]" : "z-[70]"
         } flex flex-col items-end gap-3 pointer-events-none`}
       >
@@ -418,58 +467,67 @@ export default function FloatingChatbotWidget() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 16, scale: 0.94 }}
               transition={{ type: "spring", stiffness: 360, damping: 28 }}
-              className="pointer-events-auto relative w-[min(432px,calc(100vw-2rem))] rounded-[24px] bg-white border border-slate-200/90 shadow-[0_24px_60px_-14px_rgba(15,23,42,0.26)] overflow-hidden flex flex-col h-[min(620px,calc(100vh-7.5rem))] max-h-[min(640px,calc(100vh-7.5rem))]"
+              className="pointer-events-auto max-sm:fixed max-sm:inset-x-2 max-sm:bottom-[80px] max-sm:w-auto max-sm:h-[min(76dvh,540px)] max-sm:max-h-[calc(100dvh-136px)] relative sm:w-[min(432px,calc(100vw-2rem))] rounded-[22px] sm:rounded-[24px] bg-white border border-slate-200/90 shadow-[0_24px_60px_-14px_rgba(15,23,42,0.26)] overflow-hidden flex flex-col sm:h-[min(620px,calc(100vh-7.5rem))] sm:max-h-[min(640px,calc(100vh-7.5rem))]"
             >
-              {/* Crisp White Header Bar matching reference chat card */}
-              <div className="px-4 py-3.5 bg-white border-b border-slate-100 flex items-center justify-between gap-2.5 shrink-0">
-                <div className="flex items-center gap-3 min-w-0">
-                  <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 border border-slate-200/80 shrink-0">
-                    <Suspense fallback={<div className="w-full h-full rounded-full" />}>
-                      <Chatbot3DReceptionistAvatar
-                        variant="concierge"
-                        isHovered={panelHovered}
-                        isSpeaking={sending}
-                      />
-                    </Suspense>
-                    <span
-                      aria-hidden="true"
-                      className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-[15px] font-bold text-[#111827] truncate leading-tight">
-                      {config.assistantName}
-                    </div>
-                    <div className="text-[12px] text-[#64748B] truncate mt-0.5">
-                      {sending
-                        ? "Typing reply..."
-                        : contactSettings.email || "innovistametal@gmail.com"}
-                    </div>
-                  </div>
+              {/* Mobile Bottom-Sheet Pull Handle + Header */}
+              <div
+                onTouchStart={handleHeaderTouchStart}
+                onTouchEnd={handleHeaderTouchEnd}
+                className="bg-white border-b border-slate-100 shrink-0"
+              >
+                <div className="sm:hidden flex justify-center pt-2 pb-0.5">
+                  <span className="w-10 h-1 rounded-full bg-slate-300" />
                 </div>
+                <div className="px-4 py-2.5 sm:py-3.5 flex items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-sky-50 via-indigo-50 to-fuchsia-50 border border-slate-200/80 shrink-0">
+                      <Suspense fallback={<div className="w-full h-full rounded-full" />}>
+                        <Chatbot3DReceptionistAvatar
+                          variant="concierge"
+                          isHovered={panelHovered}
+                          isSpeaking={sending}
+                        />
+                      </Suspense>
+                      <span
+                        aria-hidden="true"
+                        className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[15px] font-bold text-[#111827] truncate leading-tight">
+                        {config.assistantName}
+                      </div>
+                      <div className="text-[12px] text-[#64748B] truncate mt-0.5">
+                        {sending
+                          ? "Typing reply..."
+                          : contactSettings.email || "innovistametal@gmail.com"}
+                      </div>
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <a
-                    href={globalWhatsappUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label="Open WhatsApp chat"
-                    title={config.whatsappTriggerLabel}
-                    className="btn-anim-fx w-8 h-8 rounded-full bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/70 flex items-center justify-center no-underline transition-colors"
-                  >
-                    <FaWhatsapp className="text-sm" />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowRequestModal(false);
-                      setIsOpen(false);
-                    }}
-                    aria-label="Close chatbot"
-                    className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 flex items-center justify-center cursor-pointer border-0 transition-colors"
-                  >
-                    <FiX className="text-sm" />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <a
+                      href={globalWhatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open WhatsApp chat"
+                      title={config.whatsappTriggerLabel}
+                      className="btn-anim-fx w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/70 flex items-center justify-center no-underline transition-colors"
+                    >
+                      <FaWhatsapp className="text-base sm:text-sm" />
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowRequestModal(false);
+                        setIsOpen(false);
+                      }}
+                      aria-label="Close chatbot"
+                      className="w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center cursor-pointer border border-slate-200/70 transition-colors"
+                    >
+                      <FiX className="text-base sm:text-sm" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -662,13 +720,13 @@ export default function FloatingChatbotWidget() {
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
                         placeholder="Please review your request or ask..."
-                        className="flex-1 min-w-0 px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white focus:border-[#0A74C9] focus:outline-none text-[13px] text-[#14171A] placeholder:text-slate-400"
+                        className="flex-1 min-w-0 h-11 sm:h-10 px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:border-[#0A74C9] focus:outline-none text-base sm:text-[13px] text-[#14171A] placeholder:text-slate-400"
                       />
                       <button
                         type="submit"
                         disabled={sending || !inputValue.trim()}
                         aria-label="Send message"
-                        className="w-10 h-10 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white flex items-center justify-center cursor-pointer border-0 disabled:opacity-50 shrink-0 transition-colors"
+                        className="w-11 h-11 sm:w-10 sm:h-10 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white flex items-center justify-center cursor-pointer border-0 disabled:opacity-50 shrink-0 transition-colors"
                       >
                         <FiSend className="text-sm" />
                       </button>
@@ -1001,10 +1059,10 @@ export default function FloatingChatbotWidget() {
           onClick={() => setIsOpen((prev) => !prev)}
           whileHover={isOpen ? { scale: 1.07 } : { scale: 1.09, y: -4 }}
           whileTap={{ scale: 0.94 }}
-          className={`pointer-events-auto relative flex items-center justify-center cursor-pointer transition-all ${
+          className={`pointer-events-auto relative items-center justify-center cursor-pointer transition-all ${
             isOpen
-              ? "w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-white text-slate-700 border border-slate-200/90 shadow-[0_12px_28px_-6px_rgba(15,23,42,0.28)]"
-              : "w-[84px] h-[84px] sm:w-[104px] sm:h-[104px] rounded-full bg-transparent border-0 p-0 overflow-visible"
+              ? "hidden sm:flex w-13 h-13 sm:w-14 sm:h-14 rounded-full bg-white text-slate-700 border border-slate-200/90 shadow-[0_12px_28px_-6px_rgba(15,23,42,0.28)]"
+              : "flex w-14 h-14 sm:w-[104px] sm:h-[104px] rounded-full bg-transparent border-0 p-0 overflow-visible"
           }`}
         >
           {isOpen ? (

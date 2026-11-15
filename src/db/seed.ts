@@ -1,8 +1,6 @@
 import { count } from "drizzle-orm";
 import { db } from "./index.ts";
 import {
-  appointmentDates,
-  appointments,
   appointmentSlots,
   blogPosts,
   categories,
@@ -10,16 +8,12 @@ import {
   cmsDocuments,
   customerFeedbacks,
   mediaAssets,
-  notifications,
-  orderItems,
-  orders,
   productCategories,
   productImages,
   products,
   projectImages,
   projects,
   relatedPortals,
-  users,
 } from "./schema.ts";
 import {
   DEFAULT_ABOUT_SECTIONS,
@@ -58,10 +52,7 @@ import {
 import { DEFAULT_BLOGGER_CONFIG, DEFAULT_BLOG_POSTS } from "../utils/blogBloggerHelpers.ts";
 import { DEFAULT_SITE_CONTACT_SETTINGS, normalizeSiteContactSettings } from "../utils/footerConsultationHelpers.ts";
 import { DEFAULT_CHATBOT_CONFIG, DEFAULT_CHATBOT_FAQS } from "../utils/chatbotHelpers.ts";
-import {
-  SITE_VISIT_SLOT_TEMPLATES,
-  getUpcomingSiteVisitDates,
-} from "../utils/siteVisitSchedulerHelpers.ts";
+import { SITE_VISIT_SLOT_TEMPLATES } from "../utils/siteVisitSchedulerHelpers.ts";
 import { DEFAULT_HOME_SLIDESHOW_CMS, normalizeHomeSlideshowCms } from "../utils/homeSlideshowHelpers.ts";
 import { DEFAULT_HOME_SERVICES_CMS, normalizeHomeServicesCms } from "../utils/homeServicesHelpers.ts";
 import {
@@ -77,74 +68,10 @@ import {
 let seedPromise: Promise<void> | null = null;
 
 async function runSeed(): Promise<void> {
-  // 1. Seed Users (Admin, Staff, Customers)
-  const [{ value: existingUsersCount }] = await db.select({ value: count() }).from(users);
-  if (Number(existingUsersCount) === 0) {
-    await db
-      .insert(users)
-      .values([
-        {
-          uid: "admin-1",
-          name: "Super Admin",
-          email: "admin@innovista.com",
-          phone: "+94 77 123 4567",
-          company: "Innovista Fabriconix HQ",
-          role: "admin",
-          passwordHash: "admin123",
-          avatarUrl: "/assets/about/director.jpg",
-          isVerified: true,
-          isActive: true,
-          purchaseGoods: [],
-        },
-        {
-          uid: "staff-2",
-          name: "Operations Manager",
-          email: "manager@innovista.com",
-          phone: "+94 71 987 6543",
-          company: "Innovista Fabriconix HQ",
-          role: "staff",
-          passwordHash: "admin123",
-          avatarUrl: "/assets/about/team-structural.jpg",
-          isVerified: true,
-          isActive: true,
-          purchaseGoods: [],
-        },
-        {
-          uid: "customer-1",
-          name: "Duminda Perera",
-          email: "duminda@zenithcapital.lk",
-          phone: "+94 77 455 1200",
-          company: "Zenith Capital Residencies",
-          role: "customer",
-          passwordHash: "customer123",
-          avatarUrl: "/assets/logos/client-zenith.svg",
-          isVerified: true,
-          isActive: true,
-          purchaseGoods: ["Sliding Doors", "Glass Balustrades", "Window Systems"],
-        },
-        {
-          uid: "customer-2",
-          name: "Kavinda Jayasuriya",
-          email: "kavinda@novatech.io",
-          phone: "+94 77 333 9988",
-          company: "NovaTech Solutions",
-          role: "customer",
-          passwordHash: "customer123",
-          avatarUrl: "/assets/logos/client-novatech.svg",
-          isVerified: true,
-          isActive: true,
-          purchaseGoods: ["Acoustic Partitions", "Pivot Doors"],
-        },
-      ])
-      .onConflictDoNothing();
-  }
+  // NOTE: Zero demo user accounts, zero demo orders, zero demo RFQs, zero demo bookings,
+  // and zero demo notifications are seeded. Only public catalog & CMS reference content.
 
-  const allUsers = await db.select().from(users);
-  const adminUser = allUsers.find((u) => u.role === "admin") || allUsers[0];
-  const staffUser = allUsers.find((u) => u.role === "staff") || adminUser;
-  const customerUsers = allUsers.filter((u) => u.role === "customer");
-
-  // 2. Seed Media Assets helper
+  // 1. Seed Media Assets helper
   const mediaAssetMap = new Map<string, number>();
   const existingAssets = await db.select().from(mediaAssets);
   for (const row of existingAssets) {
@@ -166,14 +93,14 @@ async function runSeed(): Promise<void> {
         publicUrl: cleanUrl,
         altText: title,
         entityScope,
-        uploadedByUserId: adminUser?.id ?? null,
+        uploadedByUserId: null,
       })
       .returning();
     mediaAssetMap.set(cleanUrl, inserted.id);
     return inserted.id;
   }
 
-  // 3. Seed Categories
+  // 2. Seed Categories
   const [{ value: existingCatsCount }] = await db.select({ value: count() }).from(categories);
   if (Number(existingCatsCount) === 0) {
     for (let i = 0; i < DEFAULT_PRODUCT_CATEGORIES.length; i++) {
@@ -207,7 +134,7 @@ async function runSeed(): Promise<void> {
     categoryBySlugOrName.set(c.categoryKey.toLowerCase(), c.id);
   }
 
-  // 4. Seed Products + Product Categories + Product Images
+  // 3. Seed Products + Product Categories + Product Images
   const [{ value: existingProductsCount }] = await db.select({ value: count() }).from(products);
   if (Number(existingProductsCount) === 0) {
     for (const rawItem of DEFAULT_DESIGNS_CATALOG) {
@@ -267,7 +194,7 @@ async function runSeed(): Promise<void> {
           partnerServiceBannerImage: item.partnerServiceBannerImage || "",
           clientShowcases: item.clientShowcases || [],
           relatedProductIds: item.relatedProductIds || [],
-          createdByUserId: adminUser?.id ?? null,
+          createdByUserId: null,
         })
         .returning();
 
@@ -291,7 +218,7 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  // 5. Seed Appointment Slots, Dates & Initial Booking
+  // 4. Seed Appointment Slot Templates (configuration only, no demo appointments)
   const [{ value: existingSlotsCount }] = await db.select({ value: count() }).from(appointmentSlots);
   if (Number(existingSlotsCount) === 0) {
     for (let i = 0; i < SITE_VISIT_SLOT_TEMPLATES.length; i++) {
@@ -310,47 +237,7 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  const allSlots = await db.select().from(appointmentSlots);
-  const [{ value: existingAppointmentsCount }] = await db
-    .select({ value: count() })
-    .from(appointments);
-  if (Number(existingAppointmentsCount) === 0) {
-    const firstDate = getUpcomingSiteVisitDates(10)[0]?.date || new Date().toISOString().slice(0, 10);
-    const matchingSlot = allSlots.find((s) => s.slotTime === "11:00") || allSlots[0];
-    await db
-      .insert(appointmentDates)
-      .values({
-        visitDate: firstDate,
-        available: true,
-        note: "Standard showroom & measurement window",
-        isCustom: false,
-        customSlots: [],
-      })
-      .onConflictDoNothing();
-
-    await db
-      .insert(appointments)
-      .values({
-        bookingCode: "SV-2041",
-        slotId: matchingSlot?.id ?? null,
-        visitDate: firstDate,
-        slotTime: "11:00",
-        slotLabel: "11:00 AM",
-        locationName: "Nawala Showroom & Consultation",
-        visitorName: "Duminda Perera",
-        visitorEmail: "duminda@zenithcapital.lk",
-        visitorPhone: "+94 77 455 1200",
-        notes: "Slim sliding door frame measurement check.",
-        status: "CONFIRMED",
-        userId: customerUsers[0]?.id ?? null,
-        assignedStaffId: staffUser?.id ?? null,
-        calendarEventId: "",
-        emailSent: false,
-      })
-      .onConflictDoNothing();
-  }
-
-  // 6. Seed Blog Posts
+  // 5. Seed Blog Posts
   const [{ value: existingBlogsCount }] = await db.select({ value: count() }).from(blogPosts);
   if (Number(existingBlogsCount) === 0) {
     for (const post of DEFAULT_BLOG_POSTS) {
@@ -369,7 +256,7 @@ async function runSeed(): Promise<void> {
           category: post.category,
           labels: post.labels,
           authorName: post.author,
-          authorUserId: adminUser?.id ?? null,
+          authorUserId: null,
           coverAssetId,
           coverImage: post.coverImage,
           source: post.source,
@@ -382,19 +269,19 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  // 7. Seed Projects + Project Images
+  // 6. Seed Architectural Showcase Projects (without personal client emails/numbers)
   const [{ value: existingProjectsCount }] = await db.select({ value: count() }).from(projects);
   if (Number(existingProjectsCount) === 0) {
-    const seedProjects = [
+    const showcaseProjects = [
       {
         title: "Oceanview Villa Glass Cantilever & Sliding Facade",
         description:
           "Complete architectural exterior glazing featuring heavy-duty thermally broken aluminium profiles, motorized slim-line sliding glass doors, and structural frameless glass balustrades.",
         images: ["/assets/about/terrace.jpg", "/assets/products/door.jpg", "/assets/products/hero-showroom.jpg"],
         location: "Colombo 07, Sri Lanka",
-        clientName: "Duminda Perera",
-        clientEmail: "duminda@zenithcapital.lk",
-        clientNumber: "+94 77 455 1200",
+        clientName: "Zenith Capital Residencies",
+        clientEmail: "",
+        clientNumber: "",
         clientCompany: "Zenith Capital Residencies",
         finishedDate: "2024-09-30T17:00:00.000Z",
         budget: "8500000",
@@ -405,9 +292,9 @@ async function runSeed(): Promise<void> {
           "Supply, fabrication, and structural installation of 12-storey unitized aluminium curtain walling with solar-reflective low-E double glazing and integrated ventilation louvers.",
         images: ["/assets/about/facade.jpg", "/assets/products/facade-detail.jpg", "/assets/products/shopfront.jpg"],
         location: "Kollupitiya, Colombo",
-        clientName: "Niroshan Fernando",
-        clientEmail: "info@apexdevelopments.com",
-        clientNumber: "+94 11 234 5678",
+        clientName: "Apex Skyline Towers",
+        clientEmail: "",
+        clientNumber: "",
         clientCompany: "Apex Skyline Towers",
         finishedDate: "2024-04-12T18:00:00.000Z",
         budget: "24500000",
@@ -418,9 +305,9 @@ async function runSeed(): Promise<void> {
           "Ultra-slim multi-panel bi-fold doors creating seamless indoor-outdoor transition, custom acoustic interior partitions, and motorized architectural roof skylights.",
         images: ["/assets/about/pavilion.jpg", "/assets/products/roof-skylight.jpg", "/assets/products/window.jpg"],
         location: "Kandy, Sri Lanka",
-        clientName: "Sachithra Weerasinghe",
-        clientEmail: "sweera@arcvision.com",
-        clientNumber: "+94 71 890 1234",
+        clientName: "ArcVision Design Studio",
+        clientEmail: "",
+        clientNumber: "",
         clientCompany: "ArcVision Design Studio",
         finishedDate: "2024-08-15T15:00:00.000Z",
         budget: "6200000",
@@ -431,16 +318,16 @@ async function runSeed(): Promise<void> {
           "Frameless acoustic tempered glass partition suites with matte-black powder-coated aluminium perimeter channels, pivot entrance doors, and privacy smart glass integration.",
         images: ["/assets/products/partition.jpg", "/assets/products/showroom.jpg", "/assets/products/louvers.jpg"],
         location: "Rajagiriya, Colombo",
-        clientName: "Kavinda Jayasuriya",
-        clientEmail: "kavinda@novatech.io",
-        clientNumber: "+94 77 333 9988",
-        clientCompany: "NovaTech Solutions",
+        clientName: "NovaTech Corporate Park",
+        clientEmail: "",
+        clientNumber: "",
+        clientCompany: "NovaTech Corporate Park",
         finishedDate: "2024-07-20T17:00:00.000Z",
         budget: "4800000",
       },
     ];
 
-    for (const p of seedProjects) {
+    for (const p of showcaseProjects) {
       const [insertedProj] = await db
         .insert(projects)
         .values({
@@ -453,7 +340,7 @@ async function runSeed(): Promise<void> {
           clientCompany: p.clientCompany,
           budget: p.budget,
           finishedDate: p.finishedDate,
-          createdByUserId: adminUser?.id ?? null,
+          createdByUserId: null,
         })
         .returning();
 
@@ -469,60 +356,7 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  // 8. Seed Orders
-  const [{ value: existingOrdersCount }] = await db.select({ value: count() }).from(orders);
-  if (Number(existingOrdersCount) === 0) {
-    const allProducts = await db.select().from(products);
-    const [o1] = await db
-      .insert(orders)
-      .values({
-        orderCode: "ORD-9201",
-        customerUserId: customerUsers[0]?.id ?? null,
-        orderStatus: "COMPLETED",
-        clientName: "Duminda Perera",
-        clientEmail: "duminda@zenithcapital.lk",
-        clientNumber: "+94 77 455 1200",
-        customerCompany: "Zenith Capital Residencies",
-        customerLogo: "/assets/logos/client-zenith.svg",
-        purchaseGoods: ["Sliding Doors", "Glass Balustrades"],
-        orderDate: new Date("2024-10-18T14:32:00.000Z"),
-      })
-      .returning();
-
-    await db.insert(orderItems).values({
-      orderId: o1.id,
-      productId: allProducts[0]?.id ?? null,
-      designName: "Minimalist Slimline Sliding Door System",
-      designImage: "/assets/products/door.jpg",
-      quantity: 1,
-    });
-
-    const [o2] = await db
-      .insert(orders)
-      .values({
-        orderCode: "ORD-9202",
-        customerUserId: customerUsers[1]?.id ?? null,
-        orderStatus: "PENDING",
-        clientName: "Kavinda Jayasuriya",
-        clientEmail: "kavinda@novatech.io",
-        clientNumber: "+94 77 333 9988",
-        customerCompany: "NovaTech Solutions",
-        customerLogo: "/assets/logos/client-novatech.svg",
-        purchaseGoods: ["Acoustic Partitions"],
-        orderDate: new Date("2024-11-04T09:15:00.000Z"),
-      })
-      .returning();
-
-    await db.insert(orderItems).values({
-      orderId: o2.id,
-      productId: allProducts[2]?.id ?? allProducts[0]?.id ?? null,
-      designName: "Acoustic Frameless Glass Office Partition",
-      designImage: "/assets/products/partition.jpg",
-      quantity: 1,
-    });
-  }
-
-  // 9. Seed Customer Feedbacks
+  // 7. Seed Public Customer Feedbacks
   const [{ value: existingFeedbackCount }] = await db
     .select({ value: count() })
     .from(customerFeedbacks);
@@ -533,7 +367,7 @@ async function runSeed(): Promise<void> {
         ? await ensurePresetAsset(fb.Customer.Cus_Avatar, fb.Customer.Cus_Name, "cms")
         : null;
       await db.insert(customerFeedbacks).values({
-        customerUserId: customerUsers[0]?.id ?? null,
+        customerUserId: null,
         customerName: fb.Customer.Cus_Name,
         companyName: fb.Customer.Cus_CompanyName,
         customerRole: fb.Customer.Cus_Role || "",
@@ -550,7 +384,7 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  // 10. Seed Chatbot FAQs
+  // 8. Seed Chatbot FAQs
   const [{ value: existingFaqsCount }] = await db.select({ value: count() }).from(chatbotFaqs);
   if (Number(existingFaqsCount) === 0) {
     for (const faq of DEFAULT_CHATBOT_FAQS) {
@@ -564,13 +398,13 @@ async function runSeed(): Promise<void> {
           keywords: faq.keywords,
           enabled: faq.enabled,
           priority: faq.priority,
-          createdByUserId: adminUser?.id ?? null,
+          createdByUserId: null,
         })
         .onConflictDoNothing();
     }
   }
 
-  // 11. Seed Related Portals
+  // 9. Seed Related Portals
   const [{ value: existingPortalsCount }] = await db
     .select({ value: count() })
     .from(relatedPortals);
@@ -596,31 +430,7 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  // 12. Seed Notifications
-  const [{ value: existingNotifsCount }] = await db.select({ value: count() }).from(notifications);
-  if (Number(existingNotifsCount) === 0) {
-    await db
-      .insert(notifications)
-      .values([
-        {
-          notifKey: "notif-1",
-          title: "New Project Inquiry",
-          body: "Zenith Capital requested a custom quotation for high-span sliding doors.",
-          userId: adminUser?.id ?? null,
-          isRead: false,
-        },
-        {
-          notifKey: "notif-2",
-          title: "Design Approved",
-          body: "Casement suite specifications were approved for production line.",
-          userId: adminUser?.id ?? null,
-          isRead: false,
-        },
-      ])
-      .onConflictDoNothing();
-  }
-
-  // 13. Seed Structured CMS Documents
+  // 10. Seed Structured CMS Documents
   const defaultSiteSettings = normalizeSiteContactSettings({
     phone: process.env.VITE_CONTACT_PHONE || DEFAULT_SITE_CONTACT_SETTINGS.phone,
     whatsapp: process.env.VITE_WHATSAPP_NUMBER || DEFAULT_SITE_CONTACT_SETTINGS.whatsapp,
@@ -712,7 +522,7 @@ async function runSeed(): Promise<void> {
       .values({
         key: entry.key,
         payload: entry.payload,
-        updatedByUserId: adminUser?.id ?? null,
+        updatedByUserId: null,
       })
       .onConflictDoNothing();
   }

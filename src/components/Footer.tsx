@@ -199,7 +199,7 @@ function Footer() {
             </div>
 
             {/* Oversized Architectural Brand Wordmark */}
-            <div className="pt-6 sm:pt-8 pb-4 flex flex-col items-center justify-center">
+            <div className="pt-6 sm:pt-8 pb-4 flex flex-col items-center justify-center max-w-full overflow-hidden">
               <div
                 aria-label="Innovista Fabriconix"
                 className="flex flex-wrap items-center justify-center gap-2 sm:gap-4 select-none text-center max-w-full"
@@ -207,11 +207,11 @@ function Footer() {
                 <img
                   src={companyLogo}
                   alt="Innovista Logo"
-                  className="h-9 sm:h-14 lg:h-20 w-auto object-contain shrink-0"
+                  className="h-8 sm:h-14 lg:h-20 w-auto object-contain shrink-0"
                 />
                 <span
                   style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-                  className="text-[clamp(2rem,7.2vw,5.75rem)] font-black tracking-[-0.04em] leading-none text-[#14171A]"
+                  className="text-[clamp(1.65rem,7vw,5.75rem)] font-black tracking-[-0.04em] leading-none text-[#14171A] break-words"
                 >
                   Innovista{" "}
                   <span
@@ -228,7 +228,7 @@ function Footer() {
                 </span>
               </div>
 
-              <p className="mt-4 text-[11px] sm:text-xs font-medium text-[#3B4451] text-center m-0">
+              <p className="mt-4 text-[11px] sm:text-xs font-medium text-[#3B4451] text-center m-0 leading-relaxed">
                 Innovista Metal Fabriconix Pvt Ltd © {new Date().getFullYear()} All Rights Reserved · Architectural Aluminium &amp; Structural Glazing
               </p>
             </div>

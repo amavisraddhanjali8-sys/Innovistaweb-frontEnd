@@ -2,6 +2,7 @@ export type AuthRole = "admin" | "customer";
 
 export interface SignupFields {
   name: string;
+  username?: string;
   company: string;
   email: string;
   phone: string;
@@ -19,9 +20,10 @@ export interface SignupValidationResult {
 }
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const USERNAME_REGEX = /^[a-zA-Z0-9._-]{3,32}$/;
 
 /**
- * Determines whether an entered identifier belongs to an Innovista admin account.
+ * Determines whether an entered identifier belongs to an Innovista admin domain email.
  */
 export function isAdminEmail(identifier: string): boolean {
   const normalized = identifier.trim().toLowerCase();
@@ -39,15 +41,22 @@ export function resolvePostAuthRoute(role: AuthRole): string {
 /**
  * Validates login form inputs before submitting to the server.
  */
-export function validateLoginInput(identifier: string, password: string): ValidationResult {
+export function validateLoginInput(
+  identifier: string,
+  password: string,
+  captchaAnswer?: string
+): ValidationResult {
   const cleanId = identifier.trim();
   const cleanPw = password.trim();
 
   if (!cleanId) {
-    return { valid: false, error: "Please enter your email address or phone number." };
+    return { valid: false, error: "Please enter your email address, username, or user ID." };
   }
   if (!cleanPw) {
     return { valid: false, error: "Please enter your password." };
+  }
+  if (captchaAnswer !== undefined && !captchaAnswer.trim()) {
+    return { valid: false, error: "Please complete the robot verification security code." };
   }
   return { valid: true };
 }
@@ -61,6 +70,9 @@ export function validateSignupInput(fields: SignupFields): SignupValidationResul
   if (!fields.name.trim()) {
     errors.name = "Full name is required.";
   }
+  if (fields.username && fields.username.trim() && !USERNAME_REGEX.test(fields.username.trim())) {
+    errors.username = "Username must be 3-32 characters (letters, numbers, ., _, -).";
+  }
   if (!fields.company.trim()) {
     errors.company = "Company name is required.";
   }
@@ -72,35 +84,15 @@ export function validateSignupInput(fields: SignupFields): SignupValidationResul
   if (!fields.phone.trim()) {
     errors.phone = "Phone number is required.";
   }
-  if (!fields.password || fields.password.length < 6) {
-    errors.password = "Password must be at least 6 characters.";
+  if (!fields.password || fields.password.length < 8) {
+    errors.password = "Password must be at least 8 characters with letters and numbers.";
+  } else if (!/[A-Za-z]/.test(fields.password) || !/[0-9]/.test(fields.password)) {
+    errors.password = "Password must include at least one letter and one number.";
   }
 
   return {
     valid: Object.keys(errors).length === 0,
     errors,
-  };
-}
-
-/**
- * Returns built-in demo credentials for 1-click sign-in buttons.
- */
-export function getDemoAccountCredentials(kind: "client" | "admin"): {
-  email: string;
-  password: string;
-  role: AuthRole;
-} {
-  if (kind === "admin") {
-    return {
-      email: "admin@innovista.com",
-      password: "admin123",
-      role: "admin",
-    };
-  }
-  return {
-    email: "duminda@zenithcapital.lk",
-    password: "customer123",
-    role: "customer",
   };
 }
 
@@ -164,4 +156,3 @@ export function parsePostAuthRedirect(search: string, role: AuthRole): string {
   }
   return resolvePostAuthRoute(role);
 }
-

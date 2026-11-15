@@ -76,11 +76,11 @@ import {
   inferMediaKindFromUrlOrMime,
   inferSourceTypeFromUrl,
 } from "../utils/mediaAssetHelpers.ts";
-import { getLocalIsoDateOffset } from "../utils/customerPortalHelpers.ts";
 
 export interface MemoryUserRecord {
   id: number;
   uid: string;
+  username: string | null;
   name: string;
   email: string;
   phone: string | null;
@@ -89,10 +89,55 @@ export interface MemoryUserRecord {
   passwordHash: string | null;
   avatarUrl: string | null;
   isVerified: boolean;
+  emailVerified: boolean;
+  accountStatus: string;
+  emailVerificationTokenHash: string | null;
+  emailVerificationCodeHash: string | null;
+  emailVerificationExpiresAt: Date | null;
+  totpSecretEncrypted: string | null;
+  totpEnabled: boolean;
+  failedLoginAttempts: number;
+  lockedUntil: Date | null;
+  lastLoginAt: Date | null;
+  lastLoginIp: string | null;
   isActive: boolean;
   purchaseGoods: string[];
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface MemorySecurityChallengeRecord {
+  id: number;
+  challengeId: string;
+  purpose: string;
+  userId: number | null;
+  identifier: string | null;
+  answerHash: string;
+  attempts: number;
+  maxAttempts: number;
+  consumed: boolean;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+export interface MemoryAuditLogRecord {
+  id: number;
+  eventId: string;
+  actorUserId: number | null;
+  actorEmail: string | null;
+  actorRole: string | null;
+  targetUserId: number | null;
+  targetIdentifier: string | null;
+  action: string;
+  category: string;
+  status: string;
+  severity: string;
+  accountClassification: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  details: string | null;
+  metadata: Record<string, unknown>;
+  createdAt: Date;
 }
 
 export interface MemoryMediaAssetRecord {
@@ -200,12 +245,16 @@ export interface MemoryNotificationRecord {
 export interface MemoryStoreState {
   initialized: boolean;
   nextUserId: number;
+  nextChallengeId: number;
+  nextAuditLogId: number;
   nextMediaId: number;
   nextProjectId: number;
   nextFeedbackId: number;
   nextRfqId: number;
   nextRfqAttachmentId: number;
   users: MemoryUserRecord[];
+  securityChallenges: MemorySecurityChallengeRecord[];
+  auditLogs: MemoryAuditLogRecord[];
   mediaAssets: MemoryMediaAssetRecord[];
   categories: ProductCategory[];
   products: DesignItem[];
@@ -231,78 +280,17 @@ function createInitialStore(): MemoryStoreState {
   const now = new Date();
   const store: MemoryStoreState = {
     initialized: true,
-    nextUserId: 5,
+    nextUserId: 1,
+    nextChallengeId: 1,
+    nextAuditLogId: 1,
     nextMediaId: 1,
     nextProjectId: 5,
     nextFeedbackId: 1,
-    nextRfqId: 3,
+    nextRfqId: 1,
     nextRfqAttachmentId: 1,
-    users: [
-      {
-        id: 1,
-        uid: "admin-1",
-        name: "Super Admin",
-        email: "admin@innovista.com",
-        phone: "+94 77 123 4567",
-        company: "Innovista Fabriconix HQ",
-        role: "admin",
-        passwordHash: "admin123",
-        avatarUrl: "/assets/about/director.jpg",
-        isVerified: true,
-        isActive: true,
-        purchaseGoods: [],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 2,
-        uid: "staff-2",
-        name: "Operations Manager",
-        email: "manager@innovista.com",
-        phone: "+94 71 987 6543",
-        company: "Innovista Fabriconix HQ",
-        role: "staff",
-        passwordHash: "admin123",
-        avatarUrl: "/assets/about/team-structural.jpg",
-        isVerified: true,
-        isActive: true,
-        purchaseGoods: [],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 3,
-        uid: "customer-1",
-        name: "Duminda Perera",
-        email: "duminda@zenithcapital.lk",
-        phone: "+94 77 455 1200",
-        company: "Zenith Capital Residencies",
-        role: "customer",
-        passwordHash: "customer123",
-        avatarUrl: "/assets/logos/client-zenith.svg",
-        isVerified: true,
-        isActive: true,
-        purchaseGoods: ["Sliding Doors", "Glass Balustrades", "Window Systems"],
-        createdAt: now,
-        updatedAt: now,
-      },
-      {
-        id: 4,
-        uid: "customer-2",
-        name: "Kavinda Jayasuriya",
-        email: "kavinda@novatech.io",
-        phone: "+94 77 333 9988",
-        company: "NovaTech Solutions",
-        role: "customer",
-        passwordHash: "customer123",
-        avatarUrl: "/assets/logos/client-novatech.svg",
-        isVerified: true,
-        isActive: true,
-        purchaseGoods: ["Acoustic Partitions", "Pivot Doors"],
-        createdAt: now,
-        updatedAt: now,
-      },
-    ],
+    users: [],
+    securityChallenges: [],
+    auditLogs: [],
     mediaAssets: [],
     categories: DEFAULT_PRODUCT_CATEGORIES.map((c, idx) => normalizeProductCategory(c, idx)),
     products: DEFAULT_DESIGNS_CATALOG.map((d) => normalizeDesignItem(d)),
@@ -322,9 +310,9 @@ function createInitialStore(): MemoryStoreState {
           "/assets/products/hero-showroom.jpg",
         ],
         Location: "Colombo 07, Sri Lanka",
-        Client_Name: "Duminda Perera",
-        Client_Email: "duminda@zenithcapital.lk",
-        Client_Number: "+94 77 455 1200",
+        Client_Name: "Zenith Capital Residencies",
+        Client_Email: "",
+        Client_Number: "",
         Client_Company: "Zenith Capital Residencies",
         Project_CreatedAt: now.toISOString(),
         Project_FinishedDate: "2024-09-30T17:00:00.000Z",
@@ -341,9 +329,9 @@ function createInitialStore(): MemoryStoreState {
           "/assets/products/shopfront.jpg",
         ],
         Location: "Kollupitiya, Colombo",
-        Client_Name: "Niroshan Fernando",
-        Client_Email: "info@apexdevelopments.com",
-        Client_Number: "+94 11 234 5678",
+        Client_Name: "Apex Skyline Towers",
+        Client_Email: "",
+        Client_Number: "",
         Client_Company: "Apex Skyline Towers",
         Project_CreatedAt: now.toISOString(),
         Project_FinishedDate: "2024-04-12T18:00:00.000Z",
@@ -360,9 +348,9 @@ function createInitialStore(): MemoryStoreState {
           "/assets/products/window.jpg",
         ],
         Location: "Kandy, Sri Lanka",
-        Client_Name: "Sachithra Weerasinghe",
-        Client_Email: "sweera@arcvision.com",
-        Client_Number: "+94 71 890 1234",
+        Client_Name: "ArcVision Design Studio",
+        Client_Email: "",
+        Client_Number: "",
         Client_Company: "ArcVision Design Studio",
         Project_CreatedAt: now.toISOString(),
         Project_FinishedDate: "2024-08-15T15:00:00.000Z",
@@ -379,202 +367,29 @@ function createInitialStore(): MemoryStoreState {
           "/assets/products/louvers.jpg",
         ],
         Location: "Rajagiriya, Colombo",
-        Client_Name: "Kavinda Jayasuriya",
-        Client_Email: "kavinda@novatech.io",
-        Client_Number: "+94 77 333 9988",
-        Client_Company: "NovaTech Solutions",
+        Client_Name: "NovaTech Corporate Park",
+        Client_Email: "",
+        Client_Number: "",
+        Client_Company: "NovaTech Corporate Park",
         Project_CreatedAt: now.toISOString(),
         Project_FinishedDate: "2024-07-20T17:00:00.000Z",
         Budget: 4800000,
       },
     ],
-    orders: [
-      {
-        OrderID: "ORD-9201",
-        Order_Date: "2024-10-18T14:32:00.000Z",
-        Order_Status: "COMPLETED",
-        Client_Name: "Duminda Perera",
-        Client_Email: "duminda@zenithcapital.lk",
-        Client_Number: "+94 77 455 1200",
-        Customer: {
-          Cus_CompanyName: "Zenith Capital Residencies",
-          Cus_Logo: "/assets/logos/client-zenith.svg",
-          Purchase_Goods: ["Sliding Doors", "Glass Balustrades"],
-        },
-        Designs: [
-          {
-            Design: {
-              Design_Name: "Minimalist Slimline Sliding Door System",
-              Design_Image: "/assets/products/door.jpg",
-            },
-          },
-        ],
-      },
-      {
-        OrderID: "ORD-9202",
-        Order_Date: "2024-11-04T09:15:00.000Z",
-        Order_Status: "PENDING",
-        Client_Name: "Kavinda Jayasuriya",
-        Client_Email: "kavinda@novatech.io",
-        Client_Number: "+94 77 333 9988",
-        Customer: {
-          Cus_CompanyName: "NovaTech Solutions",
-          Cus_Logo: "/assets/logos/client-novatech.svg",
-          Purchase_Goods: ["Acoustic Partitions"],
-        },
-        Designs: [
-          {
-            Design: {
-              Design_Name: "Acoustic Frameless Glass Office Partition",
-              Design_Image: "/assets/products/partition.jpg",
-            },
-          },
-        ],
-      },
-    ],
-    rfqs: [
-      {
-        id: 1,
-        customerUserId: 3,
-        clientName: "Zenith Capital Residencies",
-        contactPerson: "Duminda Perera",
-        email: "duminda@zenithcapital.lk",
-        phone: "+94 77 455 1200",
-        clientWebsite: "https://zenithcapital.lk",
-        projectTitle: "Penthouse Cantilever Sliding Terrace & Acoustic Suite",
-        location: "Colombo 07, Sri Lanka",
-        projectType: "Facade",
-        projectReferenceNumber: "RFQ-2026-ZC01",
-        projectDescription:
-          "Supply and installation of thermally broken ultra-slim 4-track motorized sliding doors and acoustic laminated skylight glazing for penthouse terrace.",
-        installationConditions: "7th floor crane hoist access required via west service bay.",
-        siteConstraints: "High coastal wind exposure; minimum 2.4 kPa wind-load certification.",
-        standards: "BS EN 14351-1, ASTM E330",
-        qualityExpectations: "Qualicoat Seaside Class 2 matte charcoal powder coat.",
-        materialBrand: "AluProfile Euro-Slim 45",
-        colorCode: "RAL 7016 Anthracite Grey",
-        additionalFeatures: "Integrated floor-drainage threshold & smart fingerprint lock.",
-        interiorStyle: "Modern",
-        paymentConditions: "40% mobilization, 40% upon extrusion delivery, 20% post-commissioning.",
-        budget: "LKR 6,850,000",
-        latestDeliveryDate: getLocalIsoDateOffset(28),
-        proposedVisitDates: `${getLocalIsoDateOffset(2)}, ${getLocalIsoDateOffset(5)}`,
-        siteAddress: "No. 18, Ward Place, Colombo 07",
-        googleMapsLink: "https://maps.google.com/?q=Colombo+07",
-        status: "QUOTED",
-        createdAt: new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000),
-        attachments: [],
-      },
-      {
-        id: 2,
-        customerUserId: 4,
-        clientName: "NovaTech Solutions",
-        contactPerson: "Kavinda Jayasuriya",
-        email: "kavinda@novatech.io",
-        phone: "+94 77 333 9988",
-        clientWebsite: "https://novatech.io",
-        projectTitle: "Executive Boardroom Acoustic Double-Glazed Partitions",
-        location: "Rajagiriya, Colombo",
-        projectType: "Office Partition",
-        projectReferenceNumber: "RFQ-2026-NT04",
-        projectDescription:
-          "42 linear meters of 42dB acoustic frameless double-glazed aluminium office partitions with two full-height pivot doors.",
-        installationConditions: "Night-shift installation after 7:00 PM on weekdays.",
-        siteConstraints: "Existing raised access flooring with 120mm slab clearance.",
-        standards: "ISO 10140 Acoustic Rating",
-        qualityExpectations: "Concealed floor closers with anodized black hairline trim.",
-        materialBrand: "Innovista QuietLine 100",
-        colorCode: "RAL 9005 Jet Black",
-        additionalFeatures: "Switchable smart privacy film on boardroom bay.",
-        interiorStyle: "Corporate",
-        paymentConditions: "50% advance, 50% on handover.",
-        budget: "LKR 3,900,000",
-        latestDeliveryDate: getLocalIsoDateOffset(21),
-        proposedVisitDates: getLocalIsoDateOffset(4),
-        siteAddress: "Level 9, Orion Tech Park, Rajagiriya",
-        googleMapsLink: null,
-        status: "IN_REVIEW",
-        createdAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
-        attachments: [],
-      },
-    ],
+    orders: [],
+    rfqs: [],
     feedbacks: normalizeCustomerFeedbackList(DEFAULT_CUSTOMER_FEEDBACKS).map((fb, idx) => ({
       ...fb,
       Feed_backId: fb.Feed_backId || idx + 1,
     })),
     chatbotFaqs: DEFAULT_CHATBOT_FAQS.map((f) => ({ ...f })),
     relatedPortals: normalizeRelatedPortals(RELATED_PORTALS),
-    notifications: [
-      {
-        id: "notif-1",
-        NotificationsID: "notif-1",
-        Notifications_Title: "New Project Inquiry",
-        Notifications_Body:
-          "Zenith Capital requested a custom quotation for high-span sliding doors.",
-        Date_Timestamp: now.toISOString(),
-        isRead: false,
-      },
-      {
-        id: "notif-2",
-        NotificationsID: "notif-2",
-        Notifications_Title: "Design Approved",
-        Notifications_Body: "Casement suite specifications were approved for production line.",
-        Date_Timestamp: now.toISOString(),
-        isRead: false,
-      },
-    ],
+    notifications: [],
     cmsDocs: new Map<string, Record<string, unknown>>(),
   };
 
   store.nextFeedbackId =
     store.feedbacks.reduce((max, fb) => Math.max(max, Number(fb.Feed_backId || 0)), 0) + 1;
-
-  const firstDate = getLocalIsoDateOffset(2, now);
-  const secondDate = getLocalIsoDateOffset(5, now);
-  store.appointmentDates[firstDate] = {
-    date: firstDate,
-    available: true,
-    note: "Standard showroom & measurement window",
-    isCustom: false,
-  };
-  store.appointmentDates[secondDate] = {
-    date: secondDate,
-    available: true,
-    note: "On-site laser measurement & structural inspection",
-    isCustom: false,
-  };
-  store.appointments.push(
-    {
-      id: "SV-2041",
-      date: firstDate,
-      slotTime: "11:00",
-      slotLabel: "11:00 AM",
-      locationName: "Nawala Showroom & Consultation",
-      visitorName: "Duminda Perera",
-      visitorEmail: "duminda@zenithcapital.lk",
-      visitorPhone: "+94 77 455 1200",
-      notes: "Slim sliding door frame measurement check.",
-      status: "CONFIRMED",
-      calendarEventId: "",
-      emailSent: false,
-      createdAt: now.toISOString(),
-    },
-    {
-      id: "SV-2042",
-      date: secondDate,
-      slotTime: "14:00",
-      slotLabel: "02:00 PM",
-      locationName: "Colombo 07 Penthouse Site Inspection",
-      visitorName: "Duminda Perera",
-      visitorEmail: "duminda@zenithcapital.lk",
-      visitorPhone: "+94 77 455 1200",
-      notes: "Cantilever terrace laser plumb & wind-load survey.",
-      status: "CONFIRMED",
-      calendarEventId: "",
-      emailSent: false,
-      createdAt: now.toISOString(),
-    }
-  );
 
   const defaultSiteSettings = normalizeSiteContactSettings({
     phone: process.env.VITE_CONTACT_PHONE || DEFAULT_SITE_CONTACT_SETTINGS.phone,
@@ -632,7 +447,6 @@ function createInitialStore(): MemoryStoreState {
     locations: CONTACT_LOCATIONS,
   });
 
-  // Populate initial media assets from categories, products, projects, and blogs
   const seenUrls = new Set<string>();
   const seedAsset = (url: string, title: string, scope: string) => {
     const clean = (url || "").trim();
@@ -650,7 +464,7 @@ function createInitialStore(): MemoryStoreState {
       fileSizeBytes: null,
       altText: title,
       entityScope: scope,
-      uploadedByUserId: 1,
+      uploadedByUserId: null,
       createdAt: now,
     });
   };

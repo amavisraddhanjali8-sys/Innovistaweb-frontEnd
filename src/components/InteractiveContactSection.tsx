@@ -144,19 +144,19 @@ export default function InteractiveContactSection({
   const messageError = visibleError("message");
 
   const inputBaseClass =
-    "w-full px-4 py-3 rounded-xl border text-sm text-[#14171A] bg-[#FEF6F0] placeholder:text-[#8E8A87] focus:bg-white focus:outline-none transition-colors";
+    "w-full min-h-[44px] px-4 py-3 rounded-xl border text-base sm:text-sm text-[#14171A] bg-[#FEF6F0] placeholder:text-[#8E8A87] focus:bg-white focus:outline-none transition-colors";
 
   return (
     <MotionConfig reducedMotion="user">
       <div
         data-testid={`interactive-contact-${variant}`}
-        className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-12 sm:py-16"
+        className="w-full max-w-[1640px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-10 sm:py-16"
       >
         {/* Centered Header Inspired Directly by Screenshot 1 */}
-        <div className="text-center max-w-2xl mx-auto mb-10 sm:mb-12">
+        <div className="text-center max-w-2xl mx-auto mb-8 sm:mb-12">
           <h2
             style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
-            className="text-[32px] sm:text-[42px] font-extrabold tracking-tight leading-tight text-[#14171A] m-0"
+            className="text-[30px] sm:text-[42px] font-extrabold tracking-tight leading-tight text-[#14171A] m-0"
           >
             Get In{" "}
             <span className="bg-gradient-to-r from-[#F59E0B] via-[#EA580C] to-[#F97316] bg-clip-text text-transparent">
@@ -174,7 +174,7 @@ export default function InteractiveContactSection({
           <div className="lg:col-span-6 space-y-4">
             <Suspense
               fallback={
-                <div className="w-full h-[340px] sm:h-[395px] flex items-center justify-center rounded-2xl bg-sky-50/40" />
+                <div className="w-full h-[320px] sm:h-[395px] flex items-center justify-center rounded-2xl bg-sky-50/40" />
               }
             >
               <Contact3DCharacterStage pose={pose} onChangePose={setPose} />
@@ -191,10 +191,9 @@ export default function InteractiveContactSection({
 
           {/* Right Column: Elevated Floating White Card Matching Screenshot 1 */}
           <div className="lg:col-span-6">
-            <div className="rounded-[28px] bg-white border border-slate-200/90 p-6 sm:p-8 shadow-[0_20px_54px_-22px_rgba(34,87,122,0.22)]">
+            <div className="rounded-[24px] sm:rounded-[28px] bg-white border border-slate-200/90 p-4 sm:p-8 shadow-[0_20px_54px_-22px_rgba(34,87,122,0.22)]">
               {/* Interactive Intent Toggling Bar */}
               <div className="mb-5">
-
                 <div
                   role="tablist"
                   aria-label="Inquiry mode"
@@ -209,7 +208,7 @@ export default function InteractiveContactSection({
                         role="tab"
                         aria-selected={active}
                         onClick={() => handleIntentToggle(option.id)}
-                        className={`relative py-2 px-1.5 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer transition-all border-0 ${
+                        className={`relative min-h-[44px] sm:min-h-0 py-2.5 sm:py-2 px-1 sm:px-3 rounded-xl text-[11px] sm:text-xs font-bold whitespace-nowrap cursor-pointer transition-all border-0 ${
                           active
                             ? "bg-gradient-to-r from-[#22577A] to-[#3393B8] text-white shadow-xs"
                             : "text-[#5F6672] hover:text-[#14171A] bg-transparent"

@@ -1,9 +1,10 @@
 import styles from "../cssModules/ServiceComponet.module.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import { FaArrowLeft, FaArrowRight } from "react-icons/fa";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 
 export type Service = {
   id?: string;
@@ -29,6 +30,7 @@ function ServiceComponent({
   const imageRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const textContainerRef = useRef<HTMLDivElement>(null);
+  const swipeStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const safeIndex = items.length > 0 ? index % items.length : 0;
 
@@ -127,8 +129,38 @@ function ServiceComponent({
     return null;
   }
 
+  const handleTouchStart = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    swipeStartRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e: ReactTouchEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    const touch = e.changedTouches[0];
+    if (!start || !touch || items.length <= 1) return;
+    const dir = detectHorizontalSwipe(
+      start.x,
+      start.y,
+      touch.clientX,
+      touch.clientY,
+      Date.now() - start.t
+    );
+    if (dir === "left") {
+      setIndex((prevIndex) => (prevIndex + 1) % items.length);
+    } else if (dir === "right") {
+      setIndex((prevIndex) => (prevIndex - 1 + items.length) % items.length);
+    }
+  };
+
   return (
-    <div className={styles.container} ref={contentRef}>
+    <div
+      className={styles.container}
+      ref={contentRef}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className={styles.imageContainer} ref={imageRef}>
         {displayItems.map((item, i) => (
           <img

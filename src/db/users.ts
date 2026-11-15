@@ -1,15 +1,17 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, or, sql } from "drizzle-orm";
 import { db, markDatabaseOffline, isMemoryFallbackActive } from "./index.ts";
-import { getMemoryStore } from "./memoryStore.ts";
+import { getMemoryStore, type MemoryUserRecord } from "./memoryStore.ts";
 import { users } from "./schema.ts";
 
 export interface UpsertUserOptions {
   name?: string;
+  username?: string;
   role?: "admin" | "staff" | "customer";
   avatarUrl?: string;
   phone?: string;
   company?: string;
   isVerified?: boolean;
+  emailVerified?: boolean;
 }
 
 function getOrCreateUserInMemory(
@@ -19,28 +21,45 @@ function getOrCreateUserInMemory(
 ) {
   const store = getMemoryStore();
   const cleanEmail = email.trim().toLowerCase();
-  const existing = store.users.find((u) => u.email.toLowerCase() === cleanEmail || u.uid === uid);
+  const existing = store.users.find(
+    (u) => u.email.toLowerCase() === cleanEmail || u.uid === uid
+  );
   const now = new Date();
   if (existing) {
     existing.uid = uid;
     existing.name = options.name?.trim() || existing.name;
     existing.avatarUrl = options.avatarUrl || existing.avatarUrl;
+    if (options.emailVerified !== undefined) {
+      existing.emailVerified = options.emailVerified;
+    }
     existing.updatedAt = now;
     return existing;
   }
   const defaultName =
     options.name?.trim() || cleanEmail.split("@")[0] || "Innovista User";
-  const created = {
+  const created: MemoryUserRecord = {
     id: store.nextUserId++,
     uid,
+    username: options.username?.trim().toLowerCase() || null,
     email: cleanEmail,
     name: defaultName,
     role: options.role || "customer",
     phone: options.phone || "",
     company: options.company || "",
     passwordHash: null,
-    avatarUrl: options.avatarUrl || "/assets/logos/client-zenith.svg",
-    isVerified: options.isVerified ?? true,
+    avatarUrl: options.avatarUrl || "",
+    isVerified: options.isVerified ?? false,
+    emailVerified: options.emailVerified ?? false,
+    accountStatus: "ACTIVE",
+    emailVerificationTokenHash: null,
+    emailVerificationCodeHash: null,
+    emailVerificationExpiresAt: null,
+    totpSecretEncrypted: null,
+    totpEnabled: false,
+    failedLoginAttempts: 0,
+    lockedUntil: null,
+    lastLoginAt: now,
+    lastLoginIp: "",
     isActive: true,
     purchaseGoods: [],
     createdAt: now,
@@ -74,6 +93,7 @@ export async function getOrCreateUser(
           uid,
           name: options.name?.trim() || current.name,
           avatarUrl: options.avatarUrl || current.avatarUrl,
+          ...(options.emailVerified ? { emailVerified: true } : {}),
           updatedAt: new Date(),
         })
         .where(eq(users.id, current.id))
@@ -82,21 +102,22 @@ export async function getOrCreateUser(
     }
 
     const defaultName =
-      options.name?.trim() ||
-      cleanEmail.split("@")[0] ||
-      "Innovista User";
+      options.name?.trim() || cleanEmail.split("@")[0] || "Innovista User";
 
     const result = await db
       .insert(users)
       .values({
         uid,
+        username: options.username?.trim().toLowerCase() || null,
         email: cleanEmail,
         name: defaultName,
         role: options.role || "customer",
         phone: options.phone || "",
         company: options.company || "",
-        avatarUrl: options.avatarUrl || "/assets/logos/client-zenith.svg",
-        isVerified: options.isVerified ?? true,
+        avatarUrl: options.avatarUrl || "",
+        isVerified: options.isVerified ?? false,
+        emailVerified: options.emailVerified ?? false,
+        accountStatus: "ACTIVE",
         isActive: true,
         purchaseGoods: [],
       })
@@ -171,6 +192,7 @@ export async function getCustomerUsers() {
 
 export async function findUserByEmail(email: string) {
   const cleanEmail = email.trim().toLowerCase();
+  if (!cleanEmail) return null;
   if (isMemoryFallbackActive()) {
     return getMemoryStore().users.find((u) => u.email.toLowerCase() === cleanEmail) || null;
   }
@@ -185,4 +207,70 @@ export async function findUserByEmail(email: string) {
     markDatabaseOffline(error);
     return getMemoryStore().users.find((u) => u.email.toLowerCase() === cleanEmail) || null;
   }
+}
+
+export async function findUserById(id: number) {
+  if (!Number.isFinite(id)) return null;
+  if (isMemoryFallbackActive()) {
+    return getMemoryStore().users.find((u) => u.id === id) || null;
+  }
+  try {
+    const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return rows[0] || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return getMemoryStore().users.find((u) => u.id === id) || null;
+  }
+}
+
+export async function findUserByIdentifier(identifier: string) {
+  const raw = String(identifier || "").trim();
+  if (!raw) return null;
+  const clean = raw.toLowerCase();
+  const numericId = /^\d+$/.test(clean) ? Number(clean) : null;
+
+  if (isMemoryFallbackActive()) {
+    return (
+      getMemoryStore().users.find(
+        (u) =>
+          u.email.toLowerCase() === clean ||
+          (u.username && u.username.toLowerCase() === clean) ||
+          u.uid.toLowerCase() === clean ||
+          (numericId !== null && u.id === numericId)
+      ) || null
+    );
+  }
+
+  try {
+    const conditions = [
+      sql`lower(${users.email}) = ${clean}`,
+      sql`lower(coalesce(${users.username}, '')) = ${clean}`,
+      sql`lower(${users.uid}) = ${clean}`,
+    ];
+    if (numericId !== null) {
+      conditions.push(eq(users.id, numericId));
+    }
+    const rows = await db
+      .select()
+      .from(users)
+      .where(or(...conditions))
+      .limit(1);
+    return rows[0] || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return (
+      getMemoryStore().users.find(
+        (u) =>
+          u.email.toLowerCase() === clean ||
+          (u.username && u.username.toLowerCase() === clean) ||
+          u.uid.toLowerCase() === clean ||
+          (numericId !== null && u.id === numericId)
+      ) || null
+    );
+  }
+}
+
+export async function hasAnyAdminUser(): Promise<boolean> {
+  const admins = await getAdminAndStaffUsers();
+  return admins.length > 0;
 }

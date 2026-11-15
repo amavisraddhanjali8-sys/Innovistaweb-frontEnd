@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type TouchEvent as ReactTouchEvent } from "react";
 import { MotionConfig, motion } from "framer-motion";
 import { FiCheck, FiChevronLeft, FiChevronRight, FiMail } from "react-icons/fi";
 import AboutTaglineHeading from "./AboutTaglineHeading";
 import AccessoryCardShuffleDeck from "./AccessoryCardShuffleDeck";
 import LogoLoop, { type LogoLoopItem } from "./LogoLoop";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 import {
   clampRibbonSpeed,
   clampSlideshowSpeedMs,
@@ -52,6 +53,7 @@ export default function ProductAccessoriesShowcase({
   const [activeAccIdx, setActiveAccIdx] = useState(0);
   const [selectedVariantIdx, setSelectedVariantIdx] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const stageTouchRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const safeAccIdx =
     safeAccessories.length === 0 || activeAccIdx >= safeAccessories.length
@@ -139,11 +141,11 @@ export default function ProductAccessoriesShowcase({
           {/* 1. Interactive Auto-Advancing Accessories Slideshow */}
           <div className="rounded-2xl bg-white border border-slate-200/85 shadow-[0_18px_46px_-26px_rgba(34,87,122,0.22)] overflow-hidden">
             {/* Top Accessory Group Selector Tabs */}
-            <div className="px-4 sm:px-6 py-3 bg-[#F8FAFC] border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+            <div className="px-4 sm:px-6 py-3 bg-[#F8FAFC] border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div
                 role="tablist"
                 aria-label="Product accessory groups"
-                className="flex flex-wrap items-center gap-1.5"
+                className="flex flex-nowrap sm:flex-wrap items-center gap-1.5 overflow-x-auto no-scrollbar pb-0.5 sm:pb-0"
               >
                 {safeAccessories.map((acc, idx) => {
                   const isCurrent = idx === safeAccIdx;
@@ -154,7 +156,7 @@ export default function ProductAccessoriesShowcase({
                       role="tab"
                       aria-selected={isCurrent}
                       onClick={() => setActiveAccIdx(idx)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap border ${
+                      className={`min-h-[40px] sm:min-h-0 px-3.5 py-2 sm:py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
                         isCurrent
                           ? "bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white border-transparent shadow-sm"
                           : "bg-white text-slate-700 border-slate-200 hover:border-[#3393B8] hover:text-[#22577A]"
@@ -176,7 +178,7 @@ export default function ProductAccessoriesShowcase({
               </div>
 
               {safeAccessories.length > 1 && (
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div className="flex items-center justify-end gap-1.5 shrink-0">
                   <span className="text-[11px] font-semibold text-slate-500 tabular-nums mr-1">
                     0{safeAccIdx + 1} / 0{safeAccessories.length}
                   </span>
@@ -184,7 +186,7 @@ export default function ProductAccessoriesShowcase({
                     type="button"
                     aria-label="Previous accessory group"
                     onClick={handlePrevAcc}
-                    className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:border-[#22577A] text-slate-600 hover:text-[#22577A] flex items-center justify-center cursor-pointer transition-colors"
+                    className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg border border-slate-200 bg-white hover:border-[#22577A] text-slate-600 hover:text-[#22577A] flex items-center justify-center cursor-pointer transition-colors"
                   >
                     <FiChevronLeft className="text-sm" />
                   </button>
@@ -192,7 +194,7 @@ export default function ProductAccessoriesShowcase({
                     type="button"
                     aria-label="Next accessory group"
                     onClick={handleNextAcc}
-                    className="w-8 h-8 rounded-lg border border-slate-200 bg-white hover:border-[#22577A] text-slate-600 hover:text-[#22577A] flex items-center justify-center cursor-pointer transition-colors"
+                    className="w-10 h-10 sm:w-8 sm:h-8 rounded-lg border border-slate-200 bg-white hover:border-[#22577A] text-slate-600 hover:text-[#22577A] flex items-center justify-center cursor-pointer transition-colors"
                   >
                     <FiChevronRight className="text-sm" />
                   </button>
@@ -201,7 +203,28 @@ export default function ProductAccessoriesShowcase({
             </div>
 
             {/* Active Accessory Card Shuffle Stage + Multiple Variants Selector */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 p-5 sm:p-8 items-center">
+            <div
+              onTouchStart={(e: ReactTouchEvent<HTMLDivElement>) => {
+                const t = e.changedTouches[0];
+                if (t) stageTouchRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+              }}
+              onTouchEnd={(e: ReactTouchEvent<HTMLDivElement>) => {
+                const start = stageTouchRef.current;
+                stageTouchRef.current = null;
+                const t = e.changedTouches[0];
+                if (!start || !t || safeAccessories.length <= 1) return;
+                const dir = detectHorizontalSwipe(
+                  start.x,
+                  start.y,
+                  t.clientX,
+                  t.clientY,
+                  Date.now() - start.t
+                );
+                if (dir === "left") handleNextAcc();
+                else if (dir === "right") handlePrevAcc();
+              }}
+              className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 p-4 sm:p-8 items-center touch-pan-y"
+            >
               {/* Featured Card-Shuffle Deck Stage */}
               <div className="lg:col-span-5">
                 <AccessoryCardShuffleDeck

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, type TouchEvent as ReactTouchEvent } from "react";
 import { Link } from "react-router-dom";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
@@ -10,6 +10,7 @@ import {
   getPrevSlideIndex,
   type HeroSlide,
 } from "../utils/aboutContentHelpers";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 
 interface ShowcaseHeroSlideshowProps {
   slides: HeroSlide[];
@@ -40,6 +41,7 @@ export default function ShowcaseHeroSlideshow({
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number; t: number } | null>(null);
 
   const safeIndex =
     activeSlides.length === 0 || currentIndex >= activeSlides.length
@@ -78,6 +80,28 @@ export default function ShowcaseHeroSlideshow({
 
   if (!currentSlide) return null;
 
+  const handleTouchStart = (e: ReactTouchEvent<HTMLElement>) => {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY, t: Date.now() };
+  };
+
+  const handleTouchEnd = (e: ReactTouchEvent<HTMLElement>) => {
+    const start = touchStartRef.current;
+    touchStartRef.current = null;
+    const touch = e.changedTouches[0];
+    if (!start || !touch || activeSlides.length <= 1) return;
+    const dir = detectHorizontalSwipe(
+      start.x,
+      start.y,
+      touch.clientX,
+      touch.clientY,
+      Date.now() - start.t
+    );
+    if (dir === "left") handleNext();
+    else if (dir === "right") handlePrev();
+  };
+
   return (
     <MotionConfig reducedMotion="user">
       <section
@@ -88,7 +112,9 @@ export default function ShowcaseHeroSlideshow({
         onMouseLeave={() => setIsPaused(false)}
         onFocusCapture={() => setIsPaused(true)}
         onBlurCapture={() => setIsPaused(false)}
-        className="relative w-full overflow-hidden bg-gradient-to-b from-[#3393B8] via-[#5CB6D2] to-white pt-8 sm:pt-11 pb-0"
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        className="relative w-full overflow-hidden bg-gradient-to-b from-[#3393B8] via-[#5CB6D2] to-white pt-8 sm:pt-11 pb-0 touch-pan-y"
       >
         {/* Top Utility Strip (Back link on Category pages / Admin Quick Edit) */}
         {(backLink || (user?.role === "admin" && adminManageTo)) && (

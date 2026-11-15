@@ -85,15 +85,16 @@ function Milestones() {
       cardsRef.current.forEach((card, index) => {
         if (!card) return;
         const isLeft = index % 2 === 0;
+        const isCompact = typeof window !== "undefined" && window.innerWidth <= 768;
 
         gsap.fromTo(
           card,
           {
             opacity: 0,
-            x: isLeft ? -150 : 150,
-            y: 40,
-            scale: 0.85,
-            rotateY: isLeft ? -8 : 8,
+            x: isCompact ? 0 : isLeft ? -120 : 120,
+            y: isCompact ? 28 : 40,
+            scale: isCompact ? 0.96 : 0.85,
+            rotateY: isCompact ? 0 : isLeft ? -8 : 8,
           },
           {
             opacity: 1,
@@ -101,7 +102,7 @@ function Milestones() {
             y: 0,
             scale: 1,
             rotateY: 0,
-            duration: 1,
+            duration: isCompact ? 0.7 : 1,
             ease: "power3.out",
             scrollTrigger: {
               trigger: card,

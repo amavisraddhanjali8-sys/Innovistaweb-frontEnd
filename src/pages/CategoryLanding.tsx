@@ -228,7 +228,7 @@ export default function CategoryLanding() {
           </div>
 
           {/* Instant Category Switcher Strip */}
-          <div className="pt-3 border-t border-slate-200/80 flex items-center gap-1.5 overflow-x-auto pb-1">
+          <div className="pt-3 border-t border-slate-200/80 flex items-center gap-2 overflow-x-auto no-scrollbar snap-x pb-1">
             {categories.map((cat) => {
               const isCurrent = cat.CategoryID === activeCategory.CategoryID;
               return (
@@ -236,7 +236,7 @@ export default function CategoryLanding() {
                   key={cat.CategoryID}
                   type="button"
                   onClick={() => navigate(`/products/category/${cat.slug}`)}
-                  className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
+                  className={`snap-start min-h-[40px] px-3.5 py-2 rounded-lg text-xs font-semibold border transition-all cursor-pointer whitespace-nowrap shrink-0 ${
                     isCurrent
                       ? "bg-gradient-to-r from-[#22577A] via-[#3393B8] to-[#5CB6D2] text-white border-transparent shadow-xs"
                       : "bg-white text-slate-700 border-slate-200 hover:border-[#3393B8] hover:text-[#22577A]"

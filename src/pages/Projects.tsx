@@ -415,7 +415,7 @@ function Projects() {
                           <button
                             type="button"
                             onClick={() => openPreview(project, 0)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold text-[#14171A] hover:text-[#22577A] transition-colors cursor-pointer"
+                            className="flex-1 min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold text-[#14171A] hover:text-[#22577A] transition-colors cursor-pointer"
                           >
                             <FiImage className="text-xs" />
                             <span>View Photos</span>
@@ -426,7 +426,7 @@ function Projects() {
                             onClick={() =>
                               handleRequestQuote(project.Project_Title)
                             }
-                            className="request-quote-fx flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-all cursor-pointer"
+                            className="request-quote-fx flex-1 min-h-[44px] sm:min-h-0 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl text-white text-xs font-semibold transition-all cursor-pointer"
                           >
                             <FiSend className="relative z-10 text-xs" />
                             <span className="relative z-10">Request Quote</span>
@@ -440,11 +440,12 @@ function Projects() {
 
               {/* Pagination */}
               {filteredProjects.length > pageSize && (
-                <div className="flex justify-center mt-10">
+                <div className="flex justify-center mt-10 overflow-x-auto pb-1">
                   <Pagination
                     current={currentPage}
                     pageSize={pageSize}
                     total={filteredProjects.length}
+                    responsive
                     showSizeChanger
                     pageSizeOptions={["6", "9", "12"]}
                     onChange={(page, limit) => {

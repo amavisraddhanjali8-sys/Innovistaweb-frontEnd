@@ -242,7 +242,7 @@ function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
           })}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
           <Input
             allowClear
             size="middle"
@@ -250,7 +250,7 @@ function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
             placeholder="Search orders..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: 210 }}
+            className="w-full sm:w-[210px]"
           />
           <XlfileGenerate orders={filteredOrders} />
         </div>
@@ -267,6 +267,7 @@ function ViewAllorder({ onMetricsChange, onStatusUpdated }: ViewAllorderProps) {
           current: currentPage,
           pageSize: pageSize,
           total: total,
+          responsive: true,
           showSizeChanger: true,
           pageSizeOptions: ["5", "10", "20", "50"],
           onChange: (page, limit) => {

@@ -139,6 +139,7 @@ export function listUsersByRolesMem(roles?: string[]) {
 
 export function createUserAccountMem(payload: {
   uid?: string;
+  username?: string | null;
   name: string;
   email: string;
   phone?: string;
@@ -147,6 +148,13 @@ export function createUserAccountMem(payload: {
   passwordHash?: string;
   avatarUrl?: string;
   isVerified?: boolean;
+  emailVerified?: boolean;
+  accountStatus?: string;
+  emailVerificationTokenHash?: string | null;
+  emailVerificationCodeHash?: string | null;
+  emailVerificationExpiresAt?: Date | null;
+  totpSecretEncrypted?: string | null;
+  totpEnabled?: boolean;
   purchaseGoods?: string[];
 }) {
   const store = getMemoryStore();
@@ -154,15 +162,27 @@ export function createUserAccountMem(payload: {
   const created = {
     id: store.nextUserId++,
     uid: payload.uid || `${payload.role || "customer"}-${Date.now()}`,
+    username: payload.username ? payload.username.trim().toLowerCase() : null,
     name: payload.name.trim(),
     email: payload.email.trim().toLowerCase(),
     phone: payload.phone || "",
     company: payload.company || "",
     role: payload.role || "customer",
     passwordHash: payload.passwordHash || "",
-    avatarUrl: payload.avatarUrl || "/assets/about/director.jpg",
-    isVerified: payload.isVerified ?? payload.role !== "customer",
-    isActive: true,
+    avatarUrl: payload.avatarUrl || "",
+    isVerified: payload.isVerified ?? false,
+    emailVerified: payload.emailVerified ?? false,
+    accountStatus: payload.accountStatus || "ACTIVE",
+    emailVerificationTokenHash: payload.emailVerificationTokenHash ?? null,
+    emailVerificationCodeHash: payload.emailVerificationCodeHash ?? null,
+    emailVerificationExpiresAt: payload.emailVerificationExpiresAt ?? null,
+    totpSecretEncrypted: payload.totpSecretEncrypted ?? null,
+    totpEnabled: payload.totpEnabled ?? false,
+    failedLoginAttempts: 0,
+    lockedUntil: null,
+    lastLoginAt: null,
+    lastLoginIp: "",
+    isActive: (payload.accountStatus || "ACTIVE") !== "SUSPENDED",
     purchaseGoods: payload.purchaseGoods || [],
     createdAt: now,
     updatedAt: now,
@@ -174,13 +194,26 @@ export function createUserAccountMem(payload: {
 export function updateUserAccountMem(
   id: number,
   patch: Partial<{
+    username: string | null;
     name: string;
     email: string;
     phone: string;
     company: string;
     role: string;
+    passwordHash: string;
     avatarUrl: string;
     isVerified: boolean;
+    emailVerified: boolean;
+    accountStatus: string;
+    emailVerificationTokenHash: string | null;
+    emailVerificationCodeHash: string | null;
+    emailVerificationExpiresAt: Date | null;
+    totpSecretEncrypted: string | null;
+    totpEnabled: boolean;
+    failedLoginAttempts: number;
+    lockedUntil: Date | null;
+    lastLoginAt: Date | null;
+    lastLoginIp: string;
     isActive: boolean;
     purchaseGoods: string[];
   }>
@@ -188,13 +221,32 @@ export function updateUserAccountMem(
   const store = getMemoryStore();
   const user = store.users.find((u) => u.id === id);
   if (!user) return null;
+  if (patch.username !== undefined) user.username = patch.username ? patch.username.trim().toLowerCase() : null;
   if (patch.name !== undefined) user.name = patch.name;
   if (patch.email !== undefined) user.email = patch.email.trim().toLowerCase();
   if (patch.phone !== undefined) user.phone = patch.phone;
   if (patch.company !== undefined) user.company = patch.company;
   if (patch.role !== undefined) user.role = patch.role;
+  if (patch.passwordHash !== undefined) user.passwordHash = patch.passwordHash;
   if (patch.avatarUrl !== undefined) user.avatarUrl = patch.avatarUrl;
   if (patch.isVerified !== undefined) user.isVerified = patch.isVerified;
+  if (patch.emailVerified !== undefined) user.emailVerified = patch.emailVerified;
+  if (patch.accountStatus !== undefined) {
+    user.accountStatus = patch.accountStatus;
+    user.isActive = patch.accountStatus !== "SUSPENDED";
+  }
+  if (patch.emailVerificationTokenHash !== undefined)
+    user.emailVerificationTokenHash = patch.emailVerificationTokenHash;
+  if (patch.emailVerificationCodeHash !== undefined)
+    user.emailVerificationCodeHash = patch.emailVerificationCodeHash;
+  if (patch.emailVerificationExpiresAt !== undefined)
+    user.emailVerificationExpiresAt = patch.emailVerificationExpiresAt;
+  if (patch.totpSecretEncrypted !== undefined) user.totpSecretEncrypted = patch.totpSecretEncrypted;
+  if (patch.totpEnabled !== undefined) user.totpEnabled = patch.totpEnabled;
+  if (patch.failedLoginAttempts !== undefined) user.failedLoginAttempts = patch.failedLoginAttempts;
+  if (patch.lockedUntil !== undefined) user.lockedUntil = patch.lockedUntil;
+  if (patch.lastLoginAt !== undefined) user.lastLoginAt = patch.lastLoginAt;
+  if (patch.lastLoginIp !== undefined) user.lastLoginIp = patch.lastLoginIp;
   if (patch.isActive !== undefined) user.isActive = patch.isActive;
   if (patch.purchaseGoods !== undefined) user.purchaseGoods = patch.purchaseGoods;
   user.updatedAt = new Date();
@@ -986,4 +1038,121 @@ export function resetSeedDataCheckMem() {
     blogPosts: store.blogPosts.length,
     mediaAssets: store.mediaAssets.length,
   };
+}
+
+// ============================================================================
+// SECURITY CHALLENGES & AUDIT LOGS (Memory Fallback)
+// ============================================================================
+export function createSecurityChallengeMem(input: {
+  challengeId: string;
+  purpose: string;
+  userId?: number | null;
+  identifier?: string;
+  answerHash: string;
+  maxAttempts?: number;
+  expiresAt: Date;
+}) {
+  const store = getMemoryStore();
+  const created = {
+    id: store.nextChallengeId++,
+    challengeId: input.challengeId,
+    purpose: input.purpose,
+    userId: input.userId ?? null,
+    identifier: input.identifier || "",
+    answerHash: input.answerHash,
+    attempts: 0,
+    maxAttempts: input.maxAttempts ?? 5,
+    consumed: false,
+    expiresAt: input.expiresAt,
+    createdAt: new Date(),
+  };
+  store.securityChallenges.push(created);
+  return created;
+}
+
+export function getSecurityChallengeMem(challengeId: string) {
+  const store = getMemoryStore();
+  return store.securityChallenges.find((c) => c.challengeId === challengeId) || null;
+}
+
+export function incrementChallengeAttemptsMem(challengeId: string) {
+  const store = getMemoryStore();
+  const found = store.securityChallenges.find((c) => c.challengeId === challengeId);
+  if (!found) return null;
+  found.attempts += 1;
+  return found;
+}
+
+export function markChallengeConsumedMem(challengeId: string) {
+  const store = getMemoryStore();
+  const found = store.securityChallenges.find((c) => c.challengeId === challengeId);
+  if (!found) return null;
+  found.consumed = true;
+  return found;
+}
+
+export function createAuditLogMem(input: {
+  eventId: string;
+  actorUserId?: number | null;
+  actorEmail?: string;
+  actorRole?: string;
+  targetUserId?: number | null;
+  targetIdentifier?: string;
+  action: string;
+  category: string;
+  status: string;
+  severity: string;
+  accountClassification?: string;
+  ipAddress?: string;
+  userAgent?: string;
+  details?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  const store = getMemoryStore();
+  const record = {
+    id: store.nextAuditLogId++,
+    eventId: input.eventId,
+    actorUserId: input.actorUserId ?? null,
+    actorEmail: input.actorEmail || "",
+    actorRole: input.actorRole || "anonymous",
+    targetUserId: input.targetUserId ?? null,
+    targetIdentifier: input.targetIdentifier || "",
+    action: input.action,
+    category: input.category,
+    status: input.status,
+    severity: input.severity,
+    accountClassification: input.accountClassification || "",
+    ipAddress: input.ipAddress || "",
+    userAgent: input.userAgent || "",
+    details: input.details || "",
+    metadata: input.metadata || {},
+    createdAt: new Date(),
+  };
+  store.auditLogs.unshift(record);
+  return record;
+}
+
+export function listAuditLogsMem(filters?: {
+  category?: string;
+  status?: string;
+  severity?: string;
+  action?: string;
+  search?: string;
+  limit?: number;
+}) {
+  const store = getMemoryStore();
+  const q = (filters?.search || "").trim().toLowerCase();
+  const filtered = store.auditLogs.filter((row) => {
+    if (filters?.category && row.category.toUpperCase() !== filters.category.toUpperCase()) return false;
+    if (filters?.status && row.status.toUpperCase() !== filters.status.toUpperCase()) return false;
+    if (filters?.severity && row.severity.toUpperCase() !== filters.severity.toUpperCase()) return false;
+    if (filters?.action && !row.action.toLowerCase().includes(filters.action.toLowerCase())) return false;
+    if (q) {
+      const hay = `${row.eventId} ${row.action} ${row.actorEmail || ""} ${row.targetIdentifier || ""} ${row.details || ""} ${row.ipAddress || ""} ${row.accountClassification || ""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  const limit = filters?.limit && filters.limit > 0 ? filters.limit : 500;
+  return filtered.slice(0, limit);
 }

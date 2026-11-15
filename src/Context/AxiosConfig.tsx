@@ -125,17 +125,24 @@ AxiosConfig.interceptors.response.use(
         localStorage.getItem("refreshToken");
 
       if (!refreshToken) {
-        window.location.hash = "#/admin-login";
+        isRefreshing = false;
+        const hashPath = window.location.hash.replace(/^#/, "").split("?")[0].toLowerCase();
+        if (hashPath.startsWith("/admin") || hashPath === "/customermanager" || hashPath === "/ordermanageadmin") {
+          window.location.hash = "#/admin-login";
+        } else if (hashPath === "/profile") {
+          window.location.hash = "#/profile-login";
+        }
         return Promise.reject(error);
       }
 
       try {
-        const response = await axios.get(
-          `/auth/refresh?refreshToken=${encodeURIComponent(refreshToken)}`
-        );
+        const response = await axios.post("/api/auth/refresh", { refreshToken });
 
         const newAccessToken = response.data.accessToken;
         sessionStorage.setItem("accessToken", newAccessToken);
+        if (response.data.refreshToken) {
+          sessionStorage.setItem("refreshToken", response.data.refreshToken);
+        }
 
         AxiosConfig.defaults.headers.common.Authorization = `Bearer ${newAccessToken}`;
         processQueue(null, newAccessToken);
@@ -145,7 +152,11 @@ AxiosConfig.interceptors.response.use(
         processQueue(err, null);
         sessionStorage.clear();
         localStorage.removeItem("refreshToken");
-        window.location.hash = "#/admin-login";
+        const hashPath = window.location.hash.replace(/^#/, "").split("?")[0].toLowerCase();
+        window.location.hash =
+          hashPath.startsWith("/admin") || hashPath === "/customermanager"
+            ? "#/admin-login"
+            : "#/profile-login";
         return Promise.reject(err);
       } finally {
         isRefreshing = false;

@@ -263,7 +263,7 @@ export default function HomeSearchBar() {
                 setHighlightedIdx(-1);
                 setDropdownOpen(true);
               }}
-              className="w-full sm:w-[175px] h-10 px-3 rounded-xl bg-slate-50 sm:bg-transparent text-xs sm:text-sm font-semibold text-slate-700 border border-slate-200/70 sm:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22577A]/40 cursor-pointer"
+              className="w-full sm:w-[175px] h-11 sm:h-10 px-3 rounded-xl bg-slate-50 sm:bg-transparent text-base sm:text-sm font-semibold text-slate-700 border border-slate-200/70 sm:border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#22577A]/40 cursor-pointer"
             >
               <option value="all">All Categories</option>
               {categories.map((cat) => (
@@ -298,8 +298,8 @@ export default function HomeSearchBar() {
                   : undefined
               }
               aria-autocomplete="list"
-              placeholder="Search products or architectural solutions (e.g. sliding doors, windows, louvers)..."
-              className="w-full h-10 pl-2.5 pr-8 bg-transparent text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 border-0 focus:outline-none"
+              placeholder="Search products or architectural solutions..."
+              className="w-full h-11 sm:h-10 pl-2.5 pr-9 bg-transparent text-base sm:text-sm text-slate-900 placeholder:text-slate-400 border-0 focus:outline-none"
             />
             {query && (
               <button
@@ -310,7 +310,7 @@ export default function HomeSearchBar() {
                   setHighlightedIdx(-1);
                   inputRef.current?.focus();
                 }}
-                className="absolute right-2 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+                className="absolute right-1.5 w-8 h-8 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
               >
                 <FiX className="text-sm" />
               </button>
@@ -323,7 +323,7 @@ export default function HomeSearchBar() {
             tone="azure"
             size="sm"
             icon={<FiSearch className="text-sm" />}
-            className="h-10 px-5"
+            className="h-11 sm:h-10 px-5"
           >
             Search
           </TactileActionButton>
@@ -335,7 +335,7 @@ export default function HomeSearchBar() {
             id="home-search-listbox"
             role="listbox"
             aria-label="Search suggestions"
-            className="absolute left-0 right-0 top-[calc(100%+8px)] rounded-2xl border border-slate-200 bg-white shadow-[0_22px_50px_-14px_rgba(15,23,42,0.22)] overflow-hidden max-h-[420px] overflow-y-auto z-50 divide-y divide-slate-100"
+            className="absolute left-0 right-0 top-[calc(100%+8px)] rounded-2xl border border-slate-200 bg-white shadow-[0_22px_50px_-14px_rgba(15,23,42,0.22)] overflow-hidden max-h-[min(420px,54dvh)] overflow-y-auto z-50 divide-y divide-slate-100"
           >
             {flatItems.length > 0 ? (
               <>

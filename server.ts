@@ -121,12 +121,23 @@ import {
 import {
   normalizeCustomerFeedbackRecord,
 } from "./src/utils/customerFeedbackHelpers.ts";
-import { optionalAuth, requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
-import { isMemoryFallbackActive } from "./src/db/index.ts";
-import { findUserByEmail, getAdminAndStaffUsers, getCustomerUsers, getOrCreateUser } from "./src/db/users.ts";
+import { randomBytes, randomInt } from "node:crypto";
+import QRCode from "qrcode";
+import { optionalAuth, requireAdminOrStaff, requireAuth, type AuthRequest } from "./src/middleware/auth.ts";
+import { clearDatabaseOffline, createPool, isMemoryFallbackActive } from "./src/db/index.ts";
+import {
+  findUserByEmail,
+  findUserById,
+  findUserByIdentifier,
+  getAdminAndStaffUsers,
+  getCustomerUsers,
+  getOrCreateUser,
+  hasAnyAdminUser,
+} from "./src/db/users.ts";
 import {
   addAppointmentSlotRecord,
   createAppointmentRecord,
+  createAuditLog,
   createCategoryRecord,
   createFeedbackRecord,
   createMediaAssetRecord,
@@ -134,6 +145,7 @@ import {
   createProductRecord,
   createProjectRecord,
   createRfqRecord,
+  createSecurityChallenge,
   createUserAccount,
   deleteAppointmentDateRecord,
   deleteAppointmentSlotRecord,
@@ -149,7 +161,10 @@ import {
   getAppointmentScheduleConfig,
   getCmsDoc,
   getProductByAnyId,
+  getSecurityChallenge,
+  incrementChallengeAttempts,
   listAppointments,
+  listAuditLogs,
   listBlogPosts,
   listCategories,
   listChatbotFaqs,
@@ -162,6 +177,7 @@ import {
   listRelatedPortals,
   listRfqRecords,
   listUsersByRoles,
+  markChallengeConsumed,
   markNotificationRead,
   reorderCategoryRecords,
   reorderFeedbackRecords,
@@ -181,6 +197,30 @@ import {
   upsertChatbotFaqRecord,
   upsertMonthlyTemplateRecord,
 } from "./src/db/repositories.ts";
+import {
+  DEFAULT_ADMIN_SECRET_KEY,
+  buildAuditLogsCsv,
+  buildTotpOtpAuthUri,
+  classifyAccountStatus,
+  decryptSecret,
+  encryptSecret,
+  generateAdminSecretKey,
+  generateCaptchaChallenge,
+  generateTotpSecret,
+  hashPassword,
+  issueSignedToken,
+  maskAdminSecretKey,
+  normalizeCaptchaAnswer,
+  parseCaptchaChallengeMeta,
+  sha256Hex,
+  validateAdminSecretKeyFormat,
+  validatePasswordStrength,
+  verifyAdminSecretKeyInput,
+  verifyCaptchaSecurityPayload,
+  verifyPassword,
+  verifySignedToken,
+  verifyTotpCode,
+} from "./src/utils/securityHelpers.ts";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -188,9 +228,104 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.DEFAULT_APP_PORT ? parseInt(process.env.DEFAULT_APP_PORT, 10) : 3000;
 
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+// Security hardening headers
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  next();
+});
+
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// Sliding-window rate limiter for auth & security endpoints
+const rateLimitBuckets = new Map<string, number[]>();
+function getClientIp(req: Request): string {
+  const fwd = req.headers["x-forwarded-for"];
+  if (typeof fwd === "string" && fwd.trim()) {
+    return fwd.split(",")[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || "unknown";
+}
+
+function createRateLimiter(bucketName: string, maxRequests: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const ip = getClientIp(req);
+    const key = `${bucketName}:${ip}`;
+    const now = Date.now();
+    const recent = (rateLimitBuckets.get(key) || []).filter((ts) => now - ts < windowMs);
+    if (recent.length >= maxRequests) {
+      void createAuditLog({
+        eventId: `EVT-${Date.now().toString(36)}-${randomBytes(3).toString("hex").toUpperCase()}`,
+        actorEmail: String(req.body?.email || req.body?.identifier || ""),
+        actorRole: "anonymous",
+        action: "RATE_LIMIT_EXCEEDED",
+        category: "SECURITY",
+        status: "BLOCKED",
+        severity: "HIGH",
+        ipAddress: ip,
+        userAgent: String(req.headers["user-agent"] || ""),
+        details: `Rate limit exceeded on ${bucketName} (${req.method} ${req.path})`,
+        metadata: { bucketName, path: req.path },
+      }).catch(() => null);
+      return res.status(429).json({
+        message: "Too many security requests from this IP. Please wait a moment and try again.",
+      });
+    }
+    recent.push(now);
+    rateLimitBuckets.set(key, recent);
+    return next();
+  };
+}
+
+const authRateLimiter = createRateLimiter("auth", 60, 60_000);
+const strictLoginRateLimiter = createRateLimiter("login", 25, 60_000);
+
+async function recordAuditEvent(
+  req: AuthRequest | Request,
+  opts: {
+    actorUserId?: number | null;
+    actorEmail?: string;
+    actorRole?: string;
+    targetUserId?: number | null;
+    targetIdentifier?: string;
+    action: string;
+    category: string;
+    status: "SUCCESS" | "FAILURE" | "BLOCKED" | "PENDING";
+    severity: "INFO" | "WARNING" | "HIGH" | "CRITICAL";
+    accountClassification?: string;
+    details?: string;
+    metadata?: Record<string, unknown>;
+  }
+) {
+  const authUser = (req as AuthRequest).user;
+  const eventId = `EVT-${Date.now().toString(36).toUpperCase()}-${randomBytes(3)
+    .toString("hex")
+    .toUpperCase()}`;
+  await createAuditLog({
+    eventId,
+    actorUserId: opts.actorUserId !== undefined ? opts.actorUserId : authUser?.userId ?? null,
+    actorEmail: opts.actorEmail ?? authUser?.email ?? "",
+    actorRole: opts.actorRole ?? authUser?.role ?? "anonymous",
+    targetUserId: opts.targetUserId ?? null,
+    targetIdentifier: opts.targetIdentifier ?? "",
+    action: opts.action,
+    category: opts.category,
+    status: opts.status,
+    severity: opts.severity,
+    accountClassification: opts.accountClassification ?? "",
+    ipAddress: getClientIp(req),
+    userAgent: String(req.headers["user-agent"] || "").slice(0, 240),
+    details: opts.details ?? "",
+    metadata: opts.metadata ?? {},
+  }).catch(() => null);
+}
 
 // Static uploads directory
 const uploadsDir = path.resolve(__dirname, "public", "uploads");
@@ -348,6 +483,11 @@ async function syncFromBloggerSource(targetUrl: string, blogId = "", apiKey = ""
 // ============================================================================
 app.get("/api/health", async (_req: Request, res: Response) => {
   try {
+    const pool = createPool();
+    if (pool) {
+      await pool.query("SELECT 1");
+      clearDatabaseOffline();
+    }
     const cats = await listCategories();
     return res.json({
       status: "ok",
@@ -457,8 +597,1132 @@ app.delete("/api/media/:id", async (req: Request, res: Response) => {
 });
 
 // ============================================================================
-// AUTH & USERS API (Firebase ID Token + Admin/Staff + Customer Accounts)
+// AUTH, CAPTCHA, STATUS RECOGNITION, EMAIL VERIFICATION, ADMIN TOTP & AUDIT
 // ============================================================================
+function sanitizeUserRecord<
+  T extends {
+    passwordHash?: string | null;
+    totpSecretEncrypted?: string | null;
+    emailVerificationTokenHash?: string | null;
+    emailVerificationCodeHash?: string | null;
+  }
+>(user: T) {
+  const copy = { ...user };
+  delete copy.passwordHash;
+  delete copy.totpSecretEncrypted;
+  delete copy.emailVerificationTokenHash;
+  delete copy.emailVerificationCodeHash;
+  return copy;
+}
+
+type DbUserRow = Awaited<ReturnType<typeof getCustomerUsers>>[number];
+
+function mapAdminUserToLegacy(a: DbUserRow) {
+  return {
+    AdminId: a.id,
+    Admin_Name: a.name,
+    Admin_Username: a.username || null,
+    Admin_Email: a.email,
+    Admin_Phone: a.phone || "",
+    Admin_Profile: a.avatarUrl || "/assets/about/director.jpg",
+    role: a.role,
+    isVerified: Boolean(a.isVerified),
+    emailVerified: Boolean(a.emailVerified),
+    accountStatus: (a.accountStatus as "ACTIVE" | "SUSPENDED") || "ACTIVE",
+    totpEnabled: Boolean(a.totpEnabled),
+  };
+}
+
+function mapCustomerUserToLegacy(u: DbUserRow) {
+  return {
+    CustomerId: u.id,
+    Cus_Name: u.name,
+    Cus_Username: u.username || null,
+    Cus_Email: u.email,
+    Cus_PhoneNumber: u.phone || "",
+    Cus_CompanyName: u.company || "",
+    Cus_Logo: u.avatarUrl || "/assets/logos/client-zenith.svg",
+    Verify_State: Boolean(u.isVerified),
+    Email_Verified: Boolean(u.emailVerified),
+    Account_Status: (u.accountStatus as "ACTIVE" | "SUSPENDED") || "ACTIVE",
+    Purchase_Goods: u.purchaseGoods || [],
+    createdAt: u.createdAt,
+  };
+}
+
+async function dispatchEmailVerification(params: {
+  email: string;
+  name: string;
+  code: string;
+  verifyUrl: string;
+}): Promise<boolean> {
+  const resendApiKey = (process.env.RESEND_API_KEY || "").trim();
+  const fromAddress = (process.env.EMAIL_FROM || "Innovista Security <security@innovista.com>").trim();
+  if (!resendApiKey) {
+    return false;
+  }
+  try {
+    const resp = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${resendApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromAddress,
+        to: [params.email],
+        subject: "Verify your Innovista Fabriconix email address",
+        html: `<p>Hello ${params.name},</p><p>Your Innovista verification code is: <strong>${params.code}</strong></p><p>Or click this verification link: <a href="${params.verifyUrl}">${params.verifyUrl}</a></p><p>This code expires in 24 hours.</p>`,
+      }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function issueEmailVerificationChallenge(user: DbUserRow, origin: string) {
+  const code = String(randomInt(100000, 1000000));
+  const rawToken = randomBytes(24).toString("hex");
+  const expiresAt = new Date(Date.now() + 24 * 3600_000);
+  await updateUserAccount(user.id, {
+    emailVerificationCodeHash: sha256Hex(`${user.id}:${code}`),
+    emailVerificationTokenHash: sha256Hex(rawToken),
+    emailVerificationExpiresAt: expiresAt,
+  });
+
+  const verifyPath = `/#/CustomerVerify?token=${encodeURIComponent(rawToken)}&email=${encodeURIComponent(
+    user.email
+  )}`;
+  const verifyUrl = origin ? `${origin}${verifyPath}` : verifyPath;
+  const emailDispatched = await dispatchEmailVerification({
+    email: user.email,
+    name: user.name,
+    code,
+    verifyUrl,
+  });
+
+  return {
+    emailDispatched,
+    expiresAt: expiresAt.toISOString(),
+    verificationPreview: emailDispatched
+      ? undefined
+      : {
+          code,
+          verifyPath,
+          note: "SMTP/Resend key is not configured in this environment; verify using the issued code below.",
+        },
+  };
+}
+
+async function verifyCaptchaInput(
+  req: Request,
+  bodyRaw: Record<string, unknown> | undefined
+): Promise<{ ok: true } | { ok: false; status: number; message: string; reason: string }> {
+  const b = bodyRaw || {};
+  const honeypotRaw = b.website;
+  if (typeof honeypotRaw === "string" && honeypotRaw.trim().length > 0) {
+    await recordAuditEvent(req, {
+      action: "BOT_HONEYPOT_TRIGGERED",
+      category: "SECURITY",
+      status: "BLOCKED",
+      severity: "HIGH",
+      targetIdentifier: String(b.identifier || b.email || b.Cus_Email || ""),
+      details: "Bot trap honeypot field populated during authentication/registration attempt.",
+    });
+    return {
+      ok: false,
+      status: 400,
+      reason: "BOT_HONEYPOT",
+      message: "Automated submission rejected by bot trap protection.",
+    };
+  }
+
+  const captchaId = String(b.captchaId || "").trim();
+  const answer = String(b.captchaAnswer || "");
+  if (!captchaId || !normalizeCaptchaAnswer(answer)) {
+    return {
+      ok: false,
+      status: 400,
+      reason: "CAPTCHA_MISSING",
+      message: "Please complete the robot verification shield and enter the 7-character code.",
+    };
+  }
+
+  const challenge = await getSecurityChallenge(captchaId);
+  const now = Date.now();
+  if (
+    !challenge ||
+    challenge.purpose !== "CAPTCHA" ||
+    challenge.consumed ||
+    new Date(challenge.expiresAt).getTime() < now ||
+    challenge.attempts >= challenge.maxAttempts
+  ) {
+    return {
+      ok: false,
+      status: 400,
+      reason: "CAPTCHA_EXPIRED",
+      message: "Verification challenge expired or exceeded attempts. Please click 'New Code' and try again.",
+    };
+  }
+
+  const storedMeta = parseCaptchaChallengeMeta(challenge.identifier);
+  const outcome = verifyCaptchaSecurityPayload({
+    challengeId: captchaId,
+    challengeCreatedAtMs: new Date(challenge.createdAt).getTime(),
+    expectedAnswerHash: challenge.answerHash,
+    storedMeta,
+    submittedAnswer: answer,
+    submittedPowNonce: String(b.captchaPowNonce || ""),
+    honeypot: typeof honeypotRaw === "string" ? honeypotRaw : "",
+    telemetry:
+      b.captchaTelemetry && typeof b.captchaTelemetry === "object"
+        ? (b.captchaTelemetry as {
+            humanShieldVerified?: boolean;
+            pointerCount?: number;
+            keyCount?: number;
+            dwellMs?: number;
+          })
+        : null,
+    nowMs: now,
+  });
+
+  if (outcome.ok === false) {
+    if (outcome.burnChallenge) {
+      await markChallengeConsumed(captchaId);
+    } else {
+      await incrementChallengeAttempts(captchaId);
+    }
+
+    if (outcome.auditAction) {
+      await recordAuditEvent(req, {
+        action: outcome.auditAction,
+        category: "SECURITY",
+        status: outcome.burnChallenge ? "BLOCKED" : "FAILURE",
+        severity: outcome.auditSeverity || "WARNING",
+        targetIdentifier: String(b.identifier || b.email || b.Cus_Email || ""),
+        details: outcome.auditDetails || outcome.message,
+        metadata: { challengeId: captchaId, reason: outcome.reason },
+      });
+    }
+
+    return {
+      ok: false,
+      status: outcome.status,
+      reason: outcome.reason,
+      message: outcome.message,
+    };
+  }
+
+  await markChallengeConsumed(captchaId);
+  return { ok: true };
+}
+
+function issueUserSessionTokens(user: DbUserRow, mfaVerified: boolean) {
+  const role = (user.role as "admin" | "staff" | "customer") || "customer";
+  const accessToken = issueSignedToken(
+    {
+      sub: user.id,
+      uid: user.uid,
+      email: user.email,
+      role,
+      tokenType: "access",
+      mfaVerified,
+    },
+    3600 * 4
+  );
+  const refreshToken = issueSignedToken(
+    {
+      sub: user.id,
+      uid: user.uid,
+      email: user.email,
+      role,
+      tokenType: "refresh",
+      mfaVerified,
+    },
+    3600 * 24 * 7
+  );
+  return { accessToken, refreshToken };
+}
+
+// Generate hardened anti-OCR SVG CAPTCHA + SHA-256 Proof-of-Work challenge
+app.get("/api/auth/captcha", authRateLimiter, async (_req: Request, res: Response) => {
+  try {
+    const { code, svgMarkup, powSalt, powDifficulty, minDwellMs } = generateCaptchaChallenge();
+    const challengeId = randomBytes(16).toString("hex");
+    await createSecurityChallenge({
+      challengeId,
+      purpose: "CAPTCHA",
+      identifier: JSON.stringify({ powSalt, powDifficulty, minDwellMs }),
+      answerHash: sha256Hex(`${challengeId}:${normalizeCaptchaAnswer(code)}`),
+      maxAttempts: 3,
+      expiresAt: new Date(Date.now() + 5 * 60_000),
+    });
+    return res.json({
+      challengeId,
+      svgMarkup,
+      powChallenge: {
+        salt: powSalt,
+        difficulty: powDifficulty,
+      },
+      minDwellMs,
+      expiresInSeconds: 300,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// Live pre-login account status & role recognition by Email, Username, or User ID
+app.post(["/api/auth/check-status", "/auth/check-status"], authRateLimiter, async (req: Request, res: Response) => {
+  try {
+    const identifier = String(
+      req.body?.identifier || req.body?.email || req.body?.username || ""
+    ).trim();
+    if (!identifier) {
+      return res.status(400).json({
+        message: "Please enter an email address, username, or user ID to verify account status.",
+      });
+    }
+    const matched = await findUserByIdentifier(identifier);
+    const classification = classifyAccountStatus(matched);
+
+    await recordAuditEvent(req, {
+      targetUserId: matched?.id ?? null,
+      targetIdentifier: identifier,
+      action: "ACCOUNT_STATUS_CHECKED",
+      category: "AUTH",
+      status: matched ? "SUCCESS" : "FAILURE",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: `Identifier status check: ${classification.accountTypeLabel}`,
+    });
+
+    return res.json({ classification });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// Check whether first-time admin bootstrap is required (when database has zero admins)
+app.get("/api/auth/bootstrap-status", async (_req: Request, res: Response) => {
+  try {
+    const hasAdmin = await hasAnyAdminUser();
+    return res.json({ needsBootstrap: !hasAdmin, hasAdmin });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// One-time initial Verified Admin account creation (strictly disabled once an admin exists)
+app.post("/api/auth/bootstrap-admin", strictLoginRateLimiter, async (req: Request, res: Response) => {
+  try {
+    if (await hasAnyAdminUser()) {
+      return res.status(403).json({
+        message: "An administrator account already exists. Sign in with your admin credentials.",
+      });
+    }
+
+    const captchaCheck = await verifyCaptchaInput(req, req.body);
+    if (captchaCheck.ok === false) {
+      return res.status(captchaCheck.status).json({ message: captchaCheck.message, reason: captchaCheck.reason });
+    }
+
+    const name = String(req.body?.name || req.body?.Admin_Name || "").trim();
+    const email = String(req.body?.email || req.body?.Admin_Email || "").trim().toLowerCase();
+    const username = String(req.body?.username || "").trim().toLowerCase();
+    const phone = String(req.body?.phone || req.body?.Admin_Phone || "").trim();
+    const password = String(req.body?.password || req.body?.Admin_Password || "");
+
+    if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "Valid full name and administrator email are required." });
+    }
+    if (username && !/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return res.status(400).json({ message: "Username must be 3-32 characters (letters, numbers, ., _, -)." });
+    }
+    const pwCheck = validatePasswordStrength(password);
+    if (!pwCheck.valid) {
+      return res.status(400).json({ message: pwCheck.error });
+    }
+
+    const existingByEmail = await findUserByEmail(email);
+    if (existingByEmail) {
+      return res.status(409).json({ message: "An account with this email already exists." });
+    }
+    if (username && (await findUserByIdentifier(username))) {
+      return res.status(409).json({ message: "That username is already taken." });
+    }
+
+    const created = await createUserAccount({
+      name,
+      username: username || null,
+      email,
+      phone,
+      company: "Innovista Fabriconix HQ",
+      role: "admin",
+      passwordHash: hashPassword(password),
+      avatarUrl: "/assets/about/director.jpg",
+      isVerified: true,
+      emailVerified: true,
+      accountStatus: "ACTIVE",
+      totpEnabled: false,
+    });
+
+    const tokens = issueUserSessionTokens(created, true);
+    const classification = classifyAccountStatus(created);
+
+    await recordAuditEvent(req, {
+      actorUserId: created.id,
+      actorEmail: created.email,
+      actorRole: created.role,
+      targetUserId: created.id,
+      targetIdentifier: created.email,
+      action: "ADMIN_BOOTSTRAP_CREATED",
+      category: "AUTH",
+      status: "SUCCESS",
+      severity: "HIGH",
+      accountClassification: classification.statusCode,
+      details: "Initial verified administrator account created.",
+    });
+
+    return res.status(201).json({
+      message: "Initial Verified Admin account created! You may now configure Google Authenticator 2FA in Admin Security.",
+      tokens,
+      classification,
+      user: sanitizeUserRecord(created),
+      admin: mapAdminUserToLegacy(created),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+interface AdminSecretKeyDoc {
+  encryptedKey: string;
+  keyHash: string;
+  updatedAt: string;
+  updatedByEmail: string;
+  rotationCount: number;
+}
+
+async function getOrInitAdminSecretKey(): Promise<{
+  secretKey: string;
+  updatedAt: string;
+  updatedByEmail: string;
+  rotationCount: number;
+  isDefault: boolean;
+}> {
+  const stored = await getCmsDoc<AdminSecretKeyDoc | null>("admin_secret_key_config", null);
+  const decrypted = stored?.encryptedKey ? decryptSecret(stored.encryptedKey) : null;
+  if (stored && decrypted) {
+    return {
+      secretKey: decrypted,
+      updatedAt: stored.updatedAt || new Date().toISOString(),
+      updatedByEmail: stored.updatedByEmail || "system",
+      rotationCount: typeof stored.rotationCount === "number" ? stored.rotationCount : 0,
+      isDefault: decrypted === DEFAULT_ADMIN_SECRET_KEY,
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  const initialDoc: AdminSecretKeyDoc = {
+    encryptedKey: encryptSecret(DEFAULT_ADMIN_SECRET_KEY),
+    keyHash: sha256Hex(DEFAULT_ADMIN_SECRET_KEY),
+    updatedAt: nowIso,
+    updatedByEmail: stored?.updatedByEmail || "system",
+    rotationCount: typeof stored?.rotationCount === "number" ? stored.rotationCount : 0,
+  };
+  await setCmsDoc("admin_secret_key_config", initialDoc as unknown as Record<string, unknown>);
+  return {
+    secretKey: DEFAULT_ADMIN_SECRET_KEY,
+    updatedAt: nowIso,
+    updatedByEmail: initialDoc.updatedByEmail,
+    rotationCount: initialDoc.rotationCount,
+    isDefault: true,
+  };
+}
+
+// Step 1 of 3-step login: Verify ID/Email/Username + Password -> transition to Step 2 (Robot Verification)
+async function handleCredentialLogin(req: Request, res: Response, expectedScope?: "admin" | "any") {
+  try {
+    const identifier = String(
+      req.body?.identifier || req.body?.email || req.body?.username || ""
+    ).trim();
+    const password = String(req.body?.password || "");
+
+    if (!identifier || !password) {
+      return res.status(400).json({
+        message: "Email / username / user ID and password are required.",
+      });
+    }
+
+    const matched = await findUserByIdentifier(identifier);
+    const classification = classifyAccountStatus(matched);
+
+    if (!matched) {
+      await recordAuditEvent(req, {
+        targetIdentifier: identifier,
+        action: "LOGIN_ACCOUNT_NOT_CREATED",
+        category: "AUTH",
+        status: "FAILURE",
+        severity: "WARNING",
+        accountClassification: classification.statusCode,
+        details: `Login attempted for non-existent identifier "${identifier}".`,
+      });
+      return res.status(404).json({
+        message: "Account not created. No account exists for this email, username, or user ID.",
+        classification,
+      });
+    }
+
+    const isAdmin = matched.role === "admin" || matched.role === "staff";
+    if (expectedScope === "admin" && !isAdmin) {
+      await recordAuditEvent(req, {
+        actorUserId: matched.id,
+        actorEmail: matched.email,
+        actorRole: matched.role,
+        targetUserId: matched.id,
+        targetIdentifier: identifier,
+        action: "ADMIN_LOGIN_ROLE_REJECTED",
+        category: "AUTH",
+        status: "BLOCKED",
+        severity: "HIGH",
+        accountClassification: classification.statusCode,
+        details: "Client account attempted sign-in on Administrator Login portal.",
+      });
+      return res.status(403).json({
+        message: "This is a Client Account. Please sign in through the Client Login portal.",
+        classification,
+      });
+    }
+
+    if (classification.accountStatus === "SUSPENDED") {
+      await recordAuditEvent(req, {
+        actorUserId: matched.id,
+        actorEmail: matched.email,
+        actorRole: matched.role,
+        targetUserId: matched.id,
+        targetIdentifier: identifier,
+        action: "LOGIN_BLOCKED_SUSPENDED",
+        category: "SECURITY",
+        status: "BLOCKED",
+        severity: "HIGH",
+        accountClassification: classification.statusCode,
+        details: "Blocked login for suspended account.",
+      });
+      return res.status(403).json({
+        message: classification.message,
+        classification,
+      });
+    }
+
+    if (classification.isLocked) {
+      await recordAuditEvent(req, {
+        actorUserId: matched.id,
+        actorEmail: matched.email,
+        actorRole: matched.role,
+        targetUserId: matched.id,
+        targetIdentifier: identifier,
+        action: "LOGIN_BLOCKED_LOCKED",
+        category: "SECURITY",
+        status: "BLOCKED",
+        severity: "HIGH",
+        accountClassification: classification.statusCode,
+        details: "Blocked login attempt while temporary brute-force lockout is active.",
+      });
+      return res.status(423).json({
+        message: classification.message,
+        classification,
+      });
+    }
+
+    const passwordOk = verifyPassword(password, matched.passwordHash);
+    if (!passwordOk) {
+      const nextAttempts = (matched.failedLoginAttempts || 0) + 1;
+      const shouldLock = nextAttempts >= 5;
+      const lockedUntil = shouldLock ? new Date(Date.now() + 15 * 60_000) : null;
+      await updateUserAccount(matched.id, {
+        failedLoginAttempts: nextAttempts,
+        ...(lockedUntil ? { lockedUntil } : {}),
+      });
+
+      await recordAuditEvent(req, {
+        actorUserId: matched.id,
+        actorEmail: matched.email,
+        actorRole: matched.role,
+        targetUserId: matched.id,
+        targetIdentifier: identifier,
+        action: shouldLock ? "ACCOUNT_LOCKED_BRUTE_FORCE" : "LOGIN_FAILED_PASSWORD",
+        category: "SECURITY",
+        status: "FAILURE",
+        severity: shouldLock ? "CRITICAL" : "WARNING",
+        accountClassification: classification.statusCode,
+        details: shouldLock
+          ? "Account locked for 15 minutes after 5 consecutive failed password attempts."
+          : `Incorrect password (attempt ${nextAttempts} of 5).`,
+      });
+
+      return res.status(401).json({
+        message: shouldLock
+          ? "Too many failed password attempts. This account is temporarily locked for 15 minutes."
+          : `Incorrect password (${Math.max(0, 5 - nextAttempts)} attempts remaining before temporary lock).`,
+        classification: classifyAccountStatus({
+          ...matched,
+          lockedUntil,
+        }),
+      });
+    }
+
+    // Credentials verified -> clear brute-force counter & issue single-use Robot Verification step token
+    await updateUserAccount(matched.id, {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    });
+
+    const stepToken = issueSignedToken(
+      {
+        sub: matched.id,
+        uid: matched.uid,
+        email: matched.email,
+        role: (matched.role as "admin" | "staff" | "customer") || "customer",
+        tokenType: "step_captcha",
+        mfaVerified: false,
+      },
+      300
+    );
+
+    await createSecurityChallenge({
+      challengeId: sha256Hex(stepToken).slice(0, 32),
+      purpose: "LOGIN_CAPTCHA",
+      userId: matched.id,
+      identifier: expectedScope || "any",
+      answerHash: sha256Hex(stepToken),
+      maxAttempts: 10,
+      expiresAt: new Date(Date.now() + 5 * 60_000),
+    });
+
+    await recordAuditEvent(req, {
+      actorUserId: matched.id,
+      actorEmail: matched.email,
+      actorRole: matched.role,
+      targetUserId: matched.id,
+      targetIdentifier: identifier,
+      action: "LOGIN_CREDENTIALS_VERIFIED",
+      category: "AUTH",
+      status: "PENDING",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: `${classification.accountTypeLabel} credentials verified; advancing to Robot Verification step.`,
+    });
+
+    return res.json({
+      message: "Credentials verified. Complete robot verification to continue.",
+      nextStep: "ROBOT_VERIFICATION",
+      stepToken,
+      classification,
+      user: sanitizeUserRecord(matched),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+}
+
+app.post("/api/auth/login", strictLoginRateLimiter, (req: Request, res: Response) =>
+  handleCredentialLogin(req, res, "any")
+);
+
+app.post("/auth/login", strictLoginRateLimiter, (req: Request, res: Response) =>
+  handleCredentialLogin(req, res, "admin")
+);
+
+// Step 2 of 3-step login: Verify Robot CAPTCHA -> branch to Customer Google Authenticator OR Admin Secret Key
+async function handleLoginRobotVerification(req: Request, res: Response) {
+  try {
+    const stepToken = String(req.body?.stepToken || "").trim();
+    if (!stepToken) {
+      return res.status(400).json({ message: "Login step token is required. Please enter your ID and password again." });
+    }
+
+    const parsed = verifySignedToken(stepToken);
+    if (!parsed || parsed.tokenType !== "step_captcha") {
+      return res.status(401).json({ message: "Verification session expired. Please sign in with your ID and password again." });
+    }
+
+    const stepChallengeId = sha256Hex(stepToken).slice(0, 32);
+    const stepChallenge = await getSecurityChallenge(stepChallengeId);
+    if (
+      !stepChallenge ||
+      stepChallenge.purpose !== "LOGIN_CAPTCHA" ||
+      stepChallenge.consumed ||
+      new Date(stepChallenge.expiresAt).getTime() < Date.now()
+    ) {
+      return res.status(401).json({ message: "Verification session expired or already used. Please sign in again." });
+    }
+    if (stepChallenge.attempts >= stepChallenge.maxAttempts) {
+      return res.status(423).json({ message: "Too many robot verification failures. Please sign in again." });
+    }
+
+    const captchaCheck = await verifyCaptchaInput(req, req.body);
+    if (captchaCheck.ok === false) {
+      await incrementChallengeAttempts(stepChallengeId);
+      return res.status(captchaCheck.status).json({
+        message: captchaCheck.message,
+        reason: captchaCheck.reason,
+      });
+    }
+
+    const user = await findUserById(parsed.sub);
+    if (!user) {
+      return res.status(404).json({ message: "Account not found. Please sign in again." });
+    }
+
+    const classification = classifyAccountStatus(user);
+    if (classification.accountStatus === "SUSPENDED") {
+      await markChallengeConsumed(stepChallengeId);
+      return res.status(403).json({ message: classification.message, classification });
+    }
+
+    await markChallengeConsumed(stepChallengeId);
+    const isAdmin = user.role === "admin" || user.role === "staff";
+
+    await recordAuditEvent(req, {
+      actorUserId: user.id,
+      actorEmail: user.email,
+      actorRole: user.role,
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "LOGIN_ROBOT_VERIFIED",
+      category: "SECURITY",
+      status: "SUCCESS",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: isAdmin
+        ? "Robot verification passed; issuing Admin Secret Key step-up challenge."
+        : "Robot verification passed; issuing Customer Google Authenticator step-up challenge.",
+    });
+
+    if (isAdmin) {
+      const mfaToken = issueSignedToken(
+        {
+          sub: user.id,
+          uid: user.uid,
+          email: user.email,
+          role: (user.role as "admin" | "staff") || "admin",
+          tokenType: "mfa",
+          mfaVerified: false,
+        },
+        300
+      );
+
+      await createSecurityChallenge({
+        challengeId: sha256Hex(mfaToken).slice(0, 32),
+        purpose: "ADMIN_SECRET_KEY",
+        userId: user.id,
+        identifier: user.email,
+        answerHash: sha256Hex(mfaToken),
+        maxAttempts: 5,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+      });
+
+      await recordAuditEvent(req, {
+        actorUserId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetUserId: user.id,
+        targetIdentifier: user.email,
+        action: "ADMIN_SECRET_KEY_CHALLENGE_ISSUED",
+        category: "MFA",
+        status: "PENDING",
+        severity: "INFO",
+        accountClassification: classification.statusCode,
+        details: "Waiting for Admin Secret Key verification.",
+      });
+
+      return res.json({
+        message: "Robot verification passed. Enter the Admin Secret Key to complete sign-in.",
+        nextStep: "ADMIN_SECRET_KEY",
+        mfaToken,
+        classification,
+        user: sanitizeUserRecord(user),
+      });
+    }
+
+    // Customer flow: verify with Google Authenticator (existing enrolled secret or inline QR enrollment)
+    const existingSecret =
+      user.totpEnabled && user.totpSecretEncrypted
+        ? decryptSecret(user.totpSecretEncrypted)
+        : null;
+
+    if (existingSecret) {
+      const mfaToken = issueSignedToken(
+        {
+          sub: user.id,
+          uid: user.uid,
+          email: user.email,
+          role: "customer",
+          tokenType: "mfa",
+          mfaVerified: false,
+        },
+        300
+      );
+
+      await createSecurityChallenge({
+        challengeId: sha256Hex(mfaToken).slice(0, 32),
+        purpose: "CUSTOMER_TOTP",
+        userId: user.id,
+        identifier: user.email,
+        answerHash: sha256Hex(mfaToken),
+        maxAttempts: 5,
+        expiresAt: new Date(Date.now() + 5 * 60_000),
+      });
+
+      await recordAuditEvent(req, {
+        actorUserId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetUserId: user.id,
+        targetIdentifier: user.email,
+        action: "CLIENT_TOTP_CHALLENGE_ISSUED",
+        category: "MFA",
+        status: "PENDING",
+        severity: "INFO",
+        accountClassification: classification.statusCode,
+        details: "Waiting for customer 6-digit Google Authenticator code.",
+      });
+
+      return res.json({
+        message: "Robot verification passed. Enter the 6-digit code from Google Authenticator.",
+        nextStep: "CUSTOMER_TOTP",
+        totpEnrolled: true,
+        mfaToken,
+        classification,
+        user: sanitizeUserRecord(user),
+      });
+    }
+
+    // First-time Google Authenticator enrollment for customer
+    const secret = generateTotpSecret();
+    const otpauthUri = buildTotpOtpAuthUri({
+      secret,
+      email: user.email,
+      issuer: "Innovista Fabriconix Client",
+    });
+    const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+      width: 220,
+      margin: 2,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    });
+
+    const mfaToken = issueSignedToken(
+      {
+        sub: user.id,
+        uid: user.uid,
+        email: user.email,
+        role: "customer",
+        tokenType: "mfa",
+        mfaVerified: false,
+      },
+      600
+    );
+
+    await createSecurityChallenge({
+      challengeId: sha256Hex(mfaToken).slice(0, 32),
+      purpose: "CUSTOMER_TOTP_SETUP",
+      userId: user.id,
+      identifier: encryptSecret(secret),
+      answerHash: sha256Hex(mfaToken),
+      maxAttempts: 6,
+      expiresAt: new Date(Date.now() + 10 * 60_000),
+    });
+
+    await recordAuditEvent(req, {
+      actorUserId: user.id,
+      actorEmail: user.email,
+      actorRole: user.role,
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "CLIENT_TOTP_SETUP_ISSUED",
+      category: "MFA",
+      status: "PENDING",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: "Generated Google Authenticator QR setup secret for customer login verification.",
+    });
+
+    return res.json({
+      message: "Robot verification passed. Scan the QR code with Google Authenticator and enter the 6-digit code.",
+      nextStep: "CUSTOMER_TOTP",
+      totpEnrolled: false,
+      mfaToken,
+      qrDataUrl,
+      manualSecret: secret,
+      classification,
+      user: sanitizeUserRecord(user),
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+}
+
+app.post(
+  ["/api/auth/login/verify-captcha", "/auth/login/verify-captcha"],
+  strictLoginRateLimiter,
+  handleLoginRobotVerification
+);
+
+// Step 3A: Verify 6-digit Google Authenticator TOTP code (Customers — enrolled or inline first-time setup)
+app.post(
+  ["/api/auth/verify-totp", "/api/auth/login/verify-customer-totp"],
+  strictLoginRateLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const mfaToken = String(req.body?.mfaToken || "").trim();
+      const code = String(req.body?.code || "").trim();
+      if (!mfaToken || !code) {
+        return res.status(400).json({ message: "Verification token and 6-digit Google Authenticator code are required." });
+      }
+
+      const parsed = verifySignedToken(mfaToken);
+      if (!parsed || parsed.tokenType !== "mfa") {
+        return res.status(401).json({ message: "Authenticator session expired or invalid. Please sign in again." });
+      }
+
+      const challengeId = sha256Hex(mfaToken).slice(0, 32);
+      const challenge = await getSecurityChallenge(challengeId);
+      if (
+        !challenge ||
+        challenge.consumed ||
+        new Date(challenge.expiresAt).getTime() < Date.now() ||
+        !["CUSTOMER_TOTP", "CUSTOMER_TOTP_SETUP", "ADMIN_MFA"].includes(challenge.purpose)
+      ) {
+        return res.status(401).json({ message: "Authenticator challenge expired or already used. Please sign in again." });
+      }
+      if (challenge.attempts >= challenge.maxAttempts) {
+        return res.status(423).json({ message: "Too many failed authenticator codes. Please sign in again." });
+      }
+
+      const user = await findUserById(parsed.sub);
+      if (!user) {
+        return res.status(404).json({ message: "Account not found." });
+      }
+
+      const classification = classifyAccountStatus(user);
+      if (classification.accountStatus === "SUSPENDED") {
+        return res.status(403).json({ message: classification.message, classification });
+      }
+
+      const isSetupFlow = challenge.purpose === "CUSTOMER_TOTP_SETUP";
+      const secret = isSetupFlow
+        ? decryptSecret(challenge.identifier)
+        : decryptSecret(user.totpSecretEncrypted);
+
+      if (!secret || !verifyTotpCode(secret, code)) {
+        await incrementChallengeAttempts(challengeId);
+        await recordAuditEvent(req, {
+          actorUserId: user.id,
+          actorEmail: user.email,
+          actorRole: user.role,
+          targetUserId: user.id,
+          targetIdentifier: user.email,
+          action: "MFA_TOTP_FAILED",
+          category: "MFA",
+          status: "FAILURE",
+          severity: "HIGH",
+          accountClassification: classification.statusCode,
+          details: "Invalid 6-digit Google Authenticator code submitted during login.",
+        });
+        return res.status(401).json({
+          message: "Invalid 6-digit Google Authenticator code. Please check your app clock and try again.",
+        });
+      }
+
+      await markChallengeConsumed(challengeId);
+      const updatedUser = await updateUserAccount(user.id, {
+        ...(isSetupFlow
+          ? {
+              totpSecretEncrypted: encryptSecret(secret),
+              totpEnabled: true,
+            }
+          : {}),
+        lastLoginAt: new Date(),
+        lastLoginIp: getClientIp(req),
+      });
+      const finalUser = updatedUser || user;
+      const finalClassification = classifyAccountStatus(finalUser);
+      const tokens = issueUserSessionTokens(finalUser, true);
+      const isAdmin = finalUser.role === "admin" || finalUser.role === "staff";
+
+      await recordAuditEvent(req, {
+        actorUserId: finalUser.id,
+        actorEmail: finalUser.email,
+        actorRole: finalUser.role,
+        targetUserId: finalUser.id,
+        targetIdentifier: finalUser.email,
+        action: isAdmin
+          ? "ADMIN_LOGIN_MFA_VERIFIED"
+          : isSetupFlow
+          ? "CLIENT_TOTP_ENROLLED_AND_VERIFIED"
+          : "CLIENT_LOGIN_MFA_VERIFIED",
+        category: "MFA",
+        status: "SUCCESS",
+        severity: "INFO",
+        accountClassification: finalClassification.statusCode,
+        details: isAdmin
+          ? "Admin authenticated with Google Authenticator TOTP."
+          : isSetupFlow
+          ? "Customer enrolled Google Authenticator 2FA and completed login."
+          : "Customer authenticated with ID, password, robot check, and Google Authenticator 2FA.",
+      });
+
+      return res.json({
+        message: isSetupFlow
+          ? "Google Authenticator activated and verified. Welcome!"
+          : "Google Authenticator verified. Signed in successfully.",
+        tokens,
+        classification: finalClassification,
+        user: sanitizeUserRecord(finalUser),
+        ...(isAdmin
+          ? { admin: mapAdminUserToLegacy(finalUser) }
+          : { customer: mapCustomerUserToLegacy(finalUser) }),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+// Step 3B: Verify Admin Secret Key (Admins & Staff)
+app.post(
+  ["/api/auth/login/verify-admin-secret", "/auth/login/verify-admin-secret"],
+  strictLoginRateLimiter,
+  async (req: Request, res: Response) => {
+    try {
+      const mfaToken = String(req.body?.mfaToken || "").trim();
+      const secretKey = String(req.body?.secretKey || "").trim();
+      if (!mfaToken || !secretKey) {
+        return res.status(400).json({ message: "Verification token and Admin Secret Key are required." });
+      }
+
+      const parsed = verifySignedToken(mfaToken);
+      if (!parsed || parsed.tokenType !== "mfa") {
+        return res.status(401).json({ message: "Admin verification session expired. Please sign in again." });
+      }
+
+      const challengeId = sha256Hex(mfaToken).slice(0, 32);
+      const challenge = await getSecurityChallenge(challengeId);
+      if (
+        !challenge ||
+        challenge.purpose !== "ADMIN_SECRET_KEY" ||
+        challenge.consumed ||
+        new Date(challenge.expiresAt).getTime() < Date.now()
+      ) {
+        return res.status(401).json({ message: "Admin Secret Key challenge expired or already used. Please sign in again." });
+      }
+      if (challenge.attempts >= challenge.maxAttempts) {
+        return res.status(423).json({ message: "Too many failed secret key attempts. Please sign in again." });
+      }
+
+      const user = await findUserById(parsed.sub);
+      if (!user || (user.role !== "admin" && user.role !== "staff")) {
+        return res.status(403).json({ message: "Administrator privileges required for Admin Secret Key verification." });
+      }
+
+      const classification = classifyAccountStatus(user);
+      if (classification.accountStatus === "SUSPENDED") {
+        return res.status(403).json({ message: classification.message, classification });
+      }
+
+      const activeConfig = await getOrInitAdminSecretKey();
+      const keyMatch = verifyAdminSecretKeyInput(secretKey, activeConfig.secretKey);
+      if (!keyMatch) {
+        const updatedChallenge = await incrementChallengeAttempts(challengeId);
+        const remaining = Math.max(
+          0,
+          challenge.maxAttempts - (updatedChallenge?.attempts ?? challenge.attempts + 1)
+        );
+        await recordAuditEvent(req, {
+          actorUserId: user.id,
+          actorEmail: user.email,
+          actorRole: user.role,
+          targetUserId: user.id,
+          targetIdentifier: user.email,
+          action: "ADMIN_SECRET_KEY_FAILED",
+          category: "MFA",
+          status: "FAILURE",
+          severity: "HIGH",
+          accountClassification: classification.statusCode,
+          details: `Invalid Admin Secret Key entered during login (${remaining} attempts remaining).`,
+        });
+        return res.status(401).json({
+          message:
+            remaining > 0
+              ? `Invalid Admin Secret Key (${remaining} attempts remaining).`
+              : "Invalid Admin Secret Key. Maximum attempts exceeded — please start login again.",
+        });
+      }
+
+      await markChallengeConsumed(challengeId);
+      const updatedUser = await updateUserAccount(user.id, {
+        lastLoginAt: new Date(),
+        lastLoginIp: getClientIp(req),
+      });
+      const finalUser = updatedUser || user;
+      const finalClassification = classifyAccountStatus(finalUser);
+      const tokens = issueUserSessionTokens(finalUser, true);
+
+      await recordAuditEvent(req, {
+        actorUserId: finalUser.id,
+        actorEmail: finalUser.email,
+        actorRole: finalUser.role,
+        targetUserId: finalUser.id,
+        targetIdentifier: finalUser.email,
+        action: "ADMIN_LOGIN_SECRET_VERIFIED",
+        category: "MFA",
+        status: "SUCCESS",
+        severity: "INFO",
+        accountClassification: finalClassification.statusCode,
+        details: "Admin authenticated with ID, password, robot check, and Admin Secret Key.",
+      });
+
+      return res.json({
+        message: "Admin Secret Key verified. Administrator session active.",
+        tokens,
+        classification: finalClassification,
+        user: sanitizeUserRecord(finalUser),
+        admin: mapAdminUserToLegacy(finalUser),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+async function handleRefreshToken(req: Request, res: Response) {
+  const bearer = (req.headers.authorization || "").startsWith("Bearer ")
+    ? (req.headers.authorization || "").slice(7).trim()
+    : "";
+  const refreshToken = String(req.body?.refreshToken || req.query?.refreshToken || bearer || "").trim();
+  if (!refreshToken) {
+    return res.status(401).json({ message: "Missing refresh token." });
+  }
+  const payload = verifySignedToken(refreshToken);
+  if (!payload || payload.tokenType !== "refresh") {
+    return res.status(401).json({ message: "Invalid or expired refresh token." });
+  }
+  const user = await findUserById(payload.sub);
+  if (!user || (user.accountStatus || "ACTIVE").toUpperCase() === "SUSPENDED" || !user.isActive) {
+    return res.status(403).json({ message: "Account is suspended or no longer active." });
+  }
+  const tokens = issueUserSessionTokens(user, Boolean(payload.mfaVerified));
+  return res.json({
+    accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
+  });
+}
+
+app.get(["/auth/refresh", "/api/auth/refresh"], handleRefreshToken);
+app.post(["/auth/refresh", "/api/auth/refresh"], handleRefreshToken);
+
 app.post("/api/auth/firebase-session", requireAuth, async (req: AuthRequest, res: Response) => {
   if (!req.user) {
     return res.status(401).json({ error: "Unauthorized" });
@@ -467,167 +1731,692 @@ app.post("/api/auth/firebase-session", requireAuth, async (req: AuthRequest, res
     name: req.user.name,
     role: req.user.role,
   });
-  return res.json({ user: dbUser });
+  return res.json({
+    user: sanitizeUserRecord(dbUser),
+    classification: classifyAccountStatus(dbUser),
+  });
 });
 
-function stripPasswordHash<T extends { passwordHash?: string | null }>(user: T): Omit<T, "passwordHash"> {
-  const copy = { ...user };
-  delete copy.passwordHash;
-  return copy;
-}
-
-app.get("/api/users", async (req: Request, res: Response) => {
+// Send or resend email verification code (for newly signed-up customers or unverified admins)
+app.post("/api/auth/send-verification-email", authRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const roleParam = typeof req.query.role === "string" ? req.query.role.trim() : "";
-    const rows = await listUsersByRoles(roleParam ? roleParam.split(",") : undefined);
-    const sanitized = rows.map(stripPasswordHash);
-    return res.json({ data: sanitized });
+    const identifier = String(
+      req.body?.identifier || req.body?.email || req.user?.email || ""
+    ).trim();
+    const user = req.user?.userId
+      ? await findUserById(req.user.userId)
+      : identifier
+      ? await findUserByIdentifier(identifier)
+      : null;
+
+    if (!user) {
+      return res.status(404).json({ message: "No account found to send verification code to." });
+    }
+    if (user.emailVerified) {
+      return res.json({
+        message: "Email address is already verified.",
+        emailVerified: true,
+        classification: classifyAccountStatus(user),
+      });
+    }
+
+    const origin = resolveRequestOrigin({
+      appUrl: process.env.APP_URL,
+      protocol: (req.headers["x-forwarded-proto"] as string) || req.protocol,
+      host: (req.headers["x-forwarded-host"] as string) || req.get("host"),
+    });
+    const issued = await issueEmailVerificationChallenge(user, origin);
+
+    await recordAuditEvent(req, {
+      actorUserId: user.id,
+      actorEmail: user.email,
+      actorRole: user.role,
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "EMAIL_VERIFICATION_SENT",
+      category: "EMAIL_VERIFICATION",
+      status: "SUCCESS",
+      severity: "INFO",
+      accountClassification: classifyAccountStatus(user).statusCode,
+      details: issued.emailDispatched
+        ? "Verification email dispatched via configured mail provider."
+        : "Email verification challenge issued in database.",
+    });
+
+    return res.json({
+      message: issued.emailDispatched
+        ? `Verification code and link sent to ${user.email}.`
+        : `Verification code generated for ${user.email}.`,
+      ...issued,
+    });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.post("/api/users", async (req: Request, res: Response) => {
+// Verify email via 6-digit code OR verification link token
+app.post(["/api/auth/verify-email", "/customer/verify-email"], authRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { name, email, phone, company, role, avatarUrl, password } = req.body || {};
-    if (!name || !email) {
-      return res.status(400).json({ message: "name and email are required." });
+    const code = String(req.body?.code || "").trim();
+    const token = String(req.body?.token || "").trim();
+    const identifier = String(
+      req.body?.identifier || req.body?.email || req.user?.email || ""
+    ).trim();
+
+    if (!code && !token) {
+      return res.status(400).json({ message: "Verification code or verification token is required." });
+    }
+
+    let user = req.user?.userId
+      ? await findUserById(req.user.userId)
+      : identifier
+      ? await findUserByIdentifier(identifier)
+      : null;
+
+    if (!user && token) {
+      const tokenHash = sha256Hex(token);
+      const allUsers = await listUsersByRoles();
+      user = allUsers.find((u) => u.emailVerificationTokenHash === tokenHash) || null;
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: "Account not found for verification." });
+    }
+
+    if (user.emailVerified) {
+      return res.json({
+        message: "Email is already verified.",
+        classification: classifyAccountStatus(user),
+        user: sanitizeUserRecord(user),
+        customer: user.role === "customer" ? mapCustomerUserToLegacy(user) : undefined,
+      });
+    }
+
+    const expMs = user.emailVerificationExpiresAt
+      ? new Date(user.emailVerificationExpiresAt).getTime()
+      : 0;
+    if (!expMs || expMs < Date.now()) {
+      return res.status(400).json({
+        message: "Verification code or link has expired. Please request a new verification email.",
+      });
+    }
+
+    const validByCode =
+      Boolean(code) &&
+      Boolean(user.emailVerificationCodeHash) &&
+      sha256Hex(`${user.id}:${code}`) === user.emailVerificationCodeHash;
+    const validByToken =
+      Boolean(token) &&
+      Boolean(user.emailVerificationTokenHash) &&
+      sha256Hex(token) === user.emailVerificationTokenHash;
+
+    if (!validByCode && !validByToken) {
+      await recordAuditEvent(req, {
+        actorUserId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetUserId: user.id,
+        targetIdentifier: user.email,
+        action: "EMAIL_VERIFICATION_FAILED",
+        category: "EMAIL_VERIFICATION",
+        status: "FAILURE",
+        severity: "WARNING",
+        accountClassification: classifyAccountStatus(user).statusCode,
+        details: "Invalid email verification code or token submitted.",
+      });
+      return res.status(400).json({ message: "Invalid email verification code or token." });
+    }
+
+    const updated = await updateUserAccount(user.id, {
+      emailVerified: true,
+      emailVerificationCodeHash: null,
+      emailVerificationTokenHash: null,
+      emailVerificationExpiresAt: null,
+    });
+    const finalUser = updated || user;
+    const classification = classifyAccountStatus(finalUser);
+
+    await recordAuditEvent(req, {
+      actorUserId: finalUser.id,
+      actorEmail: finalUser.email,
+      actorRole: finalUser.role,
+      targetUserId: finalUser.id,
+      targetIdentifier: finalUser.email,
+      action: "EMAIL_VERIFIED",
+      category: "EMAIL_VERIFICATION",
+      status: "SUCCESS",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: `Email verified for ${finalUser.email}.`,
+    });
+
+    return res.json({
+      message: "Email verified successfully!",
+      classification,
+      user: sanitizeUserRecord(finalUser),
+      customer: finalUser.role === "customer" ? mapCustomerUserToLegacy(finalUser) : undefined,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// ADMIN-ONLY GOOGLE AUTHENTICATOR (TOTP 2FA) MANAGEMENT
+// ============================================================================
+app.get("/api/admin/totp/status", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const user = req.user?.userId ? await findUserById(req.user.userId) : null;
+  if (!user) return res.status(404).json({ message: "Admin user not found." });
+  return res.json({
+    totpEnabled: Boolean(user.totpEnabled),
+    hasPendingSetup: Boolean(user.totpSecretEncrypted && !user.totpEnabled),
+    email: user.email,
+    role: user.role,
+  });
+});
+
+app.post("/api/admin/totp/setup", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ message: "Admin session required." });
+    const user = await findUserById(req.user.userId);
+    if (!user || (user.role !== "admin" && user.role !== "staff")) {
+      return res.status(403).json({
+        message: "Google Authenticator 2FA is restricted exclusively to Administrator accounts.",
+      });
+    }
+
+    const secret = generateTotpSecret();
+    const otpauthUri = buildTotpOtpAuthUri({
+      secret,
+      email: user.email,
+      issuer: "Innovista Fabriconix Admin",
+    });
+    const qrDataUrl = await QRCode.toDataURL(otpauthUri, {
+      width: 240,
+      margin: 2,
+      color: { dark: "#0f172a", light: "#ffffff" },
+    });
+
+    await updateUserAccount(user.id, {
+      totpSecretEncrypted: encryptSecret(secret),
+      totpEnabled: false,
+    });
+
+    await recordAuditEvent(req, {
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "MFA_TOTP_SETUP_INITIATED",
+      category: "MFA",
+      status: "PENDING",
+      severity: "INFO",
+      accountClassification: classifyAccountStatus(user).statusCode,
+      details: "Admin generated Google Authenticator QR setup secret.",
+    });
+
+    return res.json({
+      message: "Scan the QR code in Google Authenticator, then enter the 6-digit code to activate 2FA.",
+      qrDataUrl,
+      manualSecret: secret,
+      otpauthUri,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/api/admin/totp/enable", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ message: "Admin session required." });
+    const user = await findUserById(req.user.userId);
+    if (!user || (user.role !== "admin" && user.role !== "staff")) {
+      return res.status(403).json({ message: "Google Authenticator is restricted to Administrators." });
+    }
+    const secret = decryptSecret(user.totpSecretEncrypted);
+    if (!secret) {
+      return res.status(400).json({ message: "No pending Google Authenticator secret. Start setup first." });
+    }
+    const code = String(req.body?.code || "").trim();
+    if (!verifyTotpCode(secret, code)) {
+      await recordAuditEvent(req, {
+        targetUserId: user.id,
+        targetIdentifier: user.email,
+        action: "MFA_TOTP_ENABLE_FAILED",
+        category: "MFA",
+        status: "FAILURE",
+        severity: "WARNING",
+        details: "Invalid TOTP verification code during 2FA enrollment.",
+      });
+      return res.status(400).json({ message: "Invalid 6-digit verification code. Please check Google Authenticator." });
+    }
+
+    const updated = await updateUserAccount(user.id, { totpEnabled: true });
+    const tokens = updated ? issueUserSessionTokens(updated, true) : undefined;
+
+    await recordAuditEvent(req, {
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "MFA_TOTP_ENABLED",
+      category: "MFA",
+      status: "SUCCESS",
+      severity: "HIGH",
+      accountClassification: classifyAccountStatus(updated || user).statusCode,
+      details: "Google Authenticator 2FA enabled for admin account.",
+    });
+
+    return res.json({
+      message: "Google Authenticator 2FA is now active on your administrator account.",
+      totpEnabled: true,
+      tokens,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/api/admin/totp/disable", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ message: "Admin session required." });
+    const user = await findUserById(req.user.userId);
+    if (!user) return res.status(404).json({ message: "Admin not found." });
+
+    const password = String(req.body?.password || "");
+    const code = String(req.body?.code || "").trim();
+    const secret = decryptSecret(user.totpSecretEncrypted);
+
+    const verifiedByCode = Boolean(secret && code && verifyTotpCode(secret, code));
+    const verifiedByPassword = Boolean(password && verifyPassword(password, user.passwordHash));
+    if (!verifiedByCode && !verifiedByPassword) {
+      return res.status(401).json({
+        message: "Provide your current password or a valid 6-digit Google Authenticator code to disable 2FA.",
+      });
+    }
+
+    await updateUserAccount(user.id, {
+      totpEnabled: false,
+      totpSecretEncrypted: null,
+    });
+
+    await recordAuditEvent(req, {
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "MFA_TOTP_DISABLED",
+      category: "MFA",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: "Google Authenticator 2FA disabled on admin account.",
+    });
+
+    return res.json({ message: "Google Authenticator 2FA disabled.", totpEnabled: false });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// ADMIN SECRET KEY MANAGEMENT (Default: A9HF-4K28@, Recreated in Admin Portal)
+// ============================================================================
+app.get("/api/admin/secret-key", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  try {
+    const active = await getOrInitAdminSecretKey();
+    return res.json({
+      secretKey: active.secretKey,
+      maskedKey: maskAdminSecretKey(active.secretKey),
+      updatedAt: active.updatedAt,
+      updatedByEmail: active.updatedByEmail,
+      rotationCount: active.rotationCount,
+      isDefault: active.isDefault,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/api/admin/secret-key/recreate", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const current = await getOrInitAdminSecretKey();
+    const rawCustom = typeof req.body?.customKey === "string" ? req.body.customKey.trim() : "";
+
+    let nextSecretKey = "";
+    if (rawCustom) {
+      const check = validateAdminSecretKeyFormat(rawCustom);
+      if (!check.valid) {
+        return res.status(400).json({ message: check.error });
+      }
+      nextSecretKey = check.normalized;
+    } else {
+      nextSecretKey = generateAdminSecretKey();
+      if (nextSecretKey === current.secretKey) {
+        nextSecretKey = generateAdminSecretKey();
+      }
+    }
+
+    const nowIso = new Date().toISOString();
+    const updatedDoc: AdminSecretKeyDoc = {
+      encryptedKey: encryptSecret(nextSecretKey),
+      keyHash: sha256Hex(nextSecretKey),
+      updatedAt: nowIso,
+      updatedByEmail: req.user?.email || "admin",
+      rotationCount: current.rotationCount + 1,
+    };
+
+    await setCmsDoc(
+      "admin_secret_key_config",
+      updatedDoc as unknown as Record<string, unknown>,
+      req.user?.userId ?? null
+    );
+
+    await recordAuditEvent(req, {
+      targetUserId: req.user?.userId ?? null,
+      targetIdentifier: req.user?.email || "admin-secret-key",
+      action: "ADMIN_SECRET_KEY_RECREATED",
+      category: "SECURITY",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: rawCustom
+        ? "Admin updated custom Administrator Login Secret Key."
+        : "Admin recreated a new randomized Administrator Login Secret Key.",
+      metadata: { rotationCount: updatedDoc.rotationCount, mode: rawCustom ? "custom" : "random" },
+    });
+
+    return res.json({
+      message: rawCustom
+        ? "Admin Secret Key updated and stored securely."
+        : "New Admin Secret Key recreated and stored securely.",
+      secretKey: nextSecretKey,
+      maskedKey: maskAdminSecretKey(nextSecretKey),
+      updatedAt: updatedDoc.updatedAt,
+      updatedByEmail: updatedDoc.updatedByEmail,
+      rotationCount: updatedDoc.rotationCount,
+      isDefault: nextSecretKey === DEFAULT_ADMIN_SECRET_KEY,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// ADMIN SECURITY GOVERNANCE & DETAILED CSV AUDIT REPORT ENDPOINTS
+// ============================================================================
+app.patch("/api/admin/customers/:id/status", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) {
+      return res.status(400).json({ message: "Invalid user ID." });
+    }
+    const target = await findUserById(id);
+    if (!target) {
+      return res.status(404).json({ message: "Customer account not found." });
+    }
+
+    const patch: Parameters<typeof updateUserAccount>[1] = {};
+    const actions: string[] = [];
+
+    if (typeof req.body?.isVerified === "boolean") {
+      patch.isVerified = req.body.isVerified;
+      actions.push(req.body.isVerified ? "ACCOUNT_VERIFIED" : "ACCOUNT_UNVERIFIED");
+    }
+    if (req.body?.accountStatus === "ACTIVE" || req.body?.accountStatus === "SUSPENDED") {
+      patch.accountStatus = req.body.accountStatus;
+      patch.isActive = req.body.accountStatus !== "SUSPENDED";
+      actions.push(req.body.accountStatus === "SUSPENDED" ? "ACCOUNT_SUSPENDED" : "ACCOUNT_REACTIVATED");
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return res.status(400).json({ message: "No status update fields provided." });
+    }
+
+    const updated = await updateUserAccount(id, patch);
+    const finalUser = updated || target;
+    const classification = classifyAccountStatus(finalUser);
+    const reason = String(req.body?.reason || "").trim();
+
+    await recordAuditEvent(req, {
+      targetUserId: finalUser.id,
+      targetIdentifier: finalUser.email,
+      action: actions.join("+"),
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: patch.accountStatus === "SUSPENDED" ? "HIGH" : "INFO",
+      accountClassification: classification.statusCode,
+      details: reason
+        ? `Admin updated ${finalUser.email}: ${actions.join(", ")} (${reason})`
+        : `Admin updated ${finalUser.email}: ${actions.join(", ")}`,
+    });
+
+    return res.json({
+      message:
+        patch.accountStatus === "SUSPENDED"
+          ? `Account ${finalUser.email} has been suspended.`
+          : patch.accountStatus === "ACTIVE"
+          ? `Account ${finalUser.email} reactivated.`
+          : patch.isVerified
+          ? `Account ${finalUser.email} verified by admin.`
+          : `Verification revoked for ${finalUser.email}.`,
+      customer: mapCustomerUserToLegacy(finalUser),
+      classification,
+    });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.get("/api/admin/audit-logs", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const logs = await listAuditLogs({
+      category: typeof req.query.category === "string" ? req.query.category : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+      severity: typeof req.query.severity === "string" ? req.query.severity : undefined,
+      action: typeof req.query.action === "string" ? req.query.action : undefined,
+      search: typeof req.query.search === "string" ? req.query.search : undefined,
+      limit: req.query.limit ? Number(req.query.limit) : 500,
+    });
+
+    const summary = {
+      totalEvents: logs.length,
+      criticalOrHigh: logs.filter((l) => l.severity === "CRITICAL" || l.severity === "HIGH").length,
+      failedAuth: logs.filter((l) => l.status === "FAILURE" || l.status === "BLOCKED").length,
+      csvExports: logs.filter((l) => l.action === "AUDIT_CSV_EXPORTED").length,
+    };
+
+    return res.json({ data: logs, total: logs.length, summary });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.get("/api/admin/audit-logs/export.csv", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const filters = {
+      category: typeof req.query.category === "string" ? req.query.category : undefined,
+      status: typeof req.query.status === "string" ? req.query.status : undefined,
+      severity: typeof req.query.severity === "string" ? req.query.severity : undefined,
+      action: typeof req.query.action === "string" ? req.query.action : undefined,
+      search: typeof req.query.search === "string" ? req.query.search : undefined,
+      limit: 5000,
+    };
+
+    await recordAuditEvent(req, {
+      action: "AUDIT_CSV_EXPORTED",
+      category: "REPORTING",
+      status: "SUCCESS",
+      severity: "INFO",
+      details: "Admin exported detailed security & web audit report as CSV.",
+      metadata: filters,
+    });
+
+    const logs = await listAuditLogs(filters);
+    const csvContent = buildAuditLogsCsv(logs);
+    const stamp = new Date().toISOString().slice(0, 10);
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="innovista-web-audit-report-${stamp}.csv"`);
+    res.setHeader("Cache-Control", "no-store");
+    return res.send(csvContent);
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+// ============================================================================
+// ADMIN & USER MANAGEMENT ROUTES (Protected)
+// ============================================================================
+app.get("/api/users", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const roleParam = typeof req.query.role === "string" ? req.query.role.trim() : "";
+    const rows = await listUsersByRoles(roleParam ? roleParam.split(",") : undefined);
+    return res.json({ data: rows.map(sanitizeUserRecord) });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/api/users", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const { name, username, email, phone, company, role, avatarUrl, password } = req.body || {};
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: "name, email, and strong password are required." });
+    }
+    const pwCheck = validatePasswordStrength(String(password));
+    if (!pwCheck.valid) {
+      return res.status(400).json({ message: pwCheck.error });
     }
     const existing = await findUserByEmail(String(email));
     if (existing) {
       return res.status(409).json({ message: "A user with that email already exists." });
     }
+    if (username && (await findUserByIdentifier(String(username)))) {
+      return res.status(409).json({ message: "That username is already in use." });
+    }
+    const assignedRole = role === "admin" || role === "staff" ? role : "customer";
     const created = await createUserAccount({
       name: String(name),
+      username: username ? String(username).trim().toLowerCase() : null,
       email: String(email),
       phone: String(phone || ""),
       company: String(company || ""),
-      role: role === "admin" || role === "staff" ? role : "customer",
+      role: assignedRole,
       avatarUrl: String(avatarUrl || ""),
-      passwordHash: String(password || ""),
-      isVerified: role === "admin" || role === "staff",
+      passwordHash: hashPassword(String(password)),
+      isVerified: assignedRole === "admin" || assignedRole === "staff",
+      emailVerified: false,
+      accountStatus: "ACTIVE",
     });
-    return res.status(201).json({ message: "User created", data: stripPasswordHash(created) });
+    return res.status(201).json({ message: "User created", data: sanitizeUserRecord(created) });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.put("/api/users/:id", async (req: Request, res: Response) => {
+app.put("/api/users/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user ID" });
   try {
-    const updated = await updateUserAccount(id, req.body || {});
+    const { name, phone, company, avatarUrl, isVerified, emailVerified, accountStatus, username } = req.body || {};
+    const updated = await updateUserAccount(id, {
+      ...(name !== undefined ? { name: String(name) } : {}),
+      ...(username !== undefined ? { username: username ? String(username) : null } : {}),
+      ...(phone !== undefined ? { phone: String(phone) } : {}),
+      ...(company !== undefined ? { company: String(company) } : {}),
+      ...(avatarUrl !== undefined ? { avatarUrl: String(avatarUrl) } : {}),
+      ...(typeof isVerified === "boolean" ? { isVerified } : {}),
+      ...(typeof emailVerified === "boolean" ? { emailVerified } : {}),
+      ...(accountStatus === "ACTIVE" || accountStatus === "SUSPENDED" ? { accountStatus } : {}),
+    });
     if (!updated) return res.status(404).json({ message: "User not found" });
-    return res.json({ message: "User updated", data: stripPasswordHash(updated) });
+    return res.json({ message: "User updated", data: sanitizeUserRecord(updated) });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.delete("/api/users/:id", async (req: Request, res: Response) => {
+app.delete("/api/users/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid user ID" });
   try {
+    if (req.user?.userId === id) {
+      return res.status(400).json({ message: "You cannot delete your own active administrator account." });
+    }
     const deleted = await deleteUserAccount(id);
     if (!deleted) return res.status(404).json({ message: "User not found" });
+    await recordAuditEvent(req, {
+      targetUserId: id,
+      action: "USER_DELETED",
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: `Admin deleted user ID ${id}.`,
+    });
     return res.json({ message: "User deleted" });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.post("/auth/login", async (req: Request, res: Response) => {
+app.post("/auth/register", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
-    const email = (req.query.email || req.body?.email) as string | undefined;
-    const password = (req.query.password || req.body?.password) as string | undefined;
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
+    const { Admin_Name, Admin_Email, Admin_Phone, Admin_Password, Admin_Profile, Admin_Username } =
+      req.body || {};
+    const email = String(Admin_Email || "").trim().toLowerCase();
+    if (!Admin_Name || !email || !Admin_Password) {
+      return res.status(400).json({ message: "Admin name, email, and strong password are required." });
     }
-    const adminList = await getAdminAndStaffUsers();
-    const matched = adminList.find(
-      (a) =>
-        a.email.toLowerCase() === email.trim().toLowerCase() &&
-        (!a.passwordHash || a.passwordHash === password || password === "admin123")
-    );
-    if (!matched) {
-      return res.status(401).json({ message: "Invalid email or password" });
+    const pwCheck = validatePasswordStrength(String(Admin_Password));
+    if (!pwCheck.valid) {
+      return res.status(400).json({ message: pwCheck.error });
     }
-    return res.json({
-      message: "Login successful!",
-      tokens: {
-        accessToken: `session:${matched.email}`,
-        refreshToken: `refresh:${matched.email}`,
-      },
-      admin: {
-        AdminId: matched.id,
-        Admin_Name: matched.name,
-        Admin_Email: matched.email,
-        Admin_Phone: matched.phone || "",
-        Admin_Profile: matched.avatarUrl || "/assets/about/director.jpg",
-      },
-    });
-  } catch (err) {
-    return res.status(500).json({ message: (err as Error).message });
-  }
-});
-
-app.get("/auth/refresh", (_req: Request, res: Response) => {
-  return res.json({
-    accessToken: "session:admin@innovista.com",
-  });
-});
-
-app.post("/auth/register", async (req: Request, res: Response) => {
-  try {
-    const { Admin_Name, Admin_Email, Admin_Phone, Admin_Password, Admin_Profile } = req.body || {};
-    const existing = await findUserByEmail(String(Admin_Email || ""));
+    const existing = await findUserByEmail(email);
     if (existing) {
       return res.status(409).json({ message: "An account with this email already exists." });
     }
+    if (Admin_Username && (await findUserByIdentifier(String(Admin_Username)))) {
+      return res.status(409).json({ message: "An account with this username already exists." });
+    }
     const created = await createUserAccount({
-      name: String(Admin_Name || "New Admin"),
-      email: String(Admin_Email || `admin${Date.now()}@innovista.com`),
+      name: String(Admin_Name).trim(),
+      username: Admin_Username ? String(Admin_Username).trim().toLowerCase() : null,
+      email,
       phone: String(Admin_Phone || ""),
+      company: "Innovista Fabriconix Executive",
       role: "admin",
-      passwordHash: String(Admin_Password || "admin123"),
+      passwordHash: hashPassword(String(Admin_Password)),
       avatarUrl: String(Admin_Profile || "/assets/about/director.jpg"),
       isVerified: true,
+      emailVerified: false,
+      accountStatus: "ACTIVE",
+      totpEnabled: false,
     });
+
+    await recordAuditEvent(req, {
+      targetUserId: created.id,
+      targetIdentifier: created.email,
+      action: "ADMIN_ACCOUNT_CREATED",
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: `Administrator created admin account ${created.email}.`,
+    });
+
     return res.status(201).json({
       message: "Admin registered successfully",
-      admin: {
-        AdminId: created.id,
-        Admin_Name: created.name,
-        Admin_Email: created.email,
-        Admin_Phone: created.phone || "",
-        Admin_Profile: created.avatarUrl || "",
-      },
+      admin: mapAdminUserToLegacy(created),
     });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.get("/auth/getAllAdmins", async (_req: Request, res: Response) => {
+app.get("/auth/getAllAdmins", requireAdminOrStaff, async (_req: Request, res: Response) => {
   try {
     const list = await getAdminAndStaffUsers();
     return res.json({
-      data: list.map((a) => ({
-        AdminId: a.id,
-        Admin_Name: a.name,
-        Admin_Email: a.email,
-        Admin_Phone: a.phone || "",
-        Admin_Profile: a.avatarUrl || "/assets/about/director.jpg",
-        role: a.role,
-      })),
+      data: list.map(mapAdminUserToLegacy),
     });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.delete("/auth/RemoveAdmin", async (req: Request, res: Response) => {
+app.delete("/auth/RemoveAdmin", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const adminId = Number(
       req.query.AdminId ||
@@ -635,28 +2424,138 @@ app.delete("/auth/RemoveAdmin", async (req: Request, res: Response) => {
         req.body?.AdminId ||
         req.body?.adminId
     );
+    if (req.user?.userId === adminId) {
+      return res.status(400).json({ message: "You cannot delete your own active administrator account." });
+    }
     await deleteUserAccount(adminId);
+    await recordAuditEvent(req, {
+      targetUserId: adminId,
+      action: "ADMIN_REMOVED",
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: `Admin removed admin ID ${adminId}.`,
+    });
     return res.json({ message: "Admin removed" });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.post("/auth/ResetPassword", (_req: Request, res: Response) => {
-  return res.json({ message: "Password reset link has been sent to the email." });
+app.post("/auth/ResetPassword", authRateLimiter, async (req: Request, res: Response) => {
+  const email = String(req.body?.email || req.query?.email || "").trim().toLowerCase();
+  const token = String(req.body?.token || "").trim();
+  const newPassword = String(req.body?.newPassword || req.body?.password || "");
+
+  if (token && newPassword) {
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) {
+      return res.status(400).json({ message: pwCheck.error });
+    }
+    const challenge = await getSecurityChallenge(sha256Hex(token).slice(0, 32));
+    if (!challenge || challenge.purpose !== "PASSWORD_RESET" || challenge.consumed || new Date(challenge.expiresAt).getTime() < Date.now()) {
+      return res.status(400).json({ message: "Password reset token is invalid or expired." });
+    }
+    const targetUser = challenge.userId ? await findUserById(challenge.userId) : null;
+    if (!targetUser) return res.status(404).json({ message: "User not found." });
+    await updateUserAccount(targetUser.id, { passwordHash: hashPassword(newPassword), failedLoginAttempts: 0, lockedUntil: null });
+    await markChallengeConsumed(challenge.challengeId);
+    await recordAuditEvent(req, {
+      targetUserId: targetUser.id,
+      targetIdentifier: targetUser.email,
+      action: "PASSWORD_RESET_COMPLETED",
+      category: "AUTH",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: `Password updated via reset flow for ${targetUser.email}.`,
+    });
+    return res.json({ message: "Password updated successfully. You may now sign in." });
+  }
+
+  if (!email) {
+    return res.status(400).json({ message: "Please provide a valid email address." });
+  }
+  const user = await findUserByEmail(email);
+  if (user) {
+    const resetToken = randomBytes(24).toString("hex");
+    await createSecurityChallenge({
+      challengeId: sha256Hex(resetToken).slice(0, 32),
+      purpose: "PASSWORD_RESET",
+      userId: user.id,
+      identifier: user.email,
+      answerHash: sha256Hex(resetToken),
+      maxAttempts: 3,
+      expiresAt: new Date(Date.now() + 30 * 60_000),
+    });
+    await recordAuditEvent(req, {
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "PASSWORD_RESET_REQUESTED",
+      category: "AUTH",
+      status: "SUCCESS",
+      severity: "INFO",
+      details: `Password recovery requested for ${user.email}.`,
+    });
+  }
+  return res.json({
+    message: "If an account exists for that email, password recovery instructions have been issued.",
+  });
 });
 
-app.post("/auth/forgot-password", (req: Request, res: Response) => {
-  const email = (req.body?.email || "").toString().trim();
+app.post("/api/auth/change-password", requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.userId) return res.status(401).json({ message: "Authentication required." });
+    const currentPassword = String(req.body?.currentPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
+    const user = await findUserById(req.user.userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+
+    if (user.passwordHash && !verifyPassword(currentPassword, user.passwordHash)) {
+      return res.status(401).json({ message: "Current password is incorrect." });
+    }
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) {
+      return res.status(400).json({ message: pwCheck.error });
+    }
+    await updateUserAccount(user.id, { passwordHash: hashPassword(newPassword) });
+    await recordAuditEvent(req, {
+      targetUserId: user.id,
+      targetIdentifier: user.email,
+      action: "PASSWORD_CHANGED",
+      category: "AUTH",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: `${user.email} updated account password.`,
+    });
+    return res.json({ message: "Password updated successfully." });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post("/auth/forgot-password", authRateLimiter, async (req: Request, res: Response) => {
+  const email = (req.body?.email || "").toString().trim().toLowerCase();
   if (!email) {
     return res.status(400).json({ message: "Please provide an email address." });
   }
-  return res.json({ message: `Password recovery instructions sent to ${email}.` });
+  const user = await findUserByEmail(email);
+  await recordAuditEvent(req, {
+    targetUserId: user?.id ?? null,
+    targetIdentifier: email,
+    action: "FORGOT_PASSWORD_REQUESTED",
+    category: "AUTH",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: `Forgot password inquiry for ${email}.`,
+  });
+  return res.json({
+    message: `If an account is registered under ${email}, recovery instructions have been generated.`,
+  });
 });
 
-app.get("/admin/summary", async (_req: Request, res: Response) => {
+app.get("/admin/summary", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
   try {
-    const [admins, allDesigns, allCustomers, allOrders, allProjects, allFeedbacks, allNotifs] =
+    const [admins, allDesigns, allCustomers, allOrders, allProjects, allFeedbacks, allNotifs, auditRows] =
       await Promise.all([
         getAdminAndStaffUsers(),
         listProducts(),
@@ -665,11 +2564,15 @@ app.get("/admin/summary", async (_req: Request, res: Response) => {
         listProjects(),
         listFeedbacks(),
         listNotifications(),
+        listAuditLogs({ limit: 500 }),
       ]);
 
     const pendingOrders = allOrders.filter((o) => o.Order_Status === "PENDING").length;
     const completedOrders = allOrders.filter((o) => o.Order_Status === "COMPLETED").length;
     const verifiedCustomers = allCustomers.filter((c) => c.isVerified).length;
+    const suspendedCustomers = allCustomers.filter(
+      (c) => (c.accountStatus || "ACTIVE").toUpperCase() === "SUSPENDED" || !c.isActive
+    ).length;
     const unreadNotifications = allNotifs.filter((n) => !n.isRead).length;
     const totalProjectBudget = allProjects.reduce((acc, p) => acc + Number(p.Budget || 0), 0);
 
@@ -678,6 +2581,7 @@ app.get("/admin/summary", async (_req: Request, res: Response) => {
       designs: allDesigns.length,
       customers: allCustomers.length,
       verifiedCustomers,
+      suspendedCustomers,
       orders: allOrders.length,
       pendingOrders,
       completedOrders,
@@ -685,13 +2589,23 @@ app.get("/admin/summary", async (_req: Request, res: Response) => {
       totalProjectBudget,
       feedbacks: allFeedbacks.length,
       unreadNotifications,
+      auditEvents: auditRows.length,
     });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.post("/auth/logout", (_req: Request, res: Response) => {
+app.post("/auth/logout", optionalAuth, async (req: AuthRequest, res: Response) => {
+  if (req.user) {
+    await recordAuditEvent(req, {
+      action: "USER_LOGOUT",
+      category: "AUTH",
+      status: "SUCCESS",
+      severity: "INFO",
+      details: `${req.user.email} signed out.`,
+    });
+  }
   return res.json({ message: "Logged out" });
 });
 
@@ -930,20 +2844,7 @@ app.put("/designs/:id", async (req: Request, res: Response) => {
 // ============================================================================
 // CUSTOMER ROUTES (PostgreSQL users with role='customer')
 // ============================================================================
-function mapCustomerUserToLegacy(u: Awaited<ReturnType<typeof getCustomerUsers>>[number]) {
-  return {
-    CustomerId: u.id,
-    Cus_Name: u.name,
-    Cus_Email: u.email,
-    Cus_PhoneNumber: u.phone || "",
-    Cus_CompanyName: u.company || "",
-    Cus_Logo: u.avatarUrl || "/assets/logos/client-zenith.svg",
-    Verify_State: u.isVerified,
-    Purchase_Goods: u.purchaseGoods,
-  };
-}
-
-app.get("/customer/getAllCustomers", async (req: Request, res: Response) => {
+app.get("/customer/getAllCustomers", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const rows = await getCustomerUsers();
     const limit = parseInt(req.query.limit as string, 10) || 100;
@@ -961,49 +2862,126 @@ app.get("/customer/getAllCustomers", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/customer/Customer_register", async (req: Request, res: Response) => {
+app.post("/customer/Customer_register", strictLoginRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const b = req.body || {};
+    const isAdminCreator = Boolean(req.user && (req.user.role === "admin" || req.user.role === "staff"));
+
+    if (!isAdminCreator) {
+      const captchaCheck = await verifyCaptchaInput(req, b);
+      if (captchaCheck.ok === false) {
+        return res.status(captchaCheck.status).json({ message: captchaCheck.message, reason: captchaCheck.reason });
+      }
+    }
+
     const email = String(b.Cus_Email || b.email || "").trim().toLowerCase();
-    const existing = email ? await findUserByEmail(email) : null;
+    const username = String(b.Cus_Username || b.username || "").trim().toLowerCase();
+    const name = String(b.Cus_Name || b.name || "").trim();
+    const password = String(b.Cus_Password || b.password || "");
+
+    if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ message: "Valid full name and email address are required." });
+    }
+    if (username && !/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return res.status(400).json({ message: "Username must be 3-32 characters (letters, numbers, ., _, -)." });
+    }
+    const pwCheck = validatePasswordStrength(password);
+    if (!pwCheck.valid) {
+      return res.status(400).json({ message: pwCheck.error });
+    }
+
+    const existing = await findUserByEmail(email);
     if (existing) {
       return res.status(409).json({ message: "An account with this email already exists." });
     }
+    if (username && (await findUserByIdentifier(username))) {
+      return res.status(409).json({ message: "That username is already taken." });
+    }
+
     const created = await createUserAccount({
-      name: String(b.Cus_Name || b.name || "Valued Customer"),
-      email: email || `customer-${Date.now()}@example.com`,
-      phone: String(b.Cus_PhoneNumber || b.phone || ""),
-      company: String(b.Cus_CompanyName || b.company || "Independent Client"),
+      name,
+      username: username || null,
+      email,
+      phone: String(b.Cus_PhoneNumber || b.phone || "").trim(),
+      company: String(b.Cus_CompanyName || b.company || "").trim(),
       avatarUrl: String(b.Cus_Logo || "/assets/logos/client-zenith.svg"),
-      passwordHash: String(b.Cus_Password || b.password || "customer123"),
+      passwordHash: hashPassword(password),
       role: "customer",
-      isVerified: true,
+      // Newly signed-up customers can sign in and browse right away as Unverified Clients;
+      // admins can verify or suspend the account from Customer Manager.
+      isVerified: isAdminCreator && typeof b.Verify_State === "boolean" ? b.Verify_State : false,
+      emailVerified: false,
+      accountStatus: "ACTIVE",
       purchaseGoods: Array.isArray(b.Purchase_Goods) ? b.Purchase_Goods : [],
     });
-    const mapped = mapCustomerUserToLegacy(created);
+
+    const origin = resolveRequestOrigin({
+      appUrl: process.env.APP_URL,
+      protocol: (req.headers["x-forwarded-proto"] as string) || req.protocol,
+      host: (req.headers["x-forwarded-host"] as string) || req.get("host"),
+    });
+    const verification = await issueEmailVerificationChallenge(created, origin);
+    const refreshedUser = (await findUserById(created.id)) || created;
+    const tokens = issueUserSessionTokens(refreshedUser, true);
+    const classification = classifyAccountStatus(refreshedUser);
+    const mapped = mapCustomerUserToLegacy(refreshedUser);
+
+    await recordAuditEvent(req, {
+      actorUserId: isAdminCreator ? req.user?.userId : created.id,
+      actorEmail: isAdminCreator ? req.user?.email : created.email,
+      actorRole: isAdminCreator ? req.user?.role : "customer",
+      targetUserId: created.id,
+      targetIdentifier: created.email,
+      action: isAdminCreator ? "ADMIN_CREATED_CUSTOMER" : "CUSTOMER_SIGNUP",
+      category: "AUTH",
+      status: "SUCCESS",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: `Client account created (${classification.accountTypeLabel}).`,
+    });
+
     return res.status(201).json({
-      message: "Customer created",
+      message: "Account created! You can browse the site immediately while verifying your email.",
+      tokens,
+      classification,
       customer: mapped,
       data: mapped,
+      user: sanitizeUserRecord(refreshedUser),
+      verification,
     });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.put("/customer/updateCustomer", async (req: Request, res: Response) => {
+app.put("/customer/updateCustomer", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.body?.CustomerId);
     const updated = await updateUserAccount(id, {
       name: req.body?.Cus_Name,
+      username: req.body?.Cus_Username,
       email: req.body?.Cus_Email,
       phone: req.body?.Cus_PhoneNumber,
       company: req.body?.Cus_CompanyName,
       avatarUrl: req.body?.Cus_Logo,
       isVerified: req.body?.Verify_State,
+      accountStatus:
+        req.body?.Account_Status === "ACTIVE" || req.body?.Account_Status === "SUSPENDED"
+          ? req.body.Account_Status
+          : undefined,
       purchaseGoods: req.body?.Purchase_Goods,
     });
     if (!updated) return res.status(404).json({ message: "Customer not found" });
+    await recordAuditEvent(req, {
+      targetUserId: updated.id,
+      targetIdentifier: updated.email,
+      action: "ADMIN_UPDATED_CUSTOMER",
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: "INFO",
+      accountClassification: classifyAccountStatus(updated).statusCode,
+      details: `Updated customer ${updated.email}.`,
+    });
     return res.json({
       message: "Customer updated",
       customer: mapCustomerUserToLegacy(updated),
@@ -1013,7 +2991,7 @@ app.put("/customer/updateCustomer", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/customer/deleteCustomer", async (req: Request, res: Response) => {
+app.delete("/customer/deleteCustomer", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(
       req.query.CustomerId ||
@@ -1022,48 +3000,38 @@ app.delete("/customer/deleteCustomer", async (req: Request, res: Response) => {
         req.body?.customerId
     );
     await deleteUserAccount(id);
+    await recordAuditEvent(req, {
+      targetUserId: id,
+      action: "CUSTOMER_DELETED",
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: "HIGH",
+      details: `Admin deleted customer ID ${id}.`,
+    });
     return res.json({ message: "Customer deleted" });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.post("/customer/login", async (req: Request, res: Response) => {
-  try {
-    const email = (req.body?.email || req.query.email || "").toString().trim().toLowerCase();
-    const password = (req.body?.password || req.query.password || "").toString();
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required." });
-    }
-    const list = await getCustomerUsers();
-    const customer = list.find((c) => c.email.toLowerCase() === email);
-    if (!customer) {
-      return res.status(401).json({ message: "No customer account found with that email." });
-    }
-    if (customer.passwordHash && customer.passwordHash !== password) {
-      return res.status(401).json({ message: "Incorrect password." });
-    }
-    return res.json({
-      message: "Login successful",
-      tokens: {
-        accessToken: `session:${customer.email}`,
-        refreshToken: `refresh:${customer.email}`,
-      },
-      customer: mapCustomerUserToLegacy(customer),
-    });
-  } catch (err) {
-    return res.status(500).json({ message: (err as Error).message });
-  }
-});
+app.post("/customer/login", strictLoginRateLimiter, (req: Request, res: Response) =>
+  handleCredentialLogin(req, res, "any")
+);
 
-app.get("/customer/profile", async (req: Request, res: Response) => {
+app.get("/customer/profile", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const customerId = req.query.customerId ? Number(req.query.customerId) : undefined;
-    const email = (req.query.email as string) || "";
-    const all = await getCustomerUsers();
-    const customer = all.find(
-      (c) => (customerId && c.id === customerId) || (email && c.email.toLowerCase() === email.toLowerCase())
-    );
+    const requestedId = req.query.customerId ? Number(req.query.customerId) : undefined;
+    const requestedEmail = ((req.query.email as string) || "").trim().toLowerCase();
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "staff";
+
+    let customer = req.user?.userId ? await findUserById(req.user.userId) : null;
+    if (isAdmin && (requestedId || requestedEmail)) {
+      customer =
+        (requestedId ? await findUserById(requestedId) : null) ||
+        (requestedEmail ? await findUserByEmail(requestedEmail) : null) ||
+        customer;
+    }
+
     if (!customer) return res.status(404).json({ message: "Customer profile not found" });
 
     const [allOrders, allRfqs, allAppointments] = await Promise.all([
@@ -1089,6 +3057,7 @@ app.get("/customer/profile", async (req: Request, res: Response) => {
 
     return res.json({
       customer: mapCustomerUserToLegacy(customer),
+      classification: classifyAccountStatus(customer),
       orders: customerOrders,
       rfqs: customerRfqs,
       siteVisits: customerVisits,
@@ -1098,20 +3067,25 @@ app.get("/customer/profile", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/customer/updateProfile", async (req: Request, res: Response) => {
+app.put("/customer/updateProfile", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { CustomerId, Cus_Email, Cus_Name, Cus_PhoneNumber, Cus_CompanyName, Cus_Logo } =
+    const { CustomerId, Cus_Email, Cus_Name, Cus_PhoneNumber, Cus_CompanyName, Cus_Logo, Cus_Username } =
       req.body || {};
-    const all = await getCustomerUsers();
-    const match = all.find(
-      (c) => c.id === Number(CustomerId) || (Cus_Email && c.email.toLowerCase() === String(Cus_Email).toLowerCase())
-    );
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "staff";
+    let match = req.user?.userId ? await findUserById(req.user.userId) : null;
+    if (isAdmin && (CustomerId || Cus_Email)) {
+      match =
+        (CustomerId ? await findUserById(Number(CustomerId)) : null) ||
+        (Cus_Email ? await findUserByEmail(String(Cus_Email)) : null) ||
+        match;
+    }
     if (!match) return res.status(404).json({ message: "Customer not found" });
     const updated = await updateUserAccount(match.id, {
-      name: Cus_Name,
-      phone: Cus_PhoneNumber,
-      company: Cus_CompanyName,
-      avatarUrl: Cus_Logo,
+      ...(Cus_Name !== undefined ? { name: String(Cus_Name) } : {}),
+      ...(Cus_Username !== undefined ? { username: Cus_Username ? String(Cus_Username) : null } : {}),
+      ...(Cus_PhoneNumber !== undefined ? { phone: String(Cus_PhoneNumber) } : {}),
+      ...(Cus_CompanyName !== undefined ? { company: String(Cus_CompanyName) } : {}),
+      ...(Cus_Logo !== undefined ? { avatarUrl: String(Cus_Logo) } : {}),
     });
     return res.json({
       message: "Profile updated",
@@ -1122,7 +3096,7 @@ app.put("/customer/updateProfile", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/customer/verifyCustomer", async (req: Request, res: Response) => {
+app.post("/customer/verifyCustomer", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(
       req.body?.CustomerId ||
@@ -1133,11 +3107,26 @@ app.post("/customer/verifyCustomer", async (req: Request, res: Response) => {
     const nextState =
       typeof req.body?.Verify_State === "boolean" ? req.body.Verify_State : true;
     const updated = await updateUserAccount(id, { isVerified: nextState });
+    if (!updated) return res.status(404).json({ message: "Customer not found" });
+
+    const classification = classifyAccountStatus(updated);
+    await recordAuditEvent(req, {
+      targetUserId: updated.id,
+      targetIdentifier: updated.email,
+      action: nextState ? "ACCOUNT_VERIFIED" : "ACCOUNT_UNVERIFIED",
+      category: "ACCOUNT_GOVERNANCE",
+      status: "SUCCESS",
+      severity: "INFO",
+      accountClassification: classification.statusCode,
+      details: `Admin set verification state=${nextState} for ${updated.email}.`,
+    });
+
     return res.json({
       message: nextState
         ? "Account verified successfully"
         : "Account verification revoked",
-      customer: updated ? mapCustomerUserToLegacy(updated) : null,
+      customer: mapCustomerUserToLegacy(updated),
+      classification,
     });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
@@ -1147,19 +3136,23 @@ app.post("/customer/verifyCustomer", async (req: Request, res: Response) => {
 // ============================================================================
 // ORDERS & RFQS ROUTES
 // ============================================================================
-app.get("/order/getAllOrders", async (req: Request, res: Response) => {
+app.get("/order/getAllOrders", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const all = await listOrders();
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "staff";
+    const scoped = isAdmin
+      ? all
+      : all.filter((o) => o.Client_Email.toLowerCase() === (req.user?.email || "").toLowerCase());
     const limit = parseInt(req.query.limit as string, 10) || 100;
     const page = parseInt(req.query.page as string, 10) || 1;
     const start = (page - 1) * limit;
-    return res.json({ data: all.slice(start, start + limit), total: all.length, page, limit });
+    return res.json({ data: scoped.slice(start, start + limit), total: scoped.length, page, limit });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.post("/order/createOrder", async (req: Request, res: Response) => {
+app.post("/order/createOrder", optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { Order_Status, Client_Name, Client_Email, Client_Number, Designs } = req.body || {};
     if (!Client_Name || !Client_Email) {
@@ -1172,6 +3165,14 @@ app.post("/order/createOrder", async (req: Request, res: Response) => {
       Client_Number,
       Designs,
     });
+    await recordAuditEvent(req, {
+      targetIdentifier: String(Client_Email),
+      action: "ORDER_CREATED",
+      category: "COMMERCE",
+      status: "SUCCESS",
+      severity: "INFO",
+      details: `Order ${created.OrderID} created for ${Client_Email}.`,
+    });
     return res.status(201).json({
       message: "Order placed successfully!",
       order: created,
@@ -1182,7 +3183,7 @@ app.post("/order/createOrder", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/order/ChangeStates", async (req: Request, res: Response) => {
+app.put("/order/ChangeStates", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const OrderID =
       req.body?.OrderID ||
@@ -1201,16 +3202,32 @@ app.put("/order/ChangeStates", async (req: Request, res: Response) => {
       String(Order_Status || "PENDING")
     );
     if (!updated) return res.status(404).json({ message: "Order not found" });
+    await recordAuditEvent(req, {
+      targetIdentifier: String(OrderID || ""),
+      action: "ORDER_STATUS_UPDATED",
+      category: "COMMERCE",
+      status: "SUCCESS",
+      severity: "INFO",
+      details: `Order ${OrderID} updated to ${Order_Status}.`,
+    });
     return res.json({ message: "Order status updated", order: updated });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
 });
 
-app.get("/api/rfq", async (_req: Request, res: Response) => {
+app.get("/api/rfq", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const rows = await listRfqRecords();
-    return res.json({ data: rows });
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "staff";
+    const scoped = isAdmin
+      ? rows
+      : rows.filter(
+          (r) =>
+            (r.email || "").toLowerCase() === (req.user?.email || "").toLowerCase() ||
+            (req.user?.userId && Number(r.customerUserId) === Number(req.user.userId))
+        );
+    return res.json({ data: scoped });
   } catch (err) {
     return res.status(500).json({ message: (err as Error).message });
   }
@@ -1218,8 +3235,9 @@ app.get("/api/rfq", async (_req: Request, res: Response) => {
 
 app.post(
   "/api/rfq",
+  optionalAuth,
   upload.array("attachments", 12),
-  async (req: Request, res: Response) => {
+  async (req: AuthRequest, res: Response) => {
     try {
       const body = (req.body || {}) as Record<string, string>;
       if (!body.clientName || !body.email || !body.projectTitle) {
@@ -1246,6 +3264,7 @@ app.post(
           mimeType: file.mimetype,
           fileSizeBytes: file.size,
           entityScope: "rfq",
+          uploadedByUserId: req.user?.userId ?? null,
         }).catch(() => null);
 
         attachmentEntries.push({
@@ -1256,7 +3275,18 @@ app.post(
         });
       }
 
-      const saved = await createRfqRecord(body, attachmentEntries);
+      const saved = await createRfqRecord(
+        { ...body, customerUserId: req.user?.userId ? String(req.user.userId) : body.customerUserId || "" },
+        attachmentEntries
+      );
+      await recordAuditEvent(req, {
+        targetIdentifier: String(body.email || ""),
+        action: "RFQ_SUBMITTED",
+        category: "COMMERCE",
+        status: "SUCCESS",
+        severity: "INFO",
+        details: `RFQ submitted: ${body.projectTitle}`,
+      });
       return res.status(201).json({
         message: "Request for quotation submitted successfully.",
         data: saved,
@@ -1364,9 +3394,9 @@ app.put("/feedback/reorder", async (req: Request, res: Response) => {
 });
 
 // ============================================================================
-// NOTIFICATIONS ROUTES
+// NOTIFICATIONS ROUTES (Admin Protected)
 // ============================================================================
-app.get("/Notification/getalerts", async (_req: Request, res: Response) => {
+app.get("/Notification/getalerts", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
   try {
     const list = await listNotifications();
     return res.json({ data: list });
@@ -1375,7 +3405,7 @@ app.get("/Notification/getalerts", async (_req: Request, res: Response) => {
   }
 });
 
-app.post("/Notification/markAsRead", async (req: Request, res: Response) => {
+app.post("/Notification/markAsRead", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const rawId =
       req.body?.id ||
@@ -2321,7 +4351,7 @@ function buildSiteVisitSchedulePayload(
   return { monthKey, todayIso, managedDates, calendarDays };
 }
 
-app.get(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Request, res: Response) => {
+app.get(["/api/site-visits/slots", "/api/appointments/slots"], optionalAuth, async (req: AuthRequest, res: Response) => {
   const [schedule, bookings] = await Promise.all([
     getAppointmentScheduleConfig(),
     listAppointments(),
@@ -2368,10 +4398,7 @@ app.get(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Reque
     selectedDate: requestedDate,
     slots,
     schedule,
-    calendarConnected: Boolean(
-      (req.headers.authorization || "").startsWith("Bearer ") &&
-        !(req.headers.authorization || "").includes("mock-access-token")
-    ),
+    calendarConnected: Boolean(req.user && req.user.authProvider === "firebase"),
   });
 });
 

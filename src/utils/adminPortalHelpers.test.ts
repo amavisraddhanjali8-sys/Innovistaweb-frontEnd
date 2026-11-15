@@ -35,6 +35,8 @@ describe("adminPortalHelpers", () => {
     assert.equal(getActiveAdminNavKey("/EditVisionMission"), "about-cms");
     assert.equal(getActiveAdminNavKey("/PageAdsAdmin"), "ads");
     assert.equal(getActiveAdminNavKey("/BlogsAdmin"), "blogs");
+    assert.equal(getActiveAdminNavKey("/AdminSecurity"), "security");
+    assert.equal(isAdminPortalPath("/AdminSecurity"), true);
   });
 
   it("returns accurate breadcrumb metadata for admin pages", () => {
@@ -57,6 +59,10 @@ describe("adminPortalHelpers", () => {
     const blogsMeta = getAdminBreadcrumb("/BlogsAdmin");
     assert.equal(blogsMeta.parent, "Blogs");
     assert.equal(blogsMeta.current, "Blogger Sync & Home Curation");
+
+    const securityMeta = getAdminBreadcrumb("/AdminSecurity");
+    assert.equal(securityMeta.parent, "Security");
+    assert.equal(securityMeta.current, "Security, 2FA & Audit CSV");
   });
 
   it("computes order metrics accurately including reported total", () => {

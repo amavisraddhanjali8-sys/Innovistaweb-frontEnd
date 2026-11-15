@@ -50,8 +50,14 @@
 }
 
 @layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    overflow-x: clip;
+  }
+
   body {
     background-color: var(--color-white);
+    overflow-x: clip;
   }
 
   *,
@@ -62,6 +68,40 @@
     padding: 0;
     font-family: var(--font-sans), sans-serif;
   }
+
+  button,
+  a,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
+/* Prevent iOS Safari auto-zoom on form controls < 16px while keeping desktop sizing crisp */
+@media (max-width: 767px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="search"],
+  input[type="number"],
+  input[type="url"],
+  input:not([type]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Hide scrollbars cleanly on mobile horizontal snap carousels / filter rails */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 .about-section-spacing {
@@ -72,16 +112,6 @@
   display: flex;
   flex-direction: column;
   gap: clamp(24px, 6vw, 72px);
-}
-
-@media (max-width: 480px) {
-  .about-page-stack *,
-  .about-page-stack *::before,
-  .about-page-stack *::after {
-    animation: none !important;
-    transition: none !important;
-    scroll-behavior: auto !important;
-  }
 }
 
 .submit-btn-red {
@@ -475,17 +505,17 @@
   border: 1.5px solid rgba(186, 230, 253, 0.82);
   background: linear-gradient(
     180deg,
-    rgba(56, 189, 248, 0.92) 0%,
-    rgba(14, 142, 233, 0.94) 52%,
-    rgba(2, 102, 212, 0.97) 100%
+    rgba(56, 189, 248, 0.94) 0%,
+    rgba(14, 142, 233, 0.96) 52%,
+    rgba(2, 102, 212, 0.98) 100%
   );
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.34);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.45);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.86),
-    inset 0 -4px 8px rgba(56, 189, 248, 0.65),
-    0 10px 22px -6px rgba(2, 132, 199, 0.62),
-    0 0 18px rgba(56, 189, 248, 0.52);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.65),
+    inset 0 -3px 6px rgba(3, 105, 161, 0.45),
+    0 4px 0 #075985,
+    0 10px 20px -5px rgba(2, 132, 199, 0.56);
   transition:
     transform 0.16s cubic-bezier(0.16, 1, 0.3, 1),
     background 0.2s ease,
@@ -494,17 +524,17 @@
     box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Specular glossy top dome */
+/* Specular glossy top bevel (kept subtle so typography remains razor-sharp) */
 .tactile-pill-btn::before {
   content: "";
   position: absolute;
-  inset: 2px 6px auto 6px;
-  height: 46%;
+  inset: 1.5px 6px auto 6px;
+  height: 36%;
   border-radius: 9px;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.72) 0%,
-    rgba(255, 255, 255, 0.16) 62%,
+    rgba(255, 255, 255, 0.3) 0%,
+    rgba(255, 255, 255, 0.06) 65%,
     rgba(255, 255, 255, 0) 100%
   );
   pointer-events: none;
@@ -522,7 +552,7 @@
   background: linear-gradient(
     90deg,
     rgba(255, 255, 255, 0) 0%,
-    rgba(255, 255, 255, 0.56) 50%,
+    rgba(255, 255, 255, 0.45) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   opacity: 0;
@@ -530,130 +560,130 @@
   z-index: 1;
 }
 
-/* Tone: Amber-Gold Neon Glass */
+/* Tone: Rich Tactile Amber-Orange 3D Glass (High-contrast crisp white label) */
 .tactile-pill-btn[data-tone="amber"] {
-  border-color: rgba(254, 243, 199, 0.92);
+  border-color: rgba(254, 215, 170, 0.9);
   background: linear-gradient(
     180deg,
-    rgba(254, 215, 170, 0.95) 0%,
-    rgba(251, 146, 60, 0.94) 50%,
-    rgba(234, 88, 12, 0.97) 100%
+    #fb923c 0%,
+    #ea580c 52%,
+    #c2410c 100%
   );
-  color: #111827;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.45);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(67, 20, 7, 0.55);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.92),
-    inset 0 -4px 8px rgba(253, 186, 116, 0.62),
-    0 10px 24px -6px rgba(249, 115, 22, 0.65),
-    0 0 20px rgba(251, 191, 36, 0.56);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -3px 6px rgba(154, 52, 18, 0.45),
+    0 4px 0 #9a3412,
+    0 10px 20px -5px rgba(234, 88, 12, 0.56);
 }
 
-/* Tone: Midnight Navy Cobalt Neon Glass */
+/* Tone: Midnight Navy Cobalt 3D Glass */
 .tactile-pill-btn[data-tone="navy"] {
   border-color: rgba(96, 165, 250, 0.78);
   background: linear-gradient(
     180deg,
-    rgba(23, 55, 114, 0.92) 0%,
-    rgba(10, 30, 72, 0.94) 56%,
-    rgba(5, 16, 42, 0.97) 100%
+    rgba(29, 78, 216, 0.94) 0%,
+    rgba(15, 42, 104, 0.96) 56%,
+    rgba(9, 24, 62, 0.98) 100%
   );
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(2, 6, 23, 0.5);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(2, 6, 23, 0.55);
   box-shadow:
-    inset 0 2.5px 2px rgba(191, 219, 254, 0.52),
-    inset 0 -4px 8px rgba(37, 99, 235, 0.72),
-    0 10px 24px -6px rgba(29, 78, 216, 0.65),
-    0 0 18px rgba(59, 130, 246, 0.52);
+    inset 0 1.5px 1px rgba(191, 219, 254, 0.48),
+    inset 0 -3px 6px rgba(30, 64, 175, 0.55),
+    0 4px 0 #09183e,
+    0 10px 20px -5px rgba(29, 78, 216, 0.58);
 }
 
-/* Tone: Frosted Ice Pearl Glass */
+/* Tone: Frosted Ice Pearl 3D Glass */
 .tactile-pill-btn[data-tone="pearl"] {
   border-color: rgba(255, 255, 255, 0.95);
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.94) 0%,
-    rgba(241, 245, 249, 0.88) 58%,
-    rgba(226, 232, 240, 0.92) 100%
+    #ffffff 0%,
+    #f1f5f9 58%,
+    #e2e8f0 100%
   );
-  color: #0f172a;
+  color: #0f172a !important;
   text-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.98),
-    inset 0 -4px 7px rgba(56, 189, 248, 0.34),
-    0 10px 22px -6px rgba(15, 23, 42, 0.25),
-    0 0 16px rgba(125, 211, 252, 0.45);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.98),
+    inset 0 -3px 6px rgba(148, 163, 184, 0.28),
+    0 4px 0 #94a3b8,
+    0 10px 20px -5px rgba(15, 23, 42, 0.24);
 }
 
-/* Tone: Ruby-Ember Neon Glass */
+/* Tone: Ruby-Ember 3D Glass */
 .tactile-pill-btn[data-tone="crimson"] {
   border-color: rgba(254, 202, 202, 0.88);
   background: linear-gradient(
     180deg,
-    rgba(252, 114, 102, 0.94) 0%,
-    rgba(225, 29, 72, 0.94) 54%,
-    rgba(185, 28, 28, 0.97) 100%
+    rgba(244, 63, 94, 0.94) 0%,
+    rgba(225, 29, 72, 0.96) 54%,
+    rgba(185, 28, 28, 0.98) 100%
   );
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(69, 10, 10, 0.4);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(69, 10, 10, 0.48);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.72),
-    inset 0 -4px 8px rgba(251, 146, 60, 0.62),
-    0 10px 24px -6px rgba(220, 38, 38, 0.65),
-    0 0 20px rgba(249, 115, 22, 0.56);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.58),
+    inset 0 -3px 6px rgba(153, 27, 27, 0.45),
+    0 4px 0 #881337,
+    0 10px 20px -5px rgba(220, 38, 38, 0.58);
 }
 
-/* Tone: Jewel Emerald-Teal Neon Glass */
+/* Tone: Jewel Emerald-Teal 3D Glass */
 .tactile-pill-btn[data-tone="emerald"] {
   border-color: rgba(167, 243, 208, 0.88);
   background: linear-gradient(
     180deg,
-    rgba(52, 211, 153, 0.92) 0%,
-    rgba(16, 185, 129, 0.94) 54%,
-    rgba(4, 120, 87, 0.97) 100%
+    rgba(52, 211, 153, 0.94) 0%,
+    rgba(16, 185, 129, 0.96) 54%,
+    rgba(4, 120, 87, 0.98) 100%
   );
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(4, 47, 46, 0.4);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(4, 47, 46, 0.48);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.78),
-    inset 0 -4px 8px rgba(45, 212, 191, 0.58),
-    0 10px 24px -6px rgba(5, 150, 105, 0.62),
-    0 0 18px rgba(52, 211, 153, 0.48);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.62),
+    inset 0 -3px 6px rgba(6, 95, 70, 0.45),
+    0 4px 0 #065f46,
+    0 10px 20px -5px rgba(5, 150, 105, 0.56);
 }
 
-/* Hover state: luminous amber-orange flare (or azure flip for amber buttons so hover is always unmistakable!) */
+/* Hover state: crisp lift & color shift while preserving clear text contrast */
 .tactile-pill-btn:hover:not(:disabled):not([data-loading="true"]) {
   transform: translateY(-2px);
-  border-color: rgba(254, 243, 199, 0.96);
+  border-color: rgba(254, 215, 170, 0.95);
   background: linear-gradient(
     180deg,
-    rgba(255, 232, 194, 0.97) 0%,
-    rgba(251, 146, 60, 0.96) 48%,
-    rgba(234, 88, 12, 0.98) 100%
+    #fb923c 0%,
+    #ea580c 50%,
+    #c2410c 100%
   );
-  color: #111827;
-  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(67, 20, 7, 0.5);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.96),
-    inset 0 -4px 8px rgba(254, 240, 138, 0.7),
-    0 12px 26px -5px rgba(249, 115, 22, 0.68),
-    0 0 24px rgba(251, 191, 36, 0.72);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.68),
+    inset 0 -3px 6px rgba(154, 52, 18, 0.45),
+    0 6px 0 #9a3412,
+    0 14px 24px -5px rgba(234, 88, 12, 0.62);
 }
 
 .tactile-pill-btn[data-tone="amber"]:hover:not(:disabled):not([data-loading="true"]) {
   border-color: rgba(186, 230, 253, 0.95);
   background: linear-gradient(
     180deg,
-    rgba(56, 189, 248, 0.95) 0%,
-    rgba(14, 142, 233, 0.96) 52%,
-    rgba(2, 102, 212, 0.98) 100%
+    #38bdf8 0%,
+    #0284c7 52%,
+    #0369a1 100%
   );
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.35);
+  color: #ffffff !important;
+  text-shadow: 0 1px 2px rgba(7, 36, 62, 0.45);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.9),
-    inset 0 -4px 8px rgba(125, 211, 252, 0.7),
-    0 12px 26px -5px rgba(14, 165, 233, 0.68),
-    0 0 24px rgba(56, 189, 248, 0.75);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.72),
+    inset 0 -3px 6px rgba(7, 89, 133, 0.48),
+    0 6px 0 #075985,
+    0 14px 24px -5px rgba(14, 165, 233, 0.65);
 }
 
 .tactile-pill-btn:hover:not(:disabled)::after {
@@ -666,26 +696,25 @@
   outline: none;
   border-color: #60a5fa;
   background: linear-gradient(180deg, #153775 0%, #091d42 58%, #040d21 100%);
-  color: #ffffff;
+  color: #ffffff !important;
   text-shadow: none;
   box-shadow:
-    inset 0 2.5px 2px rgba(147, 197, 253, 0.45),
-    inset 0 -4px 8px rgba(59, 130, 246, 0.72),
-    0 10px 24px -4px rgba(37, 99, 235, 0.72),
-    0 0 20px rgba(59, 130, 246, 0.56);
+    inset 0 1.5px 1px rgba(147, 197, 253, 0.45),
+    0 4px 0 #020617,
+    0 10px 24px -4px rgba(37, 99, 235, 0.72);
 }
 
-/* Pressed state: crisp translucent ceramic-white */
+/* Pressed state: physical 3D key press */
 .tactile-pill-btn:active:not(:disabled) {
-  transform: translateY(1px) scale(0.975);
-  border-color: rgba(255, 255, 255, 0.98);
+  transform: translateY(3px) scale(0.985);
+  border-color: rgba(255, 255, 255, 0.95);
   background: linear-gradient(180deg, #ffffff 0%, #f1f5f9 62%, #e2e8f0 100%);
-  color: #0f172a;
+  color: #0f172a !important;
   text-shadow: none;
   box-shadow:
-    inset 0 2.5px 3px rgba(255, 255, 255, 0.96),
-    inset 0 -3px 6px rgba(56, 189, 248, 0.36),
-    0 4px 12px -4px rgba(15, 23, 42, 0.28);
+    inset 0 2px 3px rgba(255, 255, 255, 0.96),
+    0 1px 0 #94a3b8,
+    0 4px 10px -4px rgba(15, 23, 42, 0.28);
 }
 
 /* Loading / active feedback state: fiery crimson-coral neon glow */
@@ -697,13 +726,12 @@
     rgba(225, 29, 72, 0.95) 54%,
     rgba(185, 28, 28, 0.98) 100%
   );
-  color: #ffffff;
+  color: #ffffff !important;
   text-shadow: 0 1px 1px rgba(69, 10, 10, 0.4);
   box-shadow:
-    inset 0 2.5px 2px rgba(255, 255, 255, 0.65),
-    inset 0 -4px 8px rgba(251, 146, 60, 0.68),
-    0 10px 24px -5px rgba(220, 38, 38, 0.66),
-    0 0 22px rgba(249, 115, 22, 0.6);
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.6),
+    0 3px 0 #881337,
+    0 10px 22px -5px rgba(220, 38, 38, 0.62);
 }
 
 .tactile-pill-btn[data-loading="true"]::after {
@@ -746,12 +774,14 @@ a.btn-anim-fx {
     opacity 0.18s ease;
 }
 
-button:not(:disabled):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):not([data-testid="floating-chatbot-ball"]):hover,
-[role="button"]:not([aria-disabled="true"]):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):hover,
-a.btn-anim-fx:hover {
-  translate: 0 -1.5px;
-  scale: 1.018;
-  filter: brightness(1.03);
+@media (hover: hover) and (pointer: fine) {
+  button:not(:disabled):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):not([data-testid="floating-chatbot-ball"]):hover,
+  [role="button"]:not([aria-disabled="true"]):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):hover,
+  a.btn-anim-fx:hover {
+    translate: 0 -1.5px;
+    scale: 1.018;
+    filter: brightness(1.03);
+  }
 }
 
 button:not(:disabled):not(.no-btn-fx):not(.request-quote-fx):not(.tactile-pill-btn):not([data-testid="floating-chatbot-ball"]):active,

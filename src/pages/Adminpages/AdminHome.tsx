@@ -10,6 +10,7 @@ import {
   FiPhone,
   FiPlus,
   FiSave,
+  FiShield,
   FiShoppingBag,
   FiSliders,
   FiStar,
@@ -56,17 +57,17 @@ function AdminHome() {
   const [adminRefresh, setAdminRefresh] = useState(0);
   const [resetModalOpen, setResetModalOpen] = useState(false);
   const [stats, setStats] = useState<AdminSummaryStats>({
-    admins: 2,
-    designs: 4,
-    customers: 2,
-    verifiedCustomers: 2,
-    orders: 2,
-    pendingOrders: 1,
-    completedOrders: 1,
-    projects: 4,
-    totalProjectBudget: 44000000,
-    feedbacks: 2,
-    unreadNotifications: 2,
+    admins: 0,
+    designs: 0,
+    customers: 0,
+    verifiedCustomers: 0,
+    orders: 0,
+    pendingOrders: 0,
+    completedOrders: 0,
+    projects: 0,
+    totalProjectBudget: 0,
+    feedbacks: 0,
+    unreadNotifications: 0,
   });
 
   useEffect(() => {
@@ -364,6 +365,14 @@ function AdminHome() {
           >
             <FiPhone className="text-xs" />
             <span>Phone &amp; Contact</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate("/AdminSecurity")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors cursor-pointer whitespace-nowrap text-[#22577A] hover:bg-white"
+          >
+            <FiShield className="text-xs" />
+            <span>Security, 2FA &amp; Audit CSV</span>
           </button>
         </div>
       </div>

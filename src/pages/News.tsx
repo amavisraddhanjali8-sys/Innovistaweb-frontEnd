@@ -640,7 +640,8 @@ export default function News() {
         onCancel={() => setActiveArticle(null)}
         footer={null}
         centered
-        width={640}
+        width="min(640px, calc(100vw - 24px))"
+        styles={{ body: { maxHeight: "76dvh", overflowY: "auto" } }}
         destroyOnHidden
         title={
           activeArticle ? (
@@ -678,18 +679,18 @@ export default function News() {
                 </li>
               ))}
             </ul>
-            <div className="pt-1 flex justify-end gap-2.5">
+            <div className="pt-1 flex flex-wrap justify-end gap-2.5">
               <button
                 type="button"
                 onClick={() => setActiveArticle(null)}
-                className="min-h-[38px] px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer bg-white"
+                className="min-h-[42px] px-4 py-2 rounded-lg border border-slate-200 text-xs font-semibold text-slate-700 cursor-pointer bg-white"
               >
                 Close
               </button>
               <Link
                 to={activeArticle.ctaTo}
                 onClick={() => setActiveArticle(null)}
-                className="min-h-[38px] inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-semibold no-underline"
+                className="min-h-[42px] inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-semibold no-underline"
               >
                 <span>{activeArticle.ctaLabel}</span>
                 <FiArrowRight className="text-xs" />

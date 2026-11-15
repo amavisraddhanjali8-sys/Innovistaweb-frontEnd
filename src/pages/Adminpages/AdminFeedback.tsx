@@ -489,6 +489,7 @@ function AdminFeedback() {
           current: currentPage,
           pageSize: pageSize,
           total: total,
+          responsive: true,
           showSizeChanger: true,
           pageSizeOptions: ["5", "10", "20", "50"],
           onChange: (page, limit) => {
@@ -501,7 +502,7 @@ function AdminFeedback() {
         open={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={null}
-        width={620}
+        width="min(620px, calc(100vw - 24px))"
         title={
           editingRecord
             ? `Edit Feedback — ${editingRecord.Customer?.Cus_Name}`
@@ -600,7 +601,7 @@ function AdminFeedback() {
                 className="w-11 h-11 rounded-full object-cover border border-slate-200"
               />
               <Select
-                style={{ width: 210 }}
+                className="w-full sm:w-[210px]"
                 value={
                   CUSTOMER_AVATAR_PRESETS.some((p) => p.url === avatarUrl)
                     ? avatarUrl

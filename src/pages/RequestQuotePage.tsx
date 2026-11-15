@@ -336,7 +336,35 @@ export default function RequestQuotePage() {
         </section>
       ) : (
       <form className={styles.form} onSubmit={handleSubmit} noValidate>
-        <section className={styles.card}>
+        <nav
+          aria-label="RFQ section quick navigation"
+          className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1"
+        >
+          {[
+            { id: "rfq-sec-1", label: "1. Client" },
+            { id: "rfq-sec-2", label: "2. Project" },
+            { id: "rfq-sec-3", label: "3. Drawings" },
+            { id: "rfq-sec-4", label: "4. Specs" },
+            { id: "rfq-sec-5", label: "5. Material" },
+            { id: "rfq-sec-6", label: "6. Budget" },
+            { id: "rfq-sec-7", label: "7. Site Visit" },
+          ].map((sec) => (
+            <button
+              key={sec.id}
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById(sec.id)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              className="shrink-0 min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-200 bg-white hover:border-[#22577A] text-xs font-semibold text-slate-700 hover:text-[#22577A] whitespace-nowrap cursor-pointer transition-colors"
+            >
+              {sec.label}
+            </button>
+          ))}
+        </nav>
+
+        <section id="rfq-sec-1" className={`${styles.card} scroll-mt-16`}>
           <h2>1. Client Details</h2>
           <div className={styles.grid}>
             <div className={styles.field}>
@@ -410,7 +438,7 @@ export default function RequestQuotePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
+        <section id="rfq-sec-2" className={`${styles.card} scroll-mt-16`}>
           <h2>2. Project Details</h2>
           <div className={styles.grid}>
             <div className={styles.field}>
@@ -486,7 +514,7 @@ export default function RequestQuotePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
+        <section id="rfq-sec-3" className={`${styles.card} scroll-mt-16`}>
           <h2>3. Drawings and Images</h2>
           <div className={styles.grid}>
             <div className={styles.fieldFull}>
@@ -498,7 +526,7 @@ export default function RequestQuotePage() {
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
               >
-                <span>Drag and drop files here, or click to browse</span>
+                <span>Drag and drop files here, or tap to browse</span>
                 <span className={styles.dropHint}>Accepted: PDF, JPG, PNG</span>
               </label>
               <input
@@ -512,9 +540,24 @@ export default function RequestQuotePage() {
               />
               {errors.files && <small>{errors.files}</small>}
               {files.length > 0 && (
-                <ul className={styles.fileList}>
-                  {files.map((file) => (
-                    <li key={`${file.name}-${file.lastModified}`}>{file.name}</li>
+                <ul className="mt-2 space-y-1.5 list-none p-0">
+                  {files.map((file, idx) => (
+                    <li
+                      key={`${file.name}-${file.lastModified}-${idx}`}
+                      className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-[#F8FAFC] text-xs font-medium text-slate-700"
+                    >
+                      <span className="truncate">{file.name}</span>
+                      <button
+                        type="button"
+                        aria-label={`Remove ${file.name}`}
+                        onClick={() =>
+                          setFiles((prev) => prev.filter((_, i) => i !== idx))
+                        }
+                        className="shrink-0 min-h-[32px] px-2.5 rounded-md border border-slate-200 bg-white text-[11px] font-semibold text-red-600 cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    </li>
                   ))}
                 </ul>
               )}
@@ -522,7 +565,7 @@ export default function RequestQuotePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
+        <section id="rfq-sec-4" className={`${styles.card} scroll-mt-16`}>
           <h2>4. Technical Requirements</h2>
           <div className={styles.grid}>
             <div className={styles.field}>
@@ -571,7 +614,7 @@ export default function RequestQuotePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
+        <section id="rfq-sec-5" className={`${styles.card} scroll-mt-16`}>
           <h2>5. Material and Design</h2>
           <div className={styles.grid}>
             <div className={styles.field}>
@@ -623,7 +666,7 @@ export default function RequestQuotePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
+        <section id="rfq-sec-6" className={`${styles.card} scroll-mt-16`}>
           <h2>6. Commercial Details</h2>
           <div className={styles.grid}>
             <div className={styles.field}>
@@ -661,7 +704,7 @@ export default function RequestQuotePage() {
           </div>
         </section>
 
-        <section className={styles.card}>
+        <section id="rfq-sec-7" className={`${styles.card} scroll-mt-16`}>
           <h2>7. Site Visit</h2>
           <div className={styles.grid}>
             <div className={styles.field}>

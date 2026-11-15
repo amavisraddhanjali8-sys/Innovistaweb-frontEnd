@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { App as AntdApp, Table, Avatar, Popconfirm, Button } from "antd";
+import { App as AntdApp, Table, Avatar, Popconfirm, Button, Tag } from "antd";
 import type { TableProps } from "antd";
 import AxiosConfig from "../../Context/AxiosConfig";
 import { DeleteOutlined } from "@ant-design/icons";
@@ -8,9 +8,13 @@ interface AdminType {
   key: number;
   AdminId: number;
   Admin_Name: string;
+  Admin_Username?: string | null;
   Admin_Email: string;
   Admin_Phone: string;
   Admin_Profile?: string;
+  isVerified?: boolean;
+  emailVerified?: boolean;
+  totpEnabled?: boolean;
 }
 
 interface ManageAllAdminsProps {
@@ -59,8 +63,10 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
       await AxiosConfig.delete(`/auth/RemoveAdmin?adminId=${adminId}`);
       message.success("Admin removed.");
       fetchAdmins();
-    } catch {
-      message.error("Cannot remove the only remaining admin.");
+    } catch (err: unknown) {
+      const serverMsg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      message.error(serverMsg || "Cannot remove this administrator.");
     }
   };
 
@@ -79,9 +85,30 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
             {name?.charAt(0)?.toUpperCase() || "A"}
           </Avatar>
           <div>
-            <div className="text-xs font-semibold text-slate-900">{name}</div>
+            <div className="text-xs font-semibold text-slate-900">
+              {name}{" "}
+              {record.Admin_Username && (
+                <span className="text-[11px] font-normal text-slate-500">
+                  @{record.Admin_Username}
+                </span>
+              )}
+            </div>
             <div className="text-[11px] text-slate-500">{record.Admin_Email}</div>
           </div>
+        </div>
+      ),
+    },
+    {
+      title: "Security & 2FA",
+      key: "security",
+      render: (_, record) => (
+        <div className="flex flex-wrap gap-1">
+          <Tag color={record.totpEnabled ? "green" : "gold"} className="text-[11px]">
+            {record.totpEnabled ? "2FA Active" : "2FA Not Set"}
+          </Tag>
+          <Tag color={record.isVerified ? "blue" : "default"} className="text-[11px]">
+            {record.isVerified ? "Verified Admin" : "Unverified"}
+          </Tag>
         </div>
       ),
     },
@@ -129,7 +156,7 @@ const ManageAllAdmins: React.FC<ManageAllAdminsProps> = ({
       rowKey="AdminId"
       size="middle"
       scroll={{ x: 520 }}
-      pagination={{ pageSize: 6, hideOnSinglePage: true }}
+      pagination={{ pageSize: 6, hideOnSinglePage: true, responsive: true }}
     />
   );
 };

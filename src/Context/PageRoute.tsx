@@ -47,6 +47,7 @@ const ProfileLogin = lazy(() => import("../pages/ProfileLogin"));
 const UserProfile = lazy(() => import("../pages/UserProfile"));
 const NotFound = lazy(() => import("../pages/NotFound"));
 const ChatbotAdmin = lazy(() => import("../pages/Adminpages/ChatbotAdmin"));
+const AdminSecurityAudit = lazy(() => import("../pages/Adminpages/AdminSecurityAudit"));
 
 function RouteFallback() {
   return (
@@ -118,6 +119,7 @@ function MainContent() {
                 <Route path="/EditVisionMission" element={<EditVisionMission />} />
                 <Route path="/BlogsAdmin" element={<BlogsAdmin />} />
                 <Route path="/ChatbotAdmin" element={<ChatbotAdmin />} />
+                <Route path="/AdminSecurity" element={<AdminSecurityAudit />} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

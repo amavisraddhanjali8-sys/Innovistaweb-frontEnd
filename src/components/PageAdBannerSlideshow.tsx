@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { MotionConfig, motion } from "framer-motion";
 import {
@@ -9,6 +9,7 @@ import {
   FiX,
 } from "react-icons/fi";
 import AxiosConfig from "../Context/AxiosConfig";
+import { detectHorizontalSwipe } from "../utils/touchGestureHelpers";
 import {
   DEFAULT_PAGE_ADS_CMS,
   clampSlideshowSpeedMs,
@@ -48,6 +49,7 @@ export default function PageAdBannerSlideshow({
   const [dismissed, setDismissed] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const touchStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   // Reset dismissal when parent changes pageKey or explicitly triggers resetSignal
   useEffect(() => {
@@ -186,7 +188,30 @@ export default function PageAdBannerSlideshow({
       onFocusCapture={() => setIsPaused(true)}
       onBlurCapture={() => setIsPaused(false)}
       onClick={(e) => e.stopPropagation()}
-      className={`relative inline-block w-fit max-w-[92vw] sm:max-w-[84vw] lg:max-w-[820px] rounded-2xl overflow-hidden bg-slate-900 shadow-[0_28px_70px_-18px_rgba(15,23,42,0.65)] group ${
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        if (t) {
+          touchStartRef.current = { x: t.clientX, y: t.clientY, time: Date.now() };
+          setIsPaused(true);
+        }
+      }}
+      onTouchEnd={(e) => {
+        const start = touchStartRef.current;
+        const t = e.changedTouches[0];
+        touchStartRef.current = null;
+        setIsPaused(false);
+        if (!start || !t || ads.length <= 1) return;
+        const swipe = detectHorizontalSwipe(
+          start.x,
+          start.y,
+          t.clientX,
+          t.clientY,
+          Date.now() - start.time
+        );
+        if (swipe === "left") handleNext();
+        else if (swipe === "right") handlePrev();
+      }}
+      className={`relative inline-block w-fit max-w-[92vw] sm:max-w-[84vw] lg:max-w-[820px] rounded-2xl overflow-hidden bg-slate-900 shadow-[0_28px_70px_-18px_rgba(15,23,42,0.65)] group touch-pan-y ${
         variant === "inline" ? className : ""
       }`}
     >
@@ -228,7 +253,7 @@ export default function PageAdBannerSlideshow({
           e.stopPropagation();
           handleClose();
         }}
-        className="absolute top-3 right-3 z-30 w-10 h-10 rounded-full bg-slate-950/80 hover:bg-slate-950 text-white border border-white/30 shadow-lg flex items-center justify-center cursor-pointer transition-all"
+        className="absolute top-3 right-3 z-30 w-11 h-11 sm:w-10 sm:h-10 rounded-full bg-slate-950/80 hover:bg-slate-950 text-white border border-white/30 shadow-lg flex items-center justify-center cursor-pointer transition-all"
       >
         <FiX className="text-lg" />
       </button>
@@ -244,7 +269,7 @@ export default function PageAdBannerSlideshow({
               e.stopPropagation();
               handlePrev();
             }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-slate-950/75 hover:bg-slate-950 text-white border border-white/25 shadow-md flex items-center justify-center cursor-pointer transition-all"
+            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-9 sm:h-9 rounded-full bg-slate-950/75 hover:bg-slate-950 text-white border border-white/25 shadow-md flex items-center justify-center cursor-pointer transition-all"
           >
             <FiChevronLeft className="text-base" />
           </button>
@@ -257,7 +282,7 @@ export default function PageAdBannerSlideshow({
               e.stopPropagation();
               handleNext();
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-9 h-9 rounded-full bg-slate-950/75 hover:bg-slate-950 text-white border border-white/25 shadow-md flex items-center justify-center cursor-pointer transition-all"
+            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 w-11 h-11 sm:w-9 sm:h-9 rounded-full bg-slate-950/75 hover:bg-slate-950 text-white border border-white/25 shadow-md flex items-center justify-center cursor-pointer transition-all"
           >
             <FiChevronRight className="text-base" />
           </button>
