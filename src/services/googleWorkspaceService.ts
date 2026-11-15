@@ -6,7 +6,7 @@ import {
   signInWithPopup,
   type User,
 } from "firebase/auth";
-import firebaseConfig from "../../firebase-applet-config.json";
+import firebaseConfig from "../../firebase-applet-config.json" with { type: "json" };
 import {
   buildGmailRawMessage,
   buildGoogleCalendarEventPayload,

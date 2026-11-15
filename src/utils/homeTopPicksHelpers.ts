@@ -4,7 +4,7 @@ import {
   DEFAULT_WINDOW_ACCESSORIES,
   sanitizeDesignImages,
   type DesignItem,
-} from "./productCatalogHelpers";
+} from "./productCatalogHelpers.ts";
 
 export interface HomeAccessoryRibbonItem {
   id: string;

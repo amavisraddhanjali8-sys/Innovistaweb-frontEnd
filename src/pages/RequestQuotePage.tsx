@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import styles from "../cssModules/RequestQuotePage.module.css";
 import PageMetadata from "../components/PageMetadata";
 import { useAuth } from "../Context/AuthContext";
+import AxiosConfig from "../Context/AxiosConfig";
 import { buildSignupRedirectUrl } from "../utils/authHelpers";
 
 type ProjectType =
@@ -264,19 +265,14 @@ export default function RequestQuotePage() {
         formData.append("attachments", file);
       });
 
-      const response = await fetch("/api/rfq", {
-        method: "POST",
-        body: formData,
-      });
+      await AxiosConfig.post("/api/rfq", formData);
 
-      if (!response.ok) {
-        throw new Error("Failed to submit request.");
-      }
-
-      setSuccessMessage("Request submitted successfully.");
       resetForm();
-    } catch {
-      setSubmitError("Submission failed. Please try again.");
+      setSuccessMessage("Request submitted successfully.");
+    } catch (err: unknown) {
+      const serverMsg = (err as { response?: { data?: { message?: string } } })?.response?.data
+        ?.message;
+      setSubmitError(serverMsg || "Submission failed. Please try again.");
     } finally {
       setIsSubmitting(false);
     }

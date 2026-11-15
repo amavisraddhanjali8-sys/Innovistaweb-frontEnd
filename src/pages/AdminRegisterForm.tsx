@@ -22,12 +22,9 @@ const AdminRegisterForm: React.FC<AdminRegisterFormProps> = ({ onSuccess }) => {
 
     try {
       setUploading(true);
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: data,
-      });
+      const res = await AxiosConfig.post("/api/upload", data);
 
-      const uploadData = await res.json();
+      const uploadData = res.data || {};
       if (uploadData.url || uploadData.secure_url) {
         const finalUrl = uploadData.secure_url || uploadData.url;
         setImageUrl(finalUrl);

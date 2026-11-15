@@ -23,8 +23,6 @@ const Resources = lazy(() => import("../pages/Resources"));
 const Contact = lazy(() => import("../pages/Contact"));
 const AdminLogin = lazy(() => import("../pages/Adminpages/AdminLogin"));
 const AdminHome = lazy(() => import("../pages/Adminpages/AdminHome"));
-const AdminRegister = lazy(() => import("../pages/AdminRegisterForm"));
-const ManageAllAdmins = lazy(() => import("../pages/Adminpages/ManageAllAdmins"));
 const DesignAdded = lazy(() => import("../pages/DesignAdded"));
 const ViewAllDesigns = lazy(() => import("../pages/ViewAllDesigns"));
 const CustomerManager = lazy(() => import("../pages/CustomerManager"));
@@ -98,8 +96,8 @@ function MainContent() {
                 <Route path="/profile" element={<UserProfile />} />
                 <Route path="/admin-login" element={<AdminLogin />} />
                 <Route path="/admin-home" element={<AdminHome />} />
-                <Route path="/admin-register" element={<AdminRegister />} />
-                <Route path="/ManageAllAdmins" element={<ManageAllAdmins />} />
+                <Route path="/admin-register" element={<AdminHome defaultMode="register" />} />
+                <Route path="/ManageAllAdmins" element={<AdminHome defaultMode="team" />} />
                 <Route path="/DesignAdded" element={<DesignAdded />} />
                 <Route path="/ViewAllDesigns" element={<ViewAllDesigns />} />
                 <Route path="/ProductCategoriesAdmin" element={<ProductCategoriesAdmin />} />

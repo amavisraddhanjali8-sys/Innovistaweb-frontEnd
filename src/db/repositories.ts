@@ -1833,9 +1833,22 @@ export async function createRfqRecord(
   if (isMemoryFallbackActive()) return createRfqRecordMem(input, attachments);
   try {
     await ensureDatabaseSeeded();
+    const parsedUserId = input.customerUserId ? Number(input.customerUserId) : NaN;
+    let resolvedCustomerUserId: number | null =
+      Number.isFinite(parsedUserId) && parsedUserId > 0 ? parsedUserId : null;
+    if (resolvedCustomerUserId === null && input.email) {
+      const matchedCustomer = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, input.email.trim().toLowerCase()))
+        .limit(1);
+      resolvedCustomerUserId = matchedCustomer[0]?.id ?? null;
+    }
+
     const [inserted] = await db
       .insert(rfqRequests)
       .values({
+        customerUserId: resolvedCustomerUserId,
         clientName: input.clientName || "",
         contactPerson: input.contactPerson || "",
         email: input.email || "",

@@ -1,4 +1,4 @@
-import { isValidEmailAddress, isValidOptionalPhone } from "./quoteModalHelpers";
+import { isValidEmailAddress, isValidOptionalPhone } from "./quoteModalHelpers.ts";
 
 export interface FooterConsultationValues {
   name: string;

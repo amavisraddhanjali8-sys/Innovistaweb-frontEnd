@@ -30,7 +30,7 @@ function DesignView() {
   const fetchCategoryDetails = async (categoryName: string) => {
     try {
       const response = await axios.get(
-        `/designs/byCategory?category=${categoryName}`
+        `/designs/byCategory?category=${encodeURIComponent(categoryName)}`
       );
       setDesigns(response.data);
     } catch (error) {
@@ -93,7 +93,7 @@ const AddtoCart = (designID: string) => {
               }}
             >
               <img
-                src={design.Design_Image[0]}
+                src={design.Design_Image?.[0] || "/assets/products/door.jpg"}
                 alt={design.Design_Name}
                 style={{
                   width: "100%",

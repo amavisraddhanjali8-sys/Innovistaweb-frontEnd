@@ -5,7 +5,7 @@ import {
   moveArrayItem,
   moveArrayItemToIndex,
   sanitizeAboutImage,
-} from "./aboutContentHelpers";
+} from "./aboutContentHelpers.ts";
 
 export type AdPageKey =
   | "home"

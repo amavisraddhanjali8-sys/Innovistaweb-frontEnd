@@ -1,4 +1,4 @@
-import { isValidEmailAddress, isValidOptionalPhone } from "./quoteModalHelpers";
+import { isValidEmailAddress, isValidOptionalPhone } from "./quoteModalHelpers.ts";
 
 export type NewsCategory = "All" | "Launches" | "Projects" | "Standards";
 

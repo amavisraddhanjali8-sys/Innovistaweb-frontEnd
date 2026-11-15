@@ -30,7 +30,11 @@ import {
   type SiteContactSettings,
 } from "../../utils/footerConsultationHelpers";
 
-function AdminHome() {
+interface AdminHomeProps {
+  defaultMode?: "team" | "register" | "contact" | "slideshow" | "services" | "top-picks";
+}
+
+function AdminHome({ defaultMode = "team" }: AdminHomeProps) {
   const { message } = AntdApp.useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -40,14 +44,16 @@ function AdminHome() {
   >(() => {
     const t = searchParams.get("tab");
     if (
+      t === "register" ||
       t === "slideshow" ||
       t === "services" ||
       t === "top-picks" ||
-      t === "contact"
+      t === "contact" ||
+      t === "team"
     ) {
       return t;
     }
-    return "team";
+    return defaultMode;
   });
   const [heroSlidesCount, setHeroSlidesCount] = useState(6);
   const [servicesCount, setServicesCount] = useState(12);
@@ -73,14 +79,18 @@ function AdminHome() {
   useEffect(() => {
     const requested = searchParams.get("tab");
     if (
+      requested === "register" ||
       requested === "slideshow" ||
       requested === "services" ||
       requested === "top-picks" ||
-      requested === "contact"
+      requested === "contact" ||
+      requested === "team"
     ) {
       setActiveMode(requested);
+    } else {
+      setActiveMode(defaultMode);
     }
-  }, [searchParams]);
+  }, [searchParams, defaultMode]);
 
   const handleSelectMode = (
     mode: "team" | "register" | "contact" | "slideshow" | "services" | "top-picks"

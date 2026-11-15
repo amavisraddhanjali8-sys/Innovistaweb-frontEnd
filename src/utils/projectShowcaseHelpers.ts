@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import type { HeroSlide } from "./aboutContentHelpers";
+import type { HeroSlide } from "./aboutContentHelpers.ts";
 
 export interface ProjectShowcaseItem {
   ProjectID: number;

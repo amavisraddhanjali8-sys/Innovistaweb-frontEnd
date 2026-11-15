@@ -6,7 +6,7 @@ import {
   normalizeHeroSlides,
   sanitizeAboutImage,
   type HeroSlide,
-} from "./aboutContentHelpers";
+} from "./aboutContentHelpers.ts";
 
 export const MAX_CERTIFICATION_IMAGES = 8;
 export const DEFAULT_ACCESSORIES_SLIDESHOW_SPEED_MS = 4000;

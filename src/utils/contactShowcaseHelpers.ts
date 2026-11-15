@@ -1,4 +1,4 @@
-import type { SiteContactSettings } from "./footerConsultationHelpers";
+import type { SiteContactSettings } from "./footerConsultationHelpers.ts";
 
 export type CharacterPoseId = "handshake" | "call" | "quote";
 

@@ -840,9 +840,14 @@ export function createRfqRecordMem(
   const matchedCustomer = normalizedEmail
     ? store.users.find((u) => u.email.trim().toLowerCase() === normalizedEmail)
     : undefined;
+  const parsedUserId = input.customerUserId ? Number(input.customerUserId) : NaN;
+  const resolvedCustomerUserId =
+    Number.isFinite(parsedUserId) && parsedUserId > 0
+      ? parsedUserId
+      : matchedCustomer?.id ?? null;
   const rfq = {
     id: rfqId,
-    customerUserId: matchedCustomer?.id ?? null,
+    customerUserId: resolvedCustomerUserId,
     clientName: input.clientName || "",
     contactPerson: input.contactPerson || "",
     email: input.email || "",

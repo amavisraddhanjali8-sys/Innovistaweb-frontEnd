@@ -5,7 +5,6 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import {
   DEFAULT_ABOUT_SECTIONS,
@@ -226,15 +225,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.DEFAULT_APP_PORT ? parseInt(process.env.DEFAULT_APP_PORT, 10) : 3000;
+const PORT = parseInt(process.env.DEFAULT_APP_PORT || "3000", 10) || 3000;
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 
-// Security hardening headers
+// Security hardening headers (allow AI Studio preview iframe controlled by upstream CSP frame-ancestors)
 app.use((_req: Request, res: Response, next: NextFunction) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
   res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
@@ -5066,6 +5064,7 @@ async function startServer() {
       }
     });
   } else {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: {
         middlewareMode: true,

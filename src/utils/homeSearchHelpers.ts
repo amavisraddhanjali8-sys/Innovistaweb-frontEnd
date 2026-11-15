@@ -2,8 +2,8 @@ import {
   designMatchesCategory,
   type DesignItem,
   type ProductCategory,
-} from "./productCatalogHelpers";
-import type { HomeServiceItem } from "./homeServicesHelpers";
+} from "./productCatalogHelpers.ts";
+import type { HomeServiceItem } from "./homeServicesHelpers.ts";
 
 export type HomeSearchResultKind = "category" | "product" | "solution";
 

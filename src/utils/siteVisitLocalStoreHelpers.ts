@@ -2,7 +2,7 @@ import type {
   MonthlyCalendarCell,
   SiteVisitBooking,
   SlotAvailabilityItem,
-} from "./siteVisitSchedulerHelpers";
+} from "./siteVisitSchedulerHelpers.ts";
 
 export const SITE_VISIT_STORAGE_KEY = "innovista_site_visit_local_reservations_v1";
 export const BOOKING_TOAST_DURATION_MS = 5500;
