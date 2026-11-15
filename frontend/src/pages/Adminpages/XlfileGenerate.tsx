@@ -1,0 +1,82 @@
+import * as XLSX from "xlsx";
+import { saveAs } from "file-saver";
+import { FiDownload } from "react-icons/fi";
+
+interface Design {
+  Design_Name?: string;
+  Design_Image?: string | string[];
+}
+
+interface DesignItem {
+  Design?: Design;
+}
+
+interface Customer {
+  Cus_CompanyName?: string;
+  Cus_Logo?: string;
+  Purchase_Goods?: string[];
+}
+
+interface Order {
+  OrderID: string;
+  Order_Date: string;
+  Order_Status: string;
+  Client_Name: string;
+  Client_Email: string;
+  Customer?: Customer;
+  Designs?: DesignItem[];
+}
+
+interface XlfileGenerateProps {
+  orders: Order[];
+}
+
+export default function XlfileGenerate({ orders }: XlfileGenerateProps) {
+  const downloadExcel = () => {
+    if (!orders || orders.length === 0) return;
+
+    const excelData = orders.flatMap((order: Order) =>
+      (order.Designs?.length ? order.Designs : [{}]).map((designItem: DesignItem) => ({
+        OrderID: order.OrderID,
+        OrderDate: new Date(order.Order_Date).toLocaleString(),
+        OrderStatus: order.Order_Status,
+        ClientName: order.Client_Name,
+        ClientEmail: order.Client_Email,
+        CompanyName: order.Customer?.Cus_CompanyName || "",
+        CompanyLogo: order.Customer?.Cus_Logo || "",
+        PurchaseGoods: order.Customer?.Purchase_Goods?.join(", ") || "",
+        DesignName: designItem.Design?.Design_Name || "",
+        DesignImages: Array.isArray(designItem.Design?.Design_Image)
+          ? designItem.Design.Design_Image.join(", ")
+          : designItem.Design?.Design_Image || "",
+      }))
+    );
+
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Orders");
+
+    const excelBuffer = XLSX.write(workbook, {
+      type: "array",
+      bookType: "xlsx",
+    });
+
+    const file = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+
+    saveAs(file, `AllOrders_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={downloadExcel}
+      disabled={!orders || orders.length === 0}
+      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:border-[#22577A] text-xs font-semibold text-[#22577A] disabled:opacity-50 transition-colors cursor-pointer whitespace-nowrap"
+    >
+      <FiDownload className="text-[13px]" />
+      <span>Export</span>
+    </button>
+  );
+}

@@ -1,0 +1,69 @@
+import React from 'react';
+import styled from 'styled-components';
+
+interface ContactButtonProps {
+  onClick?: () => void;
+  label?: string;
+  [key: string]: unknown;
+}
+
+const ContactButton: React.FC<ContactButtonProps> = ({
+  onClick,
+  label = "Contact Us",
+  ...props
+}) => {
+  return (
+    <StyledWrapper {...props}>
+      <div>
+        <button type="button" className="btn" onClick={onClick}>
+          <i className="animation" />
+          {label}
+          <i className="animation" />
+        </button>
+      </div>
+    </StyledWrapper>
+  );
+};
+
+const StyledWrapper = styled.div`
+  .btn {
+    outline: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #e60000;
+    min-width: 200px;
+    border: 0;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, .1);
+    box-sizing: border-box;
+    padding: 8px 15px;
+    color: #fff;
+    font-size: clamp(0.875rem, 1.5vw, 1.125rem);
+    font-weight: 600;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .btn:hover {
+    opacity: .95;
+  }
+
+  .btn .animation {
+    border-radius: 100%;
+    animation: ripple 0.6s linear infinite;
+  }
+
+  @keyframes ripple {
+    0% {
+      box-shadow: 0 0 0 0 rgba(34, 87, 122, 0.1), 0 0 0 20px rgba(34, 87, 122, 0.1), 0 0 0 40px rgba(34, 87, 122, 0.1), 0 0 0 60px rgba(34, 87, 122, 0.1);
+    }
+
+    100% {
+      box-shadow: 0 0 0 20px rgba(34, 87, 122, 0.1), 0 0 0 40px rgba(34, 87, 122, 0.1), 0 0 0 60px rgba(34, 87, 122, 0.1), 0 0 0 80px rgba(34, 87, 122, 0);
+    }
+  }`;
+
+export default ContactButton;

@@ -25,3 +25,9 @@ dist-ssr
 
 # Persisted runtime CMS state
 .data/
+
+# Environment variables (never commit secrets)
+.env
+.env.*
+!.env.example
+

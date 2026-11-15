@@ -1,12 +1,17 @@
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const disableHmr = process.env.DISABLE_HMR === 'true'
 
 // https://vite.dev/config/
 export default defineConfig({
   base: '/',
+  root: path.resolve(__dirname, 'frontend'),
+  publicDir: path.resolve(__dirname, 'public'),
   plugins: [react(), tailwindcss()],
   optimizeDeps: {
     include: [
@@ -29,6 +34,8 @@ export default defineConfig({
     ],
   },
   build: {
+    outDir: path.resolve(__dirname, 'dist'),
+    emptyOutDir: true,
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
