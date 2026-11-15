@@ -1,6 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -44,6 +45,11 @@ export const users = pgTable(
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     lastLoginIp: text("last_login_ip").default(""),
     isActive: boolean("is_active").notNull().default(true),
+    authProvider: text("auth_provider").notNull().default("local"), // 'local' | 'firebase'
+    lastPasswordChangedAt: timestamp("last_password_changed_at", { withTimezone: true }),
+    suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+    suspensionReason: text("suspension_reason").default(""),
+    notes: text("notes").default(""),
     purchaseGoods: jsonb("purchase_goods").$type<string[]>().notNull().default([]),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -52,7 +58,11 @@ export const users = pgTable(
     index("idx_users_role").on(table.role),
     index("idx_users_account_status").on(table.accountStatus),
     index("idx_users_email_verified").on(table.emailVerified),
+    index("idx_users_email_verify_token").on(table.emailVerificationTokenHash),
     index("idx_users_created_at").on(table.createdAt),
+    check("chk_users_role", sql`${table.role} IN ('admin', 'staff', 'customer')`),
+    check("chk_users_account_status", sql`${table.accountStatus} IN ('ACTIVE', 'SUSPENDED')`),
+    check("chk_users_failed_attempts", sql`${table.failedLoginAttempts} >= 0`),
   ]
 );
 
@@ -140,8 +150,8 @@ export const auditLogs = pgTable(
     targetIdentifier: text("target_identifier").default(""),
     action: text("action").notNull(),
     category: text("category").notNull().default("AUTH"), // 'AUTH' | 'SECURITY' | 'ACCOUNT' | 'ADMIN' | 'COMMERCE' | 'CHATBOT' | 'SYSTEM'
-    status: text("status").notNull().default("SUCCESS"), // 'SUCCESS' | 'FAILURE' | 'BLOCKED' | 'INFO'
-    severity: text("severity").notNull().default("LOW"), // 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+    status: text("status").notNull().default("SUCCESS"), // 'SUCCESS' | 'FAILURE' | 'BLOCKED' | 'INFO' | 'PENDING'
+    severity: text("severity").notNull().default("INFO"), // 'INFO' | 'LOW' | 'MEDIUM' | 'WARNING' | 'HIGH' | 'CRITICAL'
     accountClassification: text("account_classification").default(""),
     ipAddress: text("ip_address").default(""),
     userAgent: text("user_agent").default(""),
@@ -153,6 +163,7 @@ export const auditLogs = pgTable(
     index("idx_audit_logs_cat_created").on(table.category, table.createdAt),
     index("idx_audit_logs_action").on(table.action),
     index("idx_audit_logs_actor_user_id").on(table.actorUserId),
+    index("idx_audit_logs_target_user").on(table.targetUserId),
     index("idx_audit_logs_status").on(table.status),
     index("idx_audit_logs_severity").on(table.severity),
     index("idx_audit_logs_created_at").on(table.createdAt),
@@ -214,10 +225,14 @@ export const categories = pgTable(
       .default([]),
     specHighlights: jsonb("spec_highlights").$type<string[]>().notNull().default([]),
     heroTheme: jsonb("hero_theme").$type<Record<string, unknown> | null>(),
+    isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("idx_categories_featured_order").on(table.featured, table.displayOrder)]
+  (table) => [
+    index("idx_categories_featured_order").on(table.featured, table.displayOrder),
+    index("idx_categories_is_active").on(table.isActive),
+  ]
 );
 
 // ============================================================================
@@ -292,6 +307,13 @@ export const products = pgTable(
       .notNull()
       .default([]),
     relatedProductIds: jsonb("related_product_ids").$type<Array<string | number>>().notNull().default([]),
+    sku: text("sku").default(""),
+    isFeatured: boolean("is_featured").notNull().default(false),
+    isActive: boolean("is_active").notNull().default(true),
+    stockStatus: text("stock_status").notNull().default("IN_STOCK"),
+    leadTimeDays: integer("lead_time_days"),
+    warrantySummary: text("warranty_summary").default(""),
+    sortOrder: integer("sort_order").notNull().default(0),
     createdByUserId: integer("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
@@ -301,6 +323,8 @@ export const products = pgTable(
   (table) => [
     index("idx_products_slug").on(table.slug),
     index("idx_products_primary_category").on(table.primaryCategoryId),
+    index("idx_products_active_sort").on(table.isActive, table.sortOrder),
+    index("idx_products_featured").on(table.isFeatured),
     index("idx_products_updated_at").on(table.updatedAt),
   ]
 );
@@ -465,6 +489,10 @@ export const blogPosts = pgTable(
     featured: boolean("featured").notNull().default(false),
     showOnHome: boolean("show_on_home").notNull().default(false),
     homeOrder: integer("home_order").notNull().default(0),
+    seoTitle: text("seo_title").default(""),
+    seoDescription: text("seo_description").default(""),
+    isPublished: boolean("is_published").notNull().default(true),
+    viewCount: integer("view_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -492,6 +520,10 @@ export const projects = pgTable(
     clientCompany: text("client_company").default(""),
     budget: numeric("budget", { precision: 14, scale: 2 }).notNull().default("0"),
     status: text("status").notNull().default("COMPLETED"),
+    category: text("category").notNull().default("Residential"),
+    isFeatured: boolean("is_featured").notNull().default(false),
+    sortOrder: integer("sort_order").notNull().default(0),
+    areaSqFt: integer("area_sq_ft"),
     finishedDate: text("finished_date"),
     createdByUserId: integer("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
@@ -499,7 +531,11 @@ export const projects = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [index("idx_projects_created_at").on(table.createdAt)]
+  (table) => [
+    index("idx_projects_created_at").on(table.createdAt),
+    index("idx_projects_status").on(table.status),
+    index("idx_projects_featured").on(table.isFeatured),
+  ]
 );
 
 export const projectImages = pgTable(
@@ -536,6 +572,12 @@ export const orders = pgTable(
     customerCompany: text("customer_company").default(""),
     customerLogo: text("customer_logo").default(""),
     purchaseGoods: jsonb("purchase_goods").$type<string[]>().notNull().default([]),
+    inquiryType: text("inquiry_type").notNull().default("Product Quote"),
+    subject: text("subject").default(""),
+    source: text("source").notNull().default("web"),
+    assignedAdminId: integer("assigned_admin_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     notes: text("notes").default(""),
     currency: text("currency").notNull().default("LKR"),
     totalEstimatedAmount: numeric("total_estimated_amount", { precision: 14, scale: 2 }),
@@ -544,6 +586,7 @@ export const orders = pgTable(
   },
   (table) => [
     index("idx_orders_customer_user_id").on(table.customerUserId),
+    index("idx_orders_assigned_admin").on(table.assignedAdminId),
     index("idx_orders_client_email").on(table.clientEmail),
     index("idx_orders_status").on(table.orderStatus),
     index("idx_orders_date").on(table.orderDate),
@@ -562,9 +605,19 @@ export const orderItems = pgTable(
     }),
     designName: text("design_name").notNull(),
     designImage: text("design_image").default(""),
+    productSlug: text("product_slug").default(""),
+    selectedColor: text("selected_color").default(""),
+    selectedSize: text("selected_size").default(""),
     quantity: integer("quantity").notNull().default(1),
+    unitPrice: numeric("unit_price", { precision: 12, scale: 2 }),
+    subtotal: numeric("subtotal", { precision: 14, scale: 2 }),
+    notes: text("notes").default(""),
   },
-  (table) => [index("idx_order_items_order_id").on(table.orderId)]
+  (table) => [
+    index("idx_order_items_order_id").on(table.orderId),
+    index("idx_order_items_product_id").on(table.productId),
+    check("chk_order_items_qty", sql`${table.quantity} > 0`),
+  ]
 );
 
 export const rfqRequests = pgTable(
@@ -603,12 +656,17 @@ export const rfqRequests = pgTable(
     proposedVisitDates: text("proposed_visit_dates").default(""),
     siteAddress: text("site_address").default(""),
     googleMapsLink: text("google_maps_link").default(""),
+    estimatedQuoteAmount: numeric("estimated_quote_amount", { precision: 14, scale: 2 }),
+    currency: text("currency").notNull().default("LKR"),
+    adminNotes: text("admin_notes").default(""),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     status: text("status").notNull().default("NEW"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index("idx_rfq_requests_customer_user_id").on(table.customerUserId),
+    index("idx_rfq_requests_assigned_admin").on(table.assignedAdminId),
     index("idx_rfq_requests_email").on(table.email),
     index("idx_rfq_requests_status").on(table.status),
     index("idx_rfq_requests_created_at").on(table.createdAt),
@@ -666,6 +724,7 @@ export const customerFeedbacks = pgTable(
   (table) => [
     index("idx_customer_feedbacks_product_id").on(table.productId),
     index("idx_customer_feedbacks_home_order").on(table.showOnHome, table.displayOrder),
+    check("chk_customer_feedbacks_rating", sql`${table.rating} >= 1 AND ${table.rating} <= 5`),
   ]
 );
 
@@ -724,6 +783,44 @@ export const cmsDocuments = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [index("idx_cms_documents_doc_type").on(table.docType)]
+);
+
+// ============================================================================
+// 9B. CONTACT INQUIRIES (Normalized Consultation, Support & Callback Inquiries)
+// ============================================================================
+export const contactInquiries = pgTable(
+  "contact_inquiries",
+  {
+    id: serial("id").primaryKey(),
+    inquiryCode: text("inquiry_code").notNull().unique(),
+    customerUserId: integer("customer_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    assignedAdminId: integer("assigned_admin_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    email: text("email").notNull(),
+    phone: text("phone").notNull().default(""),
+    department: text("department").notNull().default("General Consultation"),
+    intent: text("intent").notNull().default("General Consultation"),
+    subject: text("subject").notNull().default(""),
+    message: text("message").notNull().default(""),
+    source: text("source").notNull().default("web"),
+    status: text("status").notNull().default("NEW"), // 'NEW' | 'IN_PROGRESS' | 'RESOLVED' | 'ARCHIVED'
+    ipAddress: text("ip_address").default(""),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_contact_inquiries_status").on(table.status),
+    index("idx_contact_inquiries_email").on(table.email),
+    index("idx_contact_inquiries_created_at").on(table.createdAt),
+    check(
+      "chk_contact_inquiries_status",
+      sql`${table.status} IN ('NEW', 'IN_PROGRESS', 'RESOLVED', 'ARCHIVED')`
+    ),
+  ]
 );
 
 // ============================================================================
@@ -888,6 +985,8 @@ export const chatbotSessions = pgTable(
     feedbackComment: text("feedback_comment").default(""),
     handoverCount: integer("handover_count").notNull().default(0),
     avgResponseTimeMs: integer("avg_response_time_ms").notNull().default(0),
+    ipAddress: text("ip_address").default(""),
+    userAgent: text("user_agent").default(""),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true }).notNull().defaultNow(),
@@ -899,6 +998,11 @@ export const chatbotSessions = pgTable(
     index("idx_chatbot_sessions_customer_email").on(table.customerEmail),
     index("idx_chatbot_sessions_customer_phone").on(table.customerPhone),
     index("idx_chatbot_sessions_customer_user_id").on(table.customerUserId),
+    check(
+      "chk_chatbot_sessions_rating",
+      sql`${table.rating} IS NULL OR (${table.rating} >= 1 AND ${table.rating} <= 5)`
+    ),
+    check("chk_chatbot_sessions_fallbacks", sql`${table.consecutiveFallbacks} >= 0`),
   ]
 );
 
@@ -1067,9 +1171,12 @@ export const usersRelations = relations(users, ({ many }) => ({
   blogPosts: many(blogPosts),
   appointments: many(appointments, { relationName: "visitorAppointments" }),
   assignedAppointments: many(appointments, { relationName: "staffAppointments" }),
-  orders: many(orders),
+  orders: many(orders, { relationName: "customerOrders" }),
+  assignedOrders: many(orders, { relationName: "assignedAdminOrders" }),
   rfqRequests: many(rfqRequests, { relationName: "customerRfqs" }),
   assignedRfqs: many(rfqRequests, { relationName: "assignedAdminRfqs" }),
+  contactInquiries: many(contactInquiries, { relationName: "customerInquiries" }),
+  assignedInquiries: many(contactInquiries, { relationName: "assignedAdminInquiries" }),
   projects: many(projects),
   notifications: many(notifications),
   chatbotSessions: many(chatbotSessions, { relationName: "customerChatSessions" }),
@@ -1238,6 +1345,12 @@ export const ordersRelations = relations(orders, ({ one, many }) => ({
   customer: one(users, {
     fields: [orders.customerUserId],
     references: [users.id],
+    relationName: "customerOrders",
+  }),
+  assignedAdmin: one(users, {
+    fields: [orders.assignedAdminId],
+    references: [users.id],
+    relationName: "assignedAdminOrders",
   }),
   items: many(orderItems),
 }));
@@ -1298,6 +1411,19 @@ export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
     references: [users.id],
+  }),
+}));
+
+export const contactInquiriesRelations = relations(contactInquiries, ({ one }) => ({
+  customer: one(users, {
+    fields: [contactInquiries.customerUserId],
+    references: [users.id],
+    relationName: "customerInquiries",
+  }),
+  assignedAdmin: one(users, {
+    fields: [contactInquiries.assignedAdminId],
+    references: [users.id],
+    relationName: "assignedAdminInquiries",
   }),
 }));
 
@@ -1427,6 +1553,7 @@ export type ProjectRow = typeof projects.$inferSelect;
 export type OrderRow = typeof orders.$inferSelect;
 export type RfqRequestRow = typeof rfqRequests.$inferSelect;
 export type CustomerFeedbackRow = typeof customerFeedbacks.$inferSelect;
+export type ContactInquiryRow = typeof contactInquiries.$inferSelect;
 export type ChatbotFaqRow = typeof chatbotFaqs.$inferSelect;
 export type ChatbotKnowledgeRevisionRow = typeof chatbotKnowledgeRevisions.$inferSelect;
 export type ChatbotDocumentRow = typeof chatbotDocuments.$inferSelect;

@@ -10,7 +10,7 @@ import {
   getProjectStatus,
   normalizeProjectImages,
   type ProjectShowcaseItem,
-} from "./projectShowcaseHelpers";
+} from "./projectShowcaseHelpers.ts";
 
 const SAMPLE_PROJECTS: ProjectShowcaseItem[] = [
   {

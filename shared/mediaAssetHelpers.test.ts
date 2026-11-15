@@ -5,7 +5,7 @@ import {
   inferSourceTypeFromUrl,
   isValidMediaPublicUrl,
   normalizeMediaAssetInput,
-} from "./mediaAssetHelpers";
+} from "./mediaAssetHelpers.ts";
 
 test("isValidMediaPublicUrl accepts local uploads, presets, and http(s) URLs", () => {
   assert.equal(isValidMediaPublicUrl("/uploads/173156-door.jpg"), true);

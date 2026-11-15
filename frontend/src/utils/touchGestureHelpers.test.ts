@@ -5,7 +5,7 @@ import {
   detectHorizontalSwipe,
   detectVerticalSwipeDown,
   getResponsivePaginationConfig,
-} from "./touchGestureHelpers";
+} from "./touchGestureHelpers.ts";
 
 test("detectHorizontalSwipe identifies left and right swipes past threshold", () => {
   assert.equal(detectHorizontalSwipe(240, 300, 170, 310, 320), "left");

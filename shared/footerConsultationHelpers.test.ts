@@ -11,7 +11,7 @@ import {
   normalizeSiteContactSettings,
   validateFooterConsultation,
   validateSiteContactSettings,
-} from "./footerConsultationHelpers";
+} from "./footerConsultationHelpers.ts";
 
 test("footer navigation columns expose all public routes without placeholder items", () => {
   assert.equal(FOOTER_LINK_COLUMNS.length, 4);

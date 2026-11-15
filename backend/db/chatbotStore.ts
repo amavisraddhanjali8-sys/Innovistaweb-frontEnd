@@ -110,6 +110,8 @@ export interface ChatbotSessionRecord {
   feedbackComment?: string;
   handoverCount: number;
   avgResponseTimeMs: number;
+  ipAddress?: string;
+  userAgent?: string;
   createdAt: string;
   updatedAt: string;
   lastActivityAt: string;
@@ -916,6 +918,8 @@ function mapDbSessionToRecord(
     feedbackComment: row.feedbackComment || undefined,
     handoverCount: row.handoverCount,
     avgResponseTimeMs: row.avgResponseTimeMs,
+    ipAddress: row.ipAddress || undefined,
+    userAgent: row.userAgent || undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     lastActivityAt: row.lastActivityAt.toISOString(),
@@ -1050,6 +1054,8 @@ export function createNewSessionRecord(input?: {
   customerName?: string;
   customerEmail?: string;
   language?: SupportedLanguage;
+  ipAddress?: string;
+  userAgent?: string;
 }): ChatbotSessionRecord {
   const now = new Date().toISOString();
   return {
@@ -1077,6 +1083,8 @@ export function createNewSessionRecord(input?: {
     consecutiveFallbacks: 0,
     handoverCount: 0,
     avgResponseTimeMs: 0,
+    ipAddress: input?.ipAddress || "",
+    userAgent: input?.userAgent || "",
     createdAt: now,
     updatedAt: now,
     lastActivityAt: now,
@@ -1123,6 +1131,8 @@ export async function upsertChatSession(
           feedbackComment: next.feedbackComment || "",
           handoverCount: next.handoverCount,
           avgResponseTimeMs: next.avgResponseTimeMs,
+          ipAddress: next.ipAddress || "",
+          userAgent: next.userAgent || "",
           createdAt: new Date(next.createdAt || now),
           updatedAt: now,
           lastActivityAt: now,
@@ -1152,6 +1162,8 @@ export async function upsertChatSession(
             feedbackComment: next.feedbackComment || "",
             handoverCount: next.handoverCount,
             avgResponseTimeMs: next.avgResponseTimeMs,
+            ...(next.ipAddress ? { ipAddress: next.ipAddress } : {}),
+            ...(next.userAgent ? { userAgent: next.userAgent } : {}),
             updatedAt: now,
             lastActivityAt: now,
           },

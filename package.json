@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "start": "node backend/server.ts"
+    "start": "node backend/server.ts",
+    "test": "tsx --test backend/**/*.test.ts shared/*.test.ts frontend/src/utils/*.test.ts"
   },
   "dependencies": {
     "@ant-design/compatible": "^5.1.4",

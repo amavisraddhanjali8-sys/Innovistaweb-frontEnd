@@ -159,6 +159,8 @@ export function createUserAccountMem(payload: {
   emailVerificationExpiresAt?: Date | null;
   totpSecretEncrypted?: string | null;
   totpEnabled?: boolean;
+  authProvider?: string;
+  notes?: string;
   purchaseGoods?: string[];
 }) {
   const store = getMemoryStore();
@@ -187,6 +189,11 @@ export function createUserAccountMem(payload: {
     lastLoginAt: null,
     lastLoginIp: "",
     isActive: (payload.accountStatus || "ACTIVE") !== "SUSPENDED",
+    authProvider: payload.authProvider || "local",
+    lastPasswordChangedAt: payload.passwordHash ? now : null,
+    suspendedAt: (payload.accountStatus || "ACTIVE") === "SUSPENDED" ? now : null,
+    suspensionReason: "",
+    notes: payload.notes || "",
     purchaseGoods: payload.purchaseGoods || [],
     createdAt: now,
     updatedAt: now,
@@ -219,6 +226,11 @@ export function updateUserAccountMem(
     lastLoginAt: Date | null;
     lastLoginIp: string;
     isActive: boolean;
+    authProvider: string;
+    lastPasswordChangedAt: Date | null;
+    suspendedAt: Date | null;
+    suspensionReason: string;
+    notes: string;
     purchaseGoods: string[];
   }>
 ) {
@@ -231,13 +243,17 @@ export function updateUserAccountMem(
   if (patch.phone !== undefined) user.phone = patch.phone;
   if (patch.company !== undefined) user.company = patch.company;
   if (patch.role !== undefined) user.role = patch.role;
-  if (patch.passwordHash !== undefined) user.passwordHash = patch.passwordHash;
+  if (patch.passwordHash !== undefined) {
+    user.passwordHash = patch.passwordHash;
+    user.lastPasswordChangedAt = patch.lastPasswordChangedAt ?? new Date();
+  }
   if (patch.avatarUrl !== undefined) user.avatarUrl = patch.avatarUrl;
   if (patch.isVerified !== undefined) user.isVerified = patch.isVerified;
   if (patch.emailVerified !== undefined) user.emailVerified = patch.emailVerified;
   if (patch.accountStatus !== undefined) {
     user.accountStatus = patch.accountStatus;
     user.isActive = patch.accountStatus !== "SUSPENDED";
+    user.suspendedAt = patch.accountStatus === "SUSPENDED" ? (patch.suspendedAt ?? new Date()) : null;
   }
   if (patch.emailVerificationTokenHash !== undefined)
     user.emailVerificationTokenHash = patch.emailVerificationTokenHash;
@@ -252,6 +268,11 @@ export function updateUserAccountMem(
   if (patch.lastLoginAt !== undefined) user.lastLoginAt = patch.lastLoginAt;
   if (patch.lastLoginIp !== undefined) user.lastLoginIp = patch.lastLoginIp;
   if (patch.isActive !== undefined) user.isActive = patch.isActive;
+  if (patch.authProvider !== undefined) user.authProvider = patch.authProvider;
+  if (patch.lastPasswordChangedAt !== undefined) user.lastPasswordChangedAt = patch.lastPasswordChangedAt;
+  if (patch.suspendedAt !== undefined) user.suspendedAt = patch.suspendedAt;
+  if (patch.suspensionReason !== undefined) user.suspensionReason = patch.suspensionReason;
+  if (patch.notes !== undefined) user.notes = patch.notes;
   if (patch.purchaseGoods !== undefined) user.purchaseGoods = patch.purchaseGoods;
   user.updatedAt = new Date();
   return user;
@@ -804,7 +825,19 @@ export function createOrderRecordMem(input: {
   Client_Name: string;
   Client_Email: string;
   Client_Number?: string;
-  Designs?: Array<{ DesignID?: string | number; Design_Name?: string; Design_Image?: string }>;
+  Inquiry_Type?: string;
+  Subject?: string;
+  Notes?: string;
+  Source?: string;
+  Designs?: Array<{
+    DesignID?: string | number;
+    Design_Name?: string;
+    Design_Image?: string;
+    Color?: string;
+    Size?: string;
+    Quantity?: number;
+    Notes?: string;
+  }>;
 }) {
   const store = getMemoryStore();
   const orderCode = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -816,10 +849,17 @@ export function createOrderRecordMem(input: {
   const items = designList.map((entry) => {
     const prod =
       entry.DesignID !== undefined ? getProductByAnyIdMem(entry.DesignID) : null;
+    const qty = Number.isFinite(Number(entry.Quantity)) && Number(entry.Quantity) > 0
+      ? Math.floor(Number(entry.Quantity))
+      : 1;
     return {
       Design: {
         Design_Name: prod?.Design_Name || entry.Design_Name || "Custom Architectural Design",
         Design_Image: prod?.Design_Image?.[0] || entry.Design_Image || "/assets/products/door.jpg",
+        ...(entry.Color ? { Color: entry.Color } : {}),
+        ...(entry.Size ? { Size: entry.Size } : {}),
+        Quantity: qty,
+        ...(entry.Notes ? { Notes: entry.Notes } : {}),
       },
     };
   });
@@ -831,6 +871,10 @@ export function createOrderRecordMem(input: {
     Client_Name: input.Client_Name,
     Client_Email: input.Client_Email,
     Client_Number: input.Client_Number || "",
+    Inquiry_Type: input.Inquiry_Type || "Product Quote",
+    Subject: input.Subject || "",
+    Notes: input.Notes || "",
+    Source: input.Source || "web",
     Customer: {
       Cus_CompanyName: matchedCustomer?.company || "New Client",
       Cus_Logo: matchedCustomer?.avatarUrl || "/assets/logos/client-zenith.svg",
@@ -844,6 +888,9 @@ export function createOrderRecordMem(input: {
     NotificationsID: `notif-${Date.now()}`,
     Notifications_Title: "New Order / Quote Request",
     Notifications_Body: `${input.Client_Name} submitted inquiry ${orderCode}.`,
+    category: "ORDER",
+    relatedEntityType: "order",
+    relatedEntityId: orderCode,
     Date_Timestamp: new Date().toISOString(),
     isRead: false,
   });
@@ -874,9 +921,12 @@ export function createRfqRecordMem(
     Number.isFinite(parsedUserId) && parsedUserId > 0
       ? parsedUserId
       : matchedCustomer?.id ?? null;
+  const rfqCode = `RFQ-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
   const rfq = {
     id: rfqId,
+    rfqCode,
     customerUserId: resolvedCustomerUserId,
+    assignedAdminId: null,
     clientName: input.clientName || "",
     contactPerson: input.contactPerson || "",
     email: input.email || "",
@@ -901,6 +951,10 @@ export function createRfqRecordMem(
     proposedVisitDates: input.proposedVisitDates || "",
     siteAddress: input.siteAddress || "",
     googleMapsLink: input.googleMapsLink || "",
+    estimatedQuoteAmount: null,
+    currency: "LKR",
+    adminNotes: "",
+    reviewedAt: null,
     status: "NEW",
     createdAt: now,
     attachments: attachments.map((att) => ({
@@ -919,6 +973,9 @@ export function createRfqRecordMem(
     NotificationsID: `notif-rfq-${rfqId}-${Date.now()}`,
     Notifications_Title: "New Detailed RFQ Submitted",
     Notifications_Body: `${rfq.clientName} requested quotation for "${rfq.projectTitle}".`,
+    category: "RFQ",
+    relatedEntityType: "rfq",
+    relatedEntityId: String(rfqId),
     Date_Timestamp: now.toISOString(),
     isRead: false,
   });
@@ -927,6 +984,33 @@ export function createRfqRecordMem(
 
 export function listRfqRecordsMem() {
   return [...getMemoryStore().rfqs];
+}
+
+export function updateRfqRecordMem(
+  id: number,
+  patch: {
+    status?: string;
+    adminNotes?: string;
+    estimatedQuoteAmount?: string | number | null;
+    currency?: string;
+    assignedAdminId?: number | null;
+  }
+) {
+  const store = getMemoryStore();
+  const rfq = store.rfqs.find((r) => r.id === id);
+  if (!rfq) return null;
+  if (patch.status !== undefined) {
+    rfq.status = patch.status;
+    rfq.reviewedAt = new Date();
+  }
+  if (patch.adminNotes !== undefined) rfq.adminNotes = patch.adminNotes;
+  if (patch.estimatedQuoteAmount !== undefined) {
+    rfq.estimatedQuoteAmount =
+      patch.estimatedQuoteAmount === null ? null : String(patch.estimatedQuoteAmount);
+  }
+  if (patch.currency !== undefined) rfq.currency = patch.currency;
+  if (patch.assignedAdminId !== undefined) rfq.assignedAdminId = patch.assignedAdminId;
+  return rfq;
 }
 
 // ============================================================================
@@ -1049,6 +1133,10 @@ export function markNotificationReadMem(notifKey?: string): boolean {
 export function createNotificationRecordMem(input: {
   title: string;
   body: string;
+  category?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  metadata?: Record<string, unknown>;
   notifKey?: string;
 }) {
   const store = getMemoryStore();
@@ -1059,6 +1147,10 @@ export function createNotificationRecordMem(input: {
     NotificationsID: id,
     Notifications_Title: input.title,
     Notifications_Body: input.body,
+    category: input.category || "GENERAL",
+    relatedEntityType: input.relatedEntityType || "",
+    relatedEntityId: input.relatedEntityId || "",
+    metadata: input.metadata || {},
     Date_Timestamp: new Date().toISOString(),
     isRead: false,
   };
@@ -1324,5 +1416,71 @@ export function toggleBlockedSiteVisitKeyMem(input: {
     blocked: !isBlocked,
     blockedKeys: nextBlocked,
   };
+}
+
+// ============================================================================
+// CONTACT INQUIRIES (Memory Fallback)
+// ============================================================================
+export function listContactInquiriesMem() {
+  return [...getMemoryStore().contactInquiries].sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+  );
+}
+
+export function createContactInquiryRecordMem(input: {
+  customerUserId?: number | null;
+  name: string;
+  email: string;
+  phone?: string;
+  department?: string;
+  intent?: string;
+  subject?: string;
+  message?: string;
+  source?: string;
+  ipAddress?: string;
+}) {
+  const store = getMemoryStore();
+  const id = store.nextContactInquiryId++;
+  const now = new Date();
+  const inquiryCode = `INQ-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+  const created = {
+    id,
+    inquiryCode,
+    customerUserId: input.customerUserId ?? null,
+    assignedAdminId: null,
+    name: input.name.trim(),
+    email: input.email.trim().toLowerCase(),
+    phone: (input.phone || "").trim(),
+    department: (input.department || "General Consultation").trim(),
+    intent: (input.intent || "General Consultation").trim(),
+    subject: (input.subject || "").trim(),
+    message: (input.message || "").trim(),
+    source: (input.source || "web").trim(),
+    status: "NEW" as const,
+    ipAddress: input.ipAddress || "",
+    createdAt: now,
+    updatedAt: now,
+  };
+  store.contactInquiries.unshift(created);
+  return created;
+}
+
+export function updateContactInquiryStatusMem(
+  idOrCode: string | number,
+  patch: {
+    status?: "NEW" | "IN_PROGRESS" | "RESOLVED" | "ARCHIVED";
+    assignedAdminId?: number | null;
+  }
+) {
+  const store = getMemoryStore();
+  const target = String(idOrCode).trim();
+  const found = store.contactInquiries.find(
+    (c) => String(c.id) === target || c.inquiryCode === target
+  );
+  if (!found) return null;
+  if (patch.status) found.status = patch.status;
+  if (patch.assignedAdminId !== undefined) found.assignedAdminId = patch.assignedAdminId;
+  found.updatedAt = new Date();
+  return found;
 }
 

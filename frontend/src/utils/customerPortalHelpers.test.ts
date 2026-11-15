@@ -5,7 +5,7 @@ import {
   computeSiteVisitCountdown,
   filterCustomerPortalRecords,
   getLocalIsoDateOffset,
-} from "./customerPortalHelpers";
+} from "./customerPortalHelpers.ts";
 
 describe("customerPortalHelpers", () => {
   it("computes live countdown for upcoming, in-progress, elapsed, completed, and cancelled site visits", () => {

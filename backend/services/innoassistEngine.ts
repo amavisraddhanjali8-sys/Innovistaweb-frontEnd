@@ -302,7 +302,12 @@ export async function processInnoassistMessage(
       customerName: input.customerUser?.name || "",
       customerEmail: input.customerUser?.email || "",
       language: input.preferredLanguage || "en",
+      ipAddress: input.ipAddress,
+      userAgent: input.userAgent,
     });
+  } else {
+    if (input.ipAddress) session.ipAddress = input.ipAddress;
+    if (input.userAgent) session.userAgent = input.userAgent;
   }
 
   // Detect language & sanitize restricted languages

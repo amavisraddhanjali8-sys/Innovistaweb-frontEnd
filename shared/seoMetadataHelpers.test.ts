@@ -13,7 +13,7 @@ import {
   resolveDynamicRouteSeo,
   resolveOgImageUrl,
   resolveRequestOrigin,
-} from "./seoMetadataHelpers";
+} from "./seoMetadataHelpers.ts";
 
 test("formatSeoTitle formats branded titles without double-branding", () => {
   assert.equal(formatSeoTitle(), DEFAULT_SEO_TITLE);

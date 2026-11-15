@@ -20,7 +20,7 @@ import {
   upsertScheduleDate,
   validateSiteVisitBooking,
   type SiteVisitBooking,
-} from "./siteVisitSchedulerHelpers";
+} from "./siteVisitSchedulerHelpers.ts";
 
 test("getUpcomingSiteVisitDates skips Sundays and returns requested count", () => {
   // Friday Nov 13, 2026 -> next days include Sat Nov 14, skips Sun Nov 15, then Mon Nov 16

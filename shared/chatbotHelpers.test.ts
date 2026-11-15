@@ -24,7 +24,7 @@ import {
   normalizeChatbotConfig,
   normalizeChatbotFaq,
   splitMultiQuestions,
-} from "./chatbotHelpers";
+} from "./chatbotHelpers.ts";
 
 test("matchTrainedFaq finds top relevant FAQ answer from trained keywords and question", () => {
   const match = matchTrainedFaq("What is your coastal sea breeze warranty?", DEFAULT_CHATBOT_FAQS);

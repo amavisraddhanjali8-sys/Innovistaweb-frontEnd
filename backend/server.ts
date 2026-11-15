@@ -164,6 +164,7 @@ import {
   findUserByEmail,
   findUserById,
   findUserByIdentifier,
+  findUserByVerificationTokenHash,
   getAdminAndStaffUsers,
   getCustomerUsers,
   getOrCreateUser,
@@ -175,6 +176,7 @@ import {
   createAppointmentRecord,
   createAuditLog,
   createCategoryRecord,
+  createContactInquiryRecord,
   createFeedbackRecord,
   createMediaAssetRecord,
   createNotificationRecord,
@@ -184,6 +186,7 @@ import {
   createRfqRecord,
   createSecurityChallenge,
   createUserAccount,
+  createUserSession,
   deleteAppointmentDateRecord,
   deleteAppointmentSlotRecord,
   deleteBlogPostRecord,
@@ -195,16 +198,19 @@ import {
   deleteProductRecord,
   deleteProjectRecord,
   deleteUserAccount,
+  getAdminSecretConfig,
   getAppointmentScheduleConfig,
   getCmsDoc,
   getProductByAnyId,
   getSecurityChallenge,
+  getUserSessionByTokenHash,
   incrementChallengeAttempts,
   listAppointments,
   listAuditLogs,
   listBlogPosts,
   listCategories,
   listChatbotFaqs,
+  listContactInquiries,
   listFeedbacks,
   listMediaAssets,
   listNotifications,
@@ -219,16 +225,23 @@ import {
   reorderCategoryRecords,
   reorderFeedbackRecords,
   replaceRelatedPortals,
+  revokeAllUserSessionsForUser,
+  revokeUserSessionByTokenHash,
   setCmsDoc,
+  toggleBlockedSiteVisitKey,
+  touchUserSession,
   updateAppointmentMetadataRecord,
   updateAppointmentSlotRecord,
   updateAppointmentStatusRecord,
   updateCategoryRecord,
+  updateContactInquiryStatus,
   updateFeedbackRecord,
   updateOrderStatusRecord,
   updateProductRecord,
   updateProjectRecord,
+  updateRfqRecord,
   updateUserAccount,
+  upsertAdminSecretConfig,
   upsertAppointmentDateRecord,
   upsertBlogPostRecord,
   upsertChatbotFaqRecord,
@@ -264,8 +277,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, "..");
 
+function parseCliFlag(flagName: string): string | undefined {
+  const argv = process.argv.slice(2);
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i];
+    if (arg === flagName && argv[i + 1] && !argv[i + 1].startsWith("--")) {
+      return argv[i + 1];
+    }
+    if (arg.startsWith(`${flagName}=`)) {
+      return arg.slice(flagName.length + 1);
+    }
+  }
+  return undefined;
+}
+
 const app = express();
-const PORT = parseInt(process.env.DEFAULT_APP_PORT || "3000", 10) || 3000;
+const PORT =
+  parseInt(
+    parseCliFlag("--port") || process.env.PORT || process.env.DEFAULT_APP_PORT || "3000",
+    10
+  ) || 3000;
+const HOST = parseCliFlag("--host") || process.env.HOST || "0.0.0.0";
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
@@ -914,6 +946,23 @@ function issueUserSessionTokens(user: DbUserRow, mfaVerified: boolean) {
   return { accessToken, refreshToken };
 }
 
+async function persistUserSession(
+  req: Request,
+  userId: number,
+  refreshToken: string,
+  mfaVerified: boolean
+) {
+  await createUserSession({
+    sessionKey: `sess-${randomBytes(12).toString("hex")}`,
+    userId,
+    tokenHash: sha256Hex(refreshToken),
+    mfaVerified,
+    ipAddress: getClientIp(req),
+    userAgent: String(req.headers["user-agent"] || "").slice(0, 240),
+    expiresAt: new Date(Date.now() + 7 * 24 * 3600_000),
+  }).catch(() => null);
+}
+
 // Generate hardened anti-OCR SVG CAPTCHA + SHA-256 Proof-of-Work challenge
 app.get("/api/auth/captcha", authRateLimiter, async (_req: Request, res: Response) => {
   try {
@@ -1038,6 +1087,7 @@ app.post("/api/auth/bootstrap-admin", strictLoginRateLimiter, async (req: Reques
     });
 
     const tokens = issueUserSessionTokens(created, true);
+    await persistUserSession(req, created.id, tokens.refreshToken, true);
     const classification = classifyAccountStatus(created);
 
     await recordAuditEvent(req, {
@@ -1081,32 +1131,59 @@ async function getOrInitAdminSecretKey(): Promise<{
   rotationCount: number;
   isDefault: boolean;
 }> {
-  const stored = await getCmsDoc<AdminSecretKeyDoc | null>("admin_secret_key_config", null);
-  const decrypted = stored?.encryptedKey ? decryptSecret(stored.encryptedKey) : null;
-  if (stored && decrypted) {
+  const storedDb = await getAdminSecretConfig();
+  const decryptedDb = storedDb?.encryptedKey ? decryptSecret(storedDb.encryptedKey) : null;
+  if (storedDb && decryptedDb) {
     return {
-      secretKey: decrypted,
-      updatedAt: stored.updatedAt || new Date().toISOString(),
-      updatedByEmail: stored.updatedByEmail || "system",
-      rotationCount: typeof stored.rotationCount === "number" ? stored.rotationCount : 0,
-      isDefault: decrypted === DEFAULT_ADMIN_SECRET_KEY,
+      secretKey: decryptedDb,
+      updatedAt:
+        storedDb.updatedAt instanceof Date
+          ? storedDb.updatedAt.toISOString()
+          : String(storedDb.updatedAt || new Date().toISOString()),
+      updatedByEmail: storedDb.updatedByEmail || "system",
+      rotationCount: typeof storedDb.rotationCount === "number" ? storedDb.rotationCount : 0,
+      isDefault: decryptedDb === DEFAULT_ADMIN_SECRET_KEY,
     };
   }
 
-  const nowIso = new Date().toISOString();
-  const initialDoc: AdminSecretKeyDoc = {
+  // Migrate legacy CMS doc config into dedicated admin_secret_configs table if present
+  const legacyStored = await getCmsDoc<AdminSecretKeyDoc | null>("admin_secret_key_config", null);
+  const decryptedLegacy = legacyStored?.encryptedKey
+    ? decryptSecret(legacyStored.encryptedKey)
+    : null;
+  if (legacyStored && decryptedLegacy) {
+    const migrated = await upsertAdminSecretConfig({
+      encryptedKey: legacyStored.encryptedKey,
+      keyHash: legacyStored.keyHash || sha256Hex(decryptedLegacy),
+      rotationCount: typeof legacyStored.rotationCount === "number" ? legacyStored.rotationCount : 0,
+      updatedByEmail: legacyStored.updatedByEmail || "system",
+    });
+    return {
+      secretKey: decryptedLegacy,
+      updatedAt:
+        migrated.updatedAt instanceof Date
+          ? migrated.updatedAt.toISOString()
+          : String(legacyStored.updatedAt || new Date().toISOString()),
+      updatedByEmail: migrated.updatedByEmail || "system",
+      rotationCount: migrated.rotationCount,
+      isDefault: decryptedLegacy === DEFAULT_ADMIN_SECRET_KEY,
+    };
+  }
+
+  const seeded = await upsertAdminSecretConfig({
     encryptedKey: encryptSecret(DEFAULT_ADMIN_SECRET_KEY),
     keyHash: sha256Hex(DEFAULT_ADMIN_SECRET_KEY),
-    updatedAt: nowIso,
-    updatedByEmail: stored?.updatedByEmail || "system",
-    rotationCount: typeof stored?.rotationCount === "number" ? stored.rotationCount : 0,
-  };
-  await setCmsDoc("admin_secret_key_config", initialDoc as unknown as Record<string, unknown>);
+    rotationCount: 0,
+    updatedByEmail: "system",
+  });
   return {
     secretKey: DEFAULT_ADMIN_SECRET_KEY,
-    updatedAt: nowIso,
-    updatedByEmail: initialDoc.updatedByEmail,
-    rotationCount: initialDoc.rotationCount,
+    updatedAt:
+      seeded.updatedAt instanceof Date
+        ? seeded.updatedAt.toISOString()
+        : new Date().toISOString(),
+    updatedByEmail: seeded.updatedByEmail || "system",
+    rotationCount: seeded.rotationCount,
     isDefault: true,
   };
 }
@@ -1619,6 +1696,7 @@ app.post(
       const finalUser = updatedUser || user;
       const finalClassification = classifyAccountStatus(finalUser);
       const tokens = issueUserSessionTokens(finalUser, true);
+      await persistUserSession(req, finalUser.id, tokens.refreshToken, true);
       const isAdmin = finalUser.role === "admin" || finalUser.role === "staff";
 
       await recordAuditEvent(req, {
@@ -1738,6 +1816,7 @@ app.post(
       const finalUser = updatedUser || user;
       const finalClassification = classifyAccountStatus(finalUser);
       const tokens = issueUserSessionTokens(finalUser, true);
+      await persistUserSession(req, finalUser.id, tokens.refreshToken, true);
 
       await recordAuditEvent(req, {
         actorUserId: finalUser.id,
@@ -1778,11 +1857,27 @@ async function handleRefreshToken(req: Request, res: Response) {
   if (!payload || payload.tokenType !== "refresh") {
     return res.status(401).json({ message: "Invalid or expired refresh token." });
   }
+  const tokenHash = sha256Hex(refreshToken);
+  const existingSession = await getUserSessionByTokenHash(tokenHash);
+  if (existingSession) {
+    if (
+      existingSession.revokedAt ||
+      new Date(existingSession.expiresAt).getTime() < Date.now()
+    ) {
+      return res.status(401).json({ message: "Refresh session has been revoked or expired." });
+    }
+    await touchUserSession(existingSession.sessionKey).catch(() => null);
+  }
   const user = await findUserById(payload.sub);
   if (!user || (user.accountStatus || "ACTIVE").toUpperCase() === "SUSPENDED" || !user.isActive) {
     return res.status(403).json({ message: "Account is suspended or no longer active." });
   }
-  const tokens = issueUserSessionTokens(user, Boolean(payload.mfaVerified));
+  const mfaVerified = Boolean(payload.mfaVerified);
+  const tokens = issueUserSessionTokens(user, mfaVerified);
+  if (existingSession) {
+    await revokeUserSessionByTokenHash(tokenHash).catch(() => false);
+  }
+  await persistUserSession(req, user.id, tokens.refreshToken, mfaVerified);
   return res.json({
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
@@ -1883,9 +1978,7 @@ app.post(["/api/auth/verify-email", "/customer/verify-email"], authRateLimiter, 
       : null;
 
     if (!user && token) {
-      const tokenHash = sha256Hex(token);
-      const allUsers = await listUsersByRoles();
-      user = allUsers.find((u) => u.emailVerificationTokenHash === tokenHash) || null;
+      user = await findUserByVerificationTokenHash(sha256Hex(token));
     }
 
     if (!user) {
@@ -2060,6 +2153,9 @@ app.post("/api/admin/totp/enable", requireAdminOrStaff, async (req: AuthRequest,
 
     const updated = await updateUserAccount(user.id, { totpEnabled: true });
     const tokens = updated ? issueUserSessionTokens(updated, true) : undefined;
+    if (updated && tokens) {
+      await persistUserSession(req, updated.id, tokens.refreshToken, true);
+    }
 
     await recordAuditEvent(req, {
       targetUserId: user.id,
@@ -2159,20 +2255,23 @@ app.post("/api/admin/secret-key/recreate", requireAdminOrStaff, async (req: Auth
       }
     }
 
-    const nowIso = new Date().toISOString();
-    const updatedDoc: AdminSecretKeyDoc = {
-      encryptedKey: encryptSecret(nextSecretKey),
-      keyHash: sha256Hex(nextSecretKey),
-      updatedAt: nowIso,
-      updatedByEmail: req.user?.email || "admin",
-      rotationCount: current.rotationCount + 1,
-    };
+    const encryptedKey = encryptSecret(nextSecretKey);
+    const keyHash = sha256Hex(nextSecretKey);
+    const nextRotationCount = current.rotationCount + 1;
+    const updatedByEmail = req.user?.email || "admin";
 
-    await setCmsDoc(
-      "admin_secret_key_config",
-      updatedDoc as unknown as Record<string, unknown>,
-      req.user?.userId ?? null
-    );
+    const savedConfig = await upsertAdminSecretConfig({
+      encryptedKey,
+      keyHash,
+      rotationCount: nextRotationCount,
+      updatedByUserId: req.user?.userId ?? null,
+      updatedByEmail,
+    });
+
+    const updatedAtIso =
+      savedConfig.updatedAt instanceof Date
+        ? savedConfig.updatedAt.toISOString()
+        : new Date().toISOString();
 
     await recordAuditEvent(req, {
       targetUserId: req.user?.userId ?? null,
@@ -2184,7 +2283,7 @@ app.post("/api/admin/secret-key/recreate", requireAdminOrStaff, async (req: Auth
       details: rawCustom
         ? "Admin updated custom Administrator Login Secret Key."
         : "Admin recreated a new randomized Administrator Login Secret Key.",
-      metadata: { rotationCount: updatedDoc.rotationCount, mode: rawCustom ? "custom" : "random" },
+      metadata: { rotationCount: nextRotationCount, mode: rawCustom ? "custom" : "random" },
     });
 
     return res.json({
@@ -2193,9 +2292,9 @@ app.post("/api/admin/secret-key/recreate", requireAdminOrStaff, async (req: Auth
         : "New Admin Secret Key recreated and stored securely.",
       secretKey: nextSecretKey,
       maskedKey: maskAdminSecretKey(nextSecretKey),
-      updatedAt: updatedDoc.updatedAt,
-      updatedByEmail: updatedDoc.updatedByEmail,
-      rotationCount: updatedDoc.rotationCount,
+      updatedAt: updatedAtIso,
+      updatedByEmail,
+      rotationCount: nextRotationCount,
       isDefault: nextSecretKey === DEFAULT_ADMIN_SECRET_KEY,
     });
   } catch (err) {
@@ -2224,9 +2323,15 @@ app.patch("/api/admin/customers/:id/status", requireAdminOrStaff, async (req: Au
       patch.isVerified = req.body.isVerified;
       actions.push(req.body.isVerified ? "ACCOUNT_VERIFIED" : "ACCOUNT_UNVERIFIED");
     }
+    const reason = String(req.body?.reason || "").trim();
     if (req.body?.accountStatus === "ACTIVE" || req.body?.accountStatus === "SUSPENDED") {
       patch.accountStatus = req.body.accountStatus;
       patch.isActive = req.body.accountStatus !== "SUSPENDED";
+      if (req.body.accountStatus === "SUSPENDED" && reason) {
+        patch.suspensionReason = reason;
+      } else if (req.body.accountStatus === "ACTIVE") {
+        patch.suspensionReason = "";
+      }
       actions.push(req.body.accountStatus === "SUSPENDED" ? "ACCOUNT_SUSPENDED" : "ACCOUNT_REACTIVATED");
     }
 
@@ -2235,9 +2340,11 @@ app.patch("/api/admin/customers/:id/status", requireAdminOrStaff, async (req: Au
     }
 
     const updated = await updateUserAccount(id, patch);
+    if (patch.accountStatus === "SUSPENDED") {
+      await revokeAllUserSessionsForUser(id).catch(() => 0);
+    }
     const finalUser = updated || target;
     const classification = classifyAccountStatus(finalUser);
-    const reason = String(req.body?.reason || "").trim();
 
     await recordAuditEvent(req, {
       targetUserId: finalUser.id,
@@ -2528,6 +2635,7 @@ app.post("/auth/ResetPassword", authRateLimiter, async (req: Request, res: Respo
     const targetUser = challenge.userId ? await findUserById(challenge.userId) : null;
     if (!targetUser) return res.status(404).json({ message: "User not found." });
     await updateUserAccount(targetUser.id, { passwordHash: hashPassword(newPassword), failedLoginAttempts: 0, lockedUntil: null });
+    await revokeAllUserSessionsForUser(targetUser.id).catch(() => 0);
     await markChallengeConsumed(challenge.challengeId);
     await recordAuditEvent(req, {
       targetUserId: targetUser.id,
@@ -2587,6 +2695,7 @@ app.post("/api/auth/change-password", requireAuth, async (req: AuthRequest, res:
       return res.status(400).json({ message: pwCheck.error });
     }
     await updateUserAccount(user.id, { passwordHash: hashPassword(newPassword) });
+    await revokeAllUserSessionsForUser(user.id).catch(() => 0);
     await recordAuditEvent(req, {
       targetUserId: user.id,
       targetIdentifier: user.email,
@@ -2666,6 +2775,12 @@ app.get("/admin/summary", requireAdminOrStaff, async (_req: AuthRequest, res: Re
 });
 
 app.post("/auth/logout", optionalAuth, async (req: AuthRequest, res: Response) => {
+  const refreshToken = String(req.body?.refreshToken || "").trim();
+  if (refreshToken) {
+    await revokeUserSessionByTokenHash(sha256Hex(refreshToken)).catch(() => false);
+  } else if (req.user?.userId && req.body?.allSessions !== false) {
+    await revokeAllUserSessionsForUser(req.user.userId).catch(() => 0);
+  }
   if (req.user) {
     await recordAuditEvent(req, {
       action: "USER_LOGOUT",
@@ -3028,6 +3143,7 @@ app.post("/customer/Customer_register", strictLoginRateLimiter, optionalAuth, as
     const verification = await issueEmailVerificationChallenge(created, origin);
     const refreshedUser = (await findUserById(created.id)) || created;
     const tokens = issueUserSessionTokens(refreshedUser, true);
+    await persistUserSession(req, refreshedUser.id, tokens.refreshToken, true);
     const classification = classifyAccountStatus(refreshedUser);
     const mapped = mapCustomerUserToLegacy(refreshedUser);
 
@@ -3074,9 +3190,17 @@ app.put("/customer/updateCustomer", requireAdminOrStaff, async (req: AuthRequest
         req.body?.Account_Status === "ACTIVE" || req.body?.Account_Status === "SUSPENDED"
           ? req.body.Account_Status
           : undefined,
+      ...(req.body?.Account_Status === "SUSPENDED" && typeof req.body?.reason === "string"
+        ? { suspensionReason: req.body.reason.trim() }
+        : req.body?.Account_Status === "ACTIVE"
+        ? { suspensionReason: "" }
+        : {}),
       purchaseGoods: req.body?.Purchase_Goods,
     });
     if (!updated) return res.status(404).json({ message: "Customer not found" });
+    if (req.body?.Account_Status === "SUSPENDED") {
+      await revokeAllUserSessionsForUser(id).catch(() => 0);
+    }
     await recordAuditEvent(req, {
       targetUserId: updated.id,
       targetIdentifier: updated.email,
@@ -3259,7 +3383,17 @@ app.get("/order/getAllOrders", requireAuth, async (req: AuthRequest, res: Respon
 
 app.post("/order/createOrder", publicSubmissionRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
-    const { Order_Status, Client_Name, Client_Email, Client_Number, Designs } = req.body || {};
+    const {
+      Order_Status,
+      Client_Name,
+      Client_Email,
+      Client_Number,
+      Inquiry_Type,
+      Subject,
+      Notes,
+      Source,
+      Designs,
+    } = req.body || {};
     if (!Client_Name || !Client_Email) {
       return res.status(400).json({ message: "Client_Name and Client_Email are required." });
     }
@@ -3268,8 +3402,26 @@ app.post("/order/createOrder", publicSubmissionRateLimiter, optionalAuth, async 
       Client_Name,
       Client_Email,
       Client_Number,
+      Inquiry_Type,
+      Subject,
+      Notes,
+      Source,
       Designs,
     });
+    if (!Array.isArray(Designs) || Designs.length === 0 || Inquiry_Type || Subject || Notes) {
+      await createContactInquiryRecord({
+        customerUserId: req.user?.userId ?? null,
+        name: String(Client_Name),
+        email: String(Client_Email),
+        phone: String(Client_Number || ""),
+        department: String(Inquiry_Type || "Product Quote"),
+        intent: String(Inquiry_Type || "Product Quote"),
+        subject: String(Subject || `Inquiry ${created.OrderID}`),
+        message: String(Notes || ""),
+        source: String(Source || "order_form"),
+        ipAddress: getClientIp(req),
+      }).catch(() => null);
+    }
     await recordAuditEvent(req, {
       targetIdentifier: String(Client_Email),
       action: "ORDER_CREATED",
@@ -3403,6 +3555,112 @@ app.post(
     }
   }
 );
+
+app.patch("/api/rfq/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ message: "Invalid RFQ ID." });
+    }
+    const body = req.body || {};
+    const updated = await updateRfqRecord(id, {
+      status: typeof body.status === "string" ? body.status : undefined,
+      adminNotes: typeof body.adminNotes === "string" ? body.adminNotes : undefined,
+      estimatedQuoteAmount:
+        body.estimatedQuoteAmount !== undefined ? body.estimatedQuoteAmount : undefined,
+      currency: typeof body.currency === "string" ? body.currency : undefined,
+      assignedAdminId:
+        body.assignedAdminId === null
+          ? null
+          : Number.isFinite(Number(body.assignedAdminId))
+          ? Number(body.assignedAdminId)
+          : undefined,
+    });
+    if (!updated) {
+      return res.status(404).json({ message: "RFQ not found." });
+    }
+    return res.json({ message: "RFQ updated", data: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.get("/api/contact-inquiries", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = await listContactInquiries();
+    return res.json({ data: rows, total: rows.length });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
+
+app.post(
+  "/api/contact-inquiries",
+  publicSubmissionRateLimiter,
+  optionalAuth,
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const body = req.body || {};
+      const name = String(body.name || "").trim();
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!name || !email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ message: "Valid name and email are required." });
+      }
+      const created = await createContactInquiryRecord({
+        customerUserId: req.user?.userId ?? null,
+        name,
+        email,
+        phone: String(body.phone || ""),
+        department: String(body.department || "General Consultation"),
+        intent: String(body.intent || body.department || "General Consultation"),
+        subject: String(body.subject || ""),
+        message: String(body.message || ""),
+        source: String(body.source || "contact_page"),
+        ipAddress: getClientIp(req),
+      });
+      await createNotificationRecord({
+        title: "New Contact Inquiry",
+        body: `${name} (${email}) submitted a ${created.department} inquiry.`,
+        category: "INQUIRY",
+        relatedEntityType: "contact_inquiry",
+        relatedEntityId: created.inquiryCode,
+        userId: req.user?.userId ?? null,
+      }).catch(() => null);
+      return res.status(201).json({
+        message: "Inquiry submitted successfully.",
+        data: created,
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+app.patch("/api/contact-inquiries/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  try {
+    const idOrCode = String(req.params.id || "").trim();
+    const rawStatus =
+      typeof req.body?.status === "string" ? req.body.status.toUpperCase() : undefined;
+    if (rawStatus && !["NEW", "IN_PROGRESS", "RESOLVED", "ARCHIVED"].includes(rawStatus)) {
+      return res.status(400).json({ message: "Invalid inquiry status." });
+    }
+    const updated = await updateContactInquiryStatus(idOrCode, {
+      status: rawStatus as "NEW" | "IN_PROGRESS" | "RESOLVED" | "ARCHIVED" | undefined,
+      assignedAdminId:
+        req.body?.assignedAdminId === null
+          ? null
+          : Number.isFinite(Number(req.body?.assignedAdminId))
+          ? Number(req.body.assignedAdminId)
+          : undefined,
+    });
+    if (!updated) {
+      return res.status(404).json({ message: "Contact inquiry not found." });
+    }
+    return res.json({ message: "Contact inquiry updated", data: updated });
+  } catch (err) {
+    return res.status(500).json({ message: (err as Error).message });
+  }
+});
 
 // ============================================================================
 // FEEDBACK ROUTES
@@ -5655,18 +5913,15 @@ app.post("/api/site-visits/slots/toggle-block", requireAdminOrStaff, async (req:
   if (!date || !slotTime) {
     return res.status(400).json({ message: "date and slotTime are required." });
   }
-  const doc = await getCmsDoc<{ blockedKeys: string[] }>("site_visit_blocked_keys", {
-    blockedKeys: [],
+  const result = await toggleBlockedSiteVisitKey({
+    date: String(date),
+    slotTime: String(slotTime),
+    reason: typeof req.body?.reason === "string" ? req.body.reason : "",
+    blockedByUserId: req.user?.userId ?? null,
   });
-  const key = `${date}|${slotTime}`;
-  const blocked = doc.blockedKeys.includes(key);
-  const nextBlocked = blocked
-    ? doc.blockedKeys.filter((k) => k !== key)
-    : [...doc.blockedKeys, key];
-  await setCmsDoc("site_visit_blocked_keys", { blockedKeys: nextBlocked });
   return res.json({
-    message: blocked ? "Slot unblocked" : "Slot blocked",
-    blockedKeys: nextBlocked,
+    message: result.blocked ? "Slot blocked" : "Slot unblocked",
+    blockedKeys: result.blockedKeys,
   });
 });
 
@@ -5887,14 +6142,32 @@ app.delete("/api/home-featured-products/accessories/:id", requireAdminOrStaff, a
   return res.json({ message: "Accessory ribbon image removed.", data: next });
 });
 
-app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+app.use("/api", (_req: Request, res: Response) => {
+  return res.status(404).json({ message: "API endpoint not found." });
+});
+
+app.use((err: unknown, req: Request, res: Response, next: NextFunction) => {
+  if (res.headersSent) {
+    return next(err);
+  }
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ message: err.message });
   }
   if (err instanceof Error && err.message.startsWith("Unsupported or unsafe file type")) {
     return res.status(400).json({ message: err.message });
   }
-  return next(err);
+  const errObj = err as { type?: string; status?: number; statusCode?: number; message?: string };
+  if (errObj?.type === "entity.too.large" || errObj?.status === 413) {
+    return res.status(413).json({ message: "Request payload exceeds the maximum allowed size." });
+  }
+  if (err instanceof SyntaxError && (errObj?.status === 400 || errObj?.statusCode === 400)) {
+    return res.status(400).json({ message: "Malformed JSON request body." });
+  }
+  console.error("Unhandled server error:", err);
+  if (req.path.startsWith("/api")) {
+    return res.status(500).json({ message: "Internal server error." });
+  }
+  return res.status(500).send("Internal Server Error");
 });
 
 // ============================================================================
@@ -5966,6 +6239,12 @@ async function buildSeoHtml(rawHtml: string, req: Request): Promise<string> {
 async function startServer() {
   const httpServer = http.createServer(app);
   const disableHmr = process.env.DISABLE_HMR === "true";
+  let viteServer: { close: () => Promise<void> } | null = null;
+
+  httpServer.on("error", (err) => {
+    console.error("HTTP server error:", err);
+    process.exit(1);
+  });
 
   if (process.env.NODE_ENV === "production") {
     const distPath = path.resolve(rootDir, "dist");
@@ -5981,6 +6260,11 @@ async function startServer() {
       }
       try {
         const indexPath = path.resolve(distPath, "index.html");
+        if (!fs.existsSync(indexPath)) {
+          return res.status(503).json({
+            message: "Frontend production bundle not found. Run npm run build before starting in production.",
+          });
+        }
         const template = fs.readFileSync(indexPath, "utf-8");
         const html = await buildSeoHtml(template, req);
         res.status(200).set({ "Content-Type": "text/html" }).end(html);
@@ -5989,15 +6273,25 @@ async function startServer() {
       }
     });
   } else {
-    const { createServer: createViteServer } = await import("vite");
-    const vite = await createViteServer({
-      configFile: path.resolve(rootDir, "vite.config.ts"),
-      server: {
-        middlewareMode: true,
-        hmr: disableHmr ? false : { server: httpServer },
-      },
-      appType: "spa",
+    const viteReadyPromise = (async () => {
+      const { createServer: createViteServer } = await import("vite");
+      const vite = await createViteServer({
+        configFile: path.resolve(rootDir, "vite.config.ts"),
+        server: {
+          middlewareMode: true,
+          hmr: disableHmr ? false : { server: httpServer },
+        },
+        appType: "spa",
+      });
+      viteServer = vite;
+      return vite;
+    })();
+
+    viteReadyPromise.catch((err) => {
+      console.error("Failed to initialize Vite middleware:", err);
+      process.exit(1);
     });
+
     app.use(async (req: Request, res: Response, next: NextFunction) => {
       if (req.method !== "GET") return next();
       const accept = (req.headers.accept || "*/*").toLowerCase();
@@ -6015,6 +6309,7 @@ async function startServer() {
         return next();
       }
       try {
+        const vite = await viteReadyPromise;
         const indexPath = path.resolve(rootDir, "frontend", "index.html");
         const template = fs.readFileSync(indexPath, "utf-8");
         const transformed = await vite.transformIndexHtml(req.originalUrl, template);
@@ -6024,11 +6319,38 @@ async function startServer() {
         next(err);
       }
     });
-    app.use(vite.middlewares);
+
+    app.use(async (req: Request, res: Response, next: NextFunction) => {
+      if (req.path.startsWith("/api") || req.path.startsWith("/uploads")) {
+        return next();
+      }
+      try {
+        const vite = await viteReadyPromise;
+        return vite.middlewares(req, res, next);
+      } catch (err) {
+        return next(err);
+      }
+    });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server listening on http://0.0.0.0:${PORT}`);
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    Promise.allSettled([
+      viteServer ? viteServer.close() : Promise.resolve(),
+      global._postgresPool ? global._postgresPool.end() : Promise.resolve(),
+      new Promise<void>((resolve) => httpServer.close(() => resolve())),
+    ]).finally(() => {
+      process.exit(0);
+    });
+  };
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
+  process.once("SIGINT", () => shutdown("SIGINT"));
+
+  httpServer.listen(PORT, HOST, () => {
+    console.log(`Server listening on http://${HOST}:${PORT}`);
   });
 }
 

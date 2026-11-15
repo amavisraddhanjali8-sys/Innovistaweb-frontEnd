@@ -61,6 +61,11 @@ function getOrCreateUserInMemory(
     lastLoginAt: now,
     lastLoginIp: "",
     isActive: true,
+    authProvider: "firebase",
+    lastPasswordChangedAt: null,
+    suspendedAt: null,
+    suspensionReason: "",
+    notes: "",
     purchaseGoods: [],
     createdAt: now,
     updatedAt: now,
@@ -119,6 +124,7 @@ export async function getOrCreateUser(
         emailVerified: options.emailVerified ?? false,
         accountStatus: "ACTIVE",
         isActive: true,
+        authProvider: "firebase",
         purchaseGoods: [],
       })
       .onConflictDoUpdate({
@@ -126,6 +132,7 @@ export async function getOrCreateUser(
         set: {
           email: cleanEmail,
           name: defaultName,
+          authProvider: "firebase",
           updatedAt: new Date(),
         },
       })
@@ -266,6 +273,29 @@ export async function findUserByIdentifier(identifier: string) {
           u.uid.toLowerCase() === clean ||
           (numericId !== null && u.id === numericId)
       ) || null
+    );
+  }
+}
+
+export async function findUserByVerificationTokenHash(tokenHash: string) {
+  const cleanHash = String(tokenHash || "").trim();
+  if (!cleanHash) return null;
+  if (isMemoryFallbackActive()) {
+    return (
+      getMemoryStore().users.find((u) => u.emailVerificationTokenHash === cleanHash) || null
+    );
+  }
+  try {
+    const rows = await db
+      .select()
+      .from(users)
+      .where(eq(users.emailVerificationTokenHash, cleanHash))
+      .limit(1);
+    return rows[0] || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return (
+      getMemoryStore().users.find((u) => u.emailVerificationTokenHash === cleanHash) || null
     );
   }
 }

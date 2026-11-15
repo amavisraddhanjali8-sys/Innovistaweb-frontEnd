@@ -3,9 +3,9 @@ import { describe, it } from "node:test";
 import {
   DEFAULT_DESIGNS_CATALOG,
   DEFAULT_PRODUCT_CATEGORIES,
-} from "../../../shared/productCatalogHelpers";
-import { DEFAULT_HOME_SERVICES_CMS } from "../../../shared/homeServicesHelpers";
-import { buildSearchSubmitRoute, searchHomeCatalog } from "./homeSearchHelpers";
+} from "../../../shared/productCatalogHelpers.ts";
+import { DEFAULT_HOME_SERVICES_CMS } from "../../../shared/homeServicesHelpers.ts";
+import { buildSearchSubmitRoute, searchHomeCatalog } from "./homeSearchHelpers.ts";
 
 describe("homeSearchHelpers", () => {
   it("matches products and categories by name or architectural solution keyword", () => {

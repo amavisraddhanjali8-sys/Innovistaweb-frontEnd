@@ -10,7 +10,7 @@ import {
   parseVideoEmbedUrl,
   toggleHomeSlideActive,
   upsertHomeSlide,
-} from "./homeSlideshowHelpers";
+} from "./homeSlideshowHelpers.ts";
 
 test("inferMediaTypeFromUrl detects uploaded videos, mp4s, embeds, and images", () => {
   assert.equal(inferMediaTypeFromUrl("/uploads/clip-123.mp4"), "video");

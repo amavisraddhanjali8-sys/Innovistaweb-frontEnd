@@ -106,6 +106,11 @@ export interface MemoryUserRecord {
   lastLoginAt: Date | null;
   lastLoginIp: string | null;
   isActive: boolean;
+  authProvider?: string;
+  lastPasswordChangedAt?: Date | null;
+  suspendedAt?: Date | null;
+  suspensionReason?: string | null;
+  notes?: string | null;
   purchaseGoods: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -210,6 +215,10 @@ export interface MemoryOrderRecord {
   Client_Name: string;
   Client_Email: string;
   Client_Number: string;
+  Inquiry_Type?: string;
+  Subject?: string;
+  Notes?: string;
+  Source?: string;
   Customer: {
     Cus_CompanyName: string;
     Cus_Logo: string;
@@ -219,6 +228,10 @@ export interface MemoryOrderRecord {
     Design: {
       Design_Name: string;
       Design_Image: string;
+      Color?: string;
+      Size?: string;
+      Quantity?: number;
+      Notes?: string;
     };
   }>;
 }
@@ -235,7 +248,9 @@ export interface MemoryRfqAttachmentRecord {
 
 export interface MemoryRfqRecord {
   id: number;
+  rfqCode?: string | null;
   customerUserId: number | null;
+  assignedAdminId?: number | null;
   clientName: string;
   contactPerson: string;
   email: string;
@@ -260,6 +275,10 @@ export interface MemoryRfqRecord {
   proposedVisitDates: string | null;
   siteAddress: string | null;
   googleMapsLink: string | null;
+  estimatedQuoteAmount?: string | null;
+  currency?: string;
+  adminNotes?: string | null;
+  reviewedAt?: Date | null;
   status: string;
   createdAt: Date;
   attachments: MemoryRfqAttachmentRecord[];
@@ -270,8 +289,31 @@ export interface MemoryNotificationRecord {
   NotificationsID: string;
   Notifications_Title: string;
   Notifications_Body: string;
+  category?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  metadata?: Record<string, unknown>;
   Date_Timestamp: string;
   isRead: boolean;
+}
+
+export interface MemoryContactInquiryRecord {
+  id: number;
+  inquiryCode: string;
+  customerUserId: number | null;
+  assignedAdminId: number | null;
+  name: string;
+  email: string;
+  phone: string;
+  department: string;
+  intent: string;
+  subject: string;
+  message: string;
+  source: string;
+  status: "NEW" | "IN_PROGRESS" | "RESOLVED" | "ARCHIVED";
+  ipAddress: string;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 export interface MemoryStoreState {
@@ -285,6 +327,7 @@ export interface MemoryStoreState {
   nextFeedbackId: number;
   nextRfqId: number;
   nextRfqAttachmentId: number;
+  nextContactInquiryId: number;
   users: MemoryUserRecord[];
   userSessions: MemoryUserSessionRecord[];
   adminSecretConfig: MemoryAdminSecretConfigRecord | null;
@@ -304,6 +347,7 @@ export interface MemoryStoreState {
   chatbotFaqs: ChatbotFaqItem[];
   relatedPortals: RelatedPortalItem[];
   notifications: MemoryNotificationRecord[];
+  contactInquiries: MemoryContactInquiryRecord[];
   cmsDocs: Map<string, Record<string, unknown>>;
 }
 
@@ -324,6 +368,7 @@ function createInitialStore(): MemoryStoreState {
     nextFeedbackId: 1,
     nextRfqId: 1,
     nextRfqAttachmentId: 1,
+    nextContactInquiryId: 1,
     users: [
       {
         id: 1,
@@ -349,6 +394,11 @@ function createInitialStore(): MemoryStoreState {
         lastLoginAt: null,
         lastLoginIp: "",
         isActive: true,
+        authProvider: "local",
+        lastPasswordChangedAt: null,
+        suspendedAt: null,
+        suspensionReason: "",
+        notes: "",
         purchaseGoods: [],
         createdAt: now,
         updatedAt: now,
@@ -452,6 +502,7 @@ function createInitialStore(): MemoryStoreState {
     chatbotFaqs: DEFAULT_CHATBOT_FAQS.map((f) => ({ ...f })),
     relatedPortals: normalizeRelatedPortals(RELATED_PORTALS),
     notifications: [],
+    contactInquiries: [],
     cmsDocs: new Map<string, Record<string, unknown>>(),
   };
 

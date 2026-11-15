@@ -5,7 +5,7 @@ import {
   BUILDING_FLOOR_COUNT,
   computeBuildingConstructionFrame,
   computeVintagePhoneRingState,
-} from "./footerBuildingHelpers";
+} from "./footerBuildingHelpers.ts";
 
 test("corporate building construction progresses smoothly through core, slabs, and glazing", () => {
   const early = computeBuildingConstructionFrame(0.9, 0, 0);

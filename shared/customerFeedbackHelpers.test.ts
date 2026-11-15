@@ -10,7 +10,7 @@ import {
   resolveHomeFeedbackCards,
   sanitizeFeedbackImage,
   validateCustomerFeedbackForm,
-} from "./customerFeedbackHelpers";
+} from "./customerFeedbackHelpers.ts";
 
 describe("customerFeedbackHelpers", () => {
   it("normalizes feedback records with safe ratings, avatars, and showOnHome defaults", () => {

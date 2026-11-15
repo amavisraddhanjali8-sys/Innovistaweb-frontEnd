@@ -8,7 +8,7 @@ import {
   normalizeHomeServicesCms,
   toggleHomeServiceActive,
   upsertHomeService,
-} from "./homeServicesHelpers";
+} from "./homeServicesHelpers.ts";
 
 test("normalizeHomeServicesCms preserves defaults and clamps duration bounds", () => {
   assert.equal(DEFAULT_HOME_SERVICES_CMS.items.length, 12);

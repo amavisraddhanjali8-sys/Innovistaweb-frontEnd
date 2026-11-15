@@ -84,12 +84,24 @@ export const createPool = () => {
     return null;
   }
   if (!global._postgresPool) {
+    const port = parseInt(process.env.SQL_PORT || "5432", 10) || 5432;
+    const max = parseInt(process.env.SQL_POOL_MAX || "10", 10) || 10;
+    const rawSsl = (process.env.SQL_SSL || "").trim().toLowerCase();
+    const ssl =
+      rawSsl === "verify-full"
+        ? true
+        : rawSsl === "true" || rawSsl === "require" || rawSsl === "1"
+        ? { rejectUnauthorized: false }
+        : undefined;
+
     global._postgresPool = new Pool({
       host: process.env.SQL_HOST,
+      port,
       user: process.env.SQL_USER,
       password: process.env.SQL_PASSWORD,
       database: process.env.SQL_DB_NAME,
-      max: 10,
+      ...(ssl !== undefined ? { ssl } : {}),
+      max,
       connectionTimeoutMillis: 25000,
     });
 

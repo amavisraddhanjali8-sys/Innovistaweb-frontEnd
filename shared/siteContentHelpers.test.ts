@@ -17,7 +17,7 @@ import {
   normalizeRelatedPortals,
   sanitizePortalUrl,
   validateContactPageForm,
-} from "./siteContentHelpers";
+} from "./siteContentHelpers.ts";
 
 test("news articles filter cleanly by category and search keyword", () => {
   assert.equal(filterNewsArticles(NEWS_ARTICLES, "All", "").length, NEWS_ARTICLES.length);

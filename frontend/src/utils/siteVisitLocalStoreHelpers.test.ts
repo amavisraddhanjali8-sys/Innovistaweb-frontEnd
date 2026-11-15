@@ -11,8 +11,8 @@ import {
   parseSlotKey,
   serializeReservedSlots,
   siteVisitLocalReducer,
-} from "./siteVisitLocalStoreHelpers";
-import type { MonthlyCalendarCell, SlotAvailabilityItem } from "../../../shared/siteVisitSchedulerHelpers";
+} from "./siteVisitLocalStoreHelpers.ts";
+import type { MonthlyCalendarCell, SlotAvailabilityItem } from "../../../shared/siteVisitSchedulerHelpers.ts";
 
 const BASE_SLOTS: SlotAvailabilityItem[] = [
   { id: "slot-0930", time: "09:30", endTime: "10:30", label: "09:30 AM", available: true },

@@ -160,6 +160,8 @@ async function runSeed(): Promise<void> {
           slideshowSpeedMs: cat.slideshowSpeedMs,
           heroSlides: cat.heroSlides,
           specHighlights: cat.specHighlights,
+          heroTheme: cat.heroTheme as unknown as Record<string, unknown>,
+          isActive: true,
         })
         .onConflictDoNothing();
     }

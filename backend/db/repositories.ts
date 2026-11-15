@@ -6,6 +6,7 @@ import {
   createAppointmentRecordMem,
   createAuditLogMem,
   createCategoryRecordMem,
+  createContactInquiryRecordMem,
   createFeedbackRecordMem,
   createMediaAssetRecordMem,
   createNotificationRecordMem,
@@ -40,6 +41,7 @@ import {
   listBlogPostsMem,
   listCategoriesMem,
   listChatbotFaqsMem,
+  listContactInquiriesMem,
   listFeedbacksMem,
   listMediaAssetsMem,
   listNotificationsMem,
@@ -64,10 +66,12 @@ import {
   updateAppointmentSlotRecordMem,
   updateAppointmentStatusRecordMem,
   updateCategoryRecordMem,
+  updateContactInquiryStatusMem,
   updateFeedbackRecordMem,
   updateOrderStatusRecordMem,
   updateProductRecordMem,
   updateProjectRecordMem,
+  updateRfqRecordMem,
   updateUserAccountMem,
   upsertAdminSecretConfigMem,
   upsertAppointmentDateRecordMem,
@@ -87,6 +91,7 @@ import {
   categories,
   chatbotFaqs,
   cmsDocuments,
+  contactInquiries,
   customerFeedbacks,
   mediaAssets,
   notifications,
@@ -302,6 +307,8 @@ export async function createUserAccount(payload: {
   emailVerificationExpiresAt?: Date | null;
   totpSecretEncrypted?: string | null;
   totpEnabled?: boolean;
+  authProvider?: string;
+  notes?: string;
   purchaseGoods?: string[];
 }) {
   if (isMemoryFallbackActive()) return createUserAccountMem(payload);
@@ -329,6 +336,10 @@ export async function createUserAccount(payload: {
         totpSecretEncrypted: payload.totpSecretEncrypted ?? null,
         totpEnabled: payload.totpEnabled ?? false,
         isActive: (payload.accountStatus || "ACTIVE") !== "SUSPENDED",
+        authProvider: payload.authProvider || "local",
+        lastPasswordChangedAt: payload.passwordHash ? new Date() : null,
+        suspendedAt: (payload.accountStatus || "ACTIVE") === "SUSPENDED" ? new Date() : null,
+        notes: payload.notes || "",
         purchaseGoods: payload.purchaseGoods || [],
       })
       .returning();
@@ -363,6 +374,11 @@ export async function updateUserAccount(
     lastLoginAt: Date | null;
     lastLoginIp: string;
     isActive: boolean;
+    authProvider: string;
+    lastPasswordChangedAt: Date | null;
+    suspendedAt: Date | null;
+    suspensionReason: string;
+    notes: string;
     purchaseGoods: string[];
   }>
 ) {
@@ -380,7 +396,12 @@ export async function updateUserAccount(
         ...(patch.phone !== undefined ? { phone: patch.phone } : {}),
         ...(patch.company !== undefined ? { company: patch.company } : {}),
         ...(patch.role !== undefined ? { role: patch.role } : {}),
-        ...(patch.passwordHash !== undefined ? { passwordHash: patch.passwordHash } : {}),
+        ...(patch.passwordHash !== undefined
+          ? {
+              passwordHash: patch.passwordHash,
+              lastPasswordChangedAt: patch.lastPasswordChangedAt ?? new Date(),
+            }
+          : {}),
         ...(patch.avatarUrl !== undefined ? { avatarUrl: patch.avatarUrl } : {}),
         ...(patch.isVerified !== undefined ? { isVerified: patch.isVerified } : {}),
         ...(patch.emailVerified !== undefined ? { emailVerified: patch.emailVerified } : {}),
@@ -388,6 +409,8 @@ export async function updateUserAccount(
           ? {
               accountStatus: patch.accountStatus,
               isActive: patch.accountStatus !== "SUSPENDED",
+              suspendedAt:
+                patch.accountStatus === "SUSPENDED" ? (patch.suspendedAt ?? new Date()) : null,
             }
           : {}),
         ...(patch.emailVerificationTokenHash !== undefined
@@ -410,6 +433,15 @@ export async function updateUserAccount(
         ...(patch.lastLoginAt !== undefined ? { lastLoginAt: patch.lastLoginAt } : {}),
         ...(patch.lastLoginIp !== undefined ? { lastLoginIp: patch.lastLoginIp } : {}),
         ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
+        ...(patch.authProvider !== undefined ? { authProvider: patch.authProvider } : {}),
+        ...(patch.lastPasswordChangedAt !== undefined
+          ? { lastPasswordChangedAt: patch.lastPasswordChangedAt }
+          : {}),
+        ...(patch.suspendedAt !== undefined ? { suspendedAt: patch.suspendedAt } : {}),
+        ...(patch.suspensionReason !== undefined
+          ? { suspensionReason: patch.suspensionReason }
+          : {}),
+        ...(patch.notes !== undefined ? { notes: patch.notes } : {}),
         ...(patch.purchaseGoods !== undefined ? { purchaseGoods: patch.purchaseGoods } : {}),
         updatedAt: new Date(),
       })
@@ -451,6 +483,9 @@ function mapCategoryRow(row: typeof categories.$inferSelect): ProductCategory {
       slideshowSpeedMs: row.slideshowSpeedMs,
       heroSlides: row.heroSlides,
       specHighlights: row.specHighlights,
+      heroTheme: row.heroTheme
+        ? normalizeHeroTheme(row.heroTheme as Partial<HeroThemeConfig>, DEFAULT_HERO_THEME)
+        : undefined,
     },
     row.displayOrder
   );
@@ -495,8 +530,15 @@ async function saveCategoryThemeMap(
 
 function mergeCategoryTheme(
   cat: ProductCategory,
+  row: typeof categories.$inferSelect,
   themeMap: Record<string, HeroThemeConfig>
 ): ProductCategory {
+  if (row.heroTheme && typeof row.heroTheme === "object") {
+    return {
+      ...cat,
+      heroTheme: normalizeHeroTheme(row.heroTheme as Partial<HeroThemeConfig>, DEFAULT_HERO_THEME),
+    };
+  }
   const match = themeMap[cat.CategoryID] || themeMap[cat.slug];
   if (!match) return cat;
   return {
@@ -516,7 +558,7 @@ export async function listCategories(): Promise<ProductCategory[]> {
         .orderBy(asc(categories.displayOrder), asc(categories.id)),
       loadCategoryThemeMap(),
     ]);
-    return rows.map((row) => mergeCategoryTheme(mapCategoryRow(row), themeMap));
+    return rows.map((row) => mergeCategoryTheme(mapCategoryRow(row), row, themeMap));
   } catch (error) {
     markDatabaseOffline(error);
     return listCategoriesMem();
@@ -529,6 +571,7 @@ export async function createCategoryRecord(raw: Partial<ProductCategory>) {
     await ensureDatabaseSeeded();
     const existing = await db.select().from(categories);
     const normalized = normalizeProductCategory(raw, existing.length);
+    const theme = normalizeHeroTheme(raw.heroTheme, DEFAULT_HERO_THEME);
     const coverAssetId = await ensureMediaAssetIdForUrl(
       normalized.coverImage,
       normalized.name,
@@ -550,11 +593,11 @@ export async function createCategoryRecord(raw: Partial<ProductCategory>) {
         slideshowSpeedMs: normalized.slideshowSpeedMs,
         heroSlides: normalized.heroSlides,
         specHighlights: normalized.specHighlights,
+        heroTheme: theme as unknown as Record<string, unknown>,
       })
       .returning();
 
     const mapped = mapCategoryRow(inserted);
-    const theme = normalizeHeroTheme(raw.heroTheme, DEFAULT_HERO_THEME);
     const themeMap = await loadCategoryThemeMap();
     themeMap[mapped.CategoryID] = theme;
     themeMap[mapped.slug] = theme;
@@ -582,10 +625,14 @@ export async function updateCategoryRecord(keyOrId: string, raw: Partial<Product
     );
     if (!match) return null;
 
-    const current = mergeCategoryTheme(mapCategoryRow(match), themeMap);
+    const current = mergeCategoryTheme(mapCategoryRow(match), match, themeMap);
     const normalized = normalizeProductCategory(
       { ...current, ...raw, CategoryID: current.CategoryID },
       match.displayOrder
+    );
+    const theme = normalizeHeroTheme(
+      raw.heroTheme ?? current.heroTheme,
+      DEFAULT_HERO_THEME
     );
     const coverAssetId = await ensureMediaAssetIdForUrl(
       normalized.coverImage,
@@ -607,15 +654,12 @@ export async function updateCategoryRecord(keyOrId: string, raw: Partial<Product
         slideshowSpeedMs: normalized.slideshowSpeedMs,
         heroSlides: normalized.heroSlides,
         specHighlights: normalized.specHighlights,
+        heroTheme: theme as unknown as Record<string, unknown>,
         updatedAt: new Date(),
       })
       .where(eq(categories.id, match.id))
       .returning();
 
-    const theme = normalizeHeroTheme(
-      raw.heroTheme ?? current.heroTheme,
-      DEFAULT_HERO_THEME
-    );
     if (match.slug !== normalized.slug) {
       delete themeMap[match.slug];
     }
@@ -637,6 +681,12 @@ export async function applyHeroThemeToAllCategories(
   try {
     await ensureDatabaseSeeded();
     const theme = normalizeHeroTheme(rawTheme, DEFAULT_HERO_THEME);
+    await db
+      .update(categories)
+      .set({
+        heroTheme: theme as unknown as Record<string, unknown>,
+        updatedAt: new Date(),
+      });
     const rows = await db
       .select()
       .from(categories)
@@ -1110,7 +1160,7 @@ export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleC
     const monthlyTemplates: Record<string, MonthlySlotTemplate> = { ...legacyMonthlyTemplates };
     for (const tpl of templateRows) {
       monthlyTemplates[tpl.monthKey] = {
-        month: tpl.monthKey,
+        monthKey: tpl.monthKey,
         activeWeekdays: tpl.activeWeekdays,
         closedDates: tpl.closedDates,
         slots: tpl.slots,
@@ -1926,6 +1976,10 @@ export async function listOrders() {
       Client_Name: o.clientName,
       Client_Email: o.clientEmail,
       Client_Number: o.clientNumber || "",
+      Inquiry_Type: o.inquiryType || "Product Quote",
+      Subject: o.subject || "",
+      Notes: o.notes || "",
+      Source: o.source || "web",
       Customer: {
         Cus_CompanyName: o.customerCompany || "New Client",
         Cus_Logo: o.customerLogo || "/assets/logos/client-zenith.svg",
@@ -1937,6 +1991,10 @@ export async function listOrders() {
           Design: {
             Design_Name: it.designName,
             Design_Image: it.designImage || "/assets/products/door.jpg",
+            ...(it.selectedColor ? { Color: it.selectedColor } : {}),
+            ...(it.selectedSize ? { Size: it.selectedSize } : {}),
+            Quantity: it.quantity,
+            ...(it.notes ? { Notes: it.notes } : {}),
           },
         })),
     }));
@@ -1951,7 +2009,19 @@ export async function createOrderRecord(input: {
   Client_Name: string;
   Client_Email: string;
   Client_Number?: string;
-  Designs?: Array<{ DesignID?: string | number; Design_Name?: string; Design_Image?: string }>;
+  Inquiry_Type?: string;
+  Subject?: string;
+  Notes?: string;
+  Source?: string;
+  Designs?: Array<{
+    DesignID?: string | number;
+    Design_Name?: string;
+    Design_Image?: string;
+    Color?: string;
+    Size?: string;
+    Quantity?: number;
+    Notes?: string;
+  }>;
 }) {
   if (isMemoryFallbackActive()) return createOrderRecordMem(input);
   try {
@@ -1975,6 +2045,10 @@ export async function createOrderRecord(input: {
         customerCompany: matchedCustomer[0]?.company || "New Client",
         customerLogo: matchedCustomer[0]?.avatarUrl || "/assets/logos/client-zenith.svg",
         purchaseGoods: matchedCustomer[0]?.purchaseGoods || ["Custom Inquiry"],
+        inquiryType: input.Inquiry_Type || "Product Quote",
+        subject: input.Subject || "",
+        notes: input.Notes || "",
+        source: input.Source || "web",
       })
       .returning();
 
@@ -1995,12 +2069,31 @@ export async function createOrderRecord(input: {
         if (imgs[0]?.imageUrl) firstImage = imgs[0].imageUrl;
       }
 
+      const qty =
+        Number.isFinite(Number(entry.Quantity)) && Number(entry.Quantity) > 0
+          ? Math.floor(Number(entry.Quantity))
+          : 1;
+      const numericUnit =
+        productRow?.price !== null && productRow?.price !== undefined
+          ? Number(productRow.price)
+          : null;
+      const subtotal =
+        numericUnit !== null && Number.isFinite(numericUnit)
+          ? String(numericUnit * qty)
+          : null;
+
       await db.insert(orderItems).values({
         orderId: insertedOrder.id,
         productId: productRow?.id ?? null,
         designName: productRow?.name || entry.Design_Name || "Custom Architectural Design",
         designImage: firstImage,
-        quantity: 1,
+        productSlug: productRow?.slug || "",
+        selectedColor: entry.Color || "",
+        selectedSize: entry.Size || "",
+        quantity: qty,
+        unitPrice: numericUnit !== null && Number.isFinite(numericUnit) ? String(numericUnit) : null,
+        subtotal,
+        notes: entry.Notes || "",
       });
     }
 
@@ -2008,6 +2101,9 @@ export async function createOrderRecord(input: {
       notifKey: `notif-${Date.now()}`,
       title: "New Order / Quote Request",
       body: `${input.Client_Name} submitted inquiry ${orderCode}.`,
+      category: "ORDER",
+      relatedEntityType: "order",
+      relatedEntityId: orderCode,
       userId: matchedCustomer[0]?.id ?? null,
       isRead: false,
     });
@@ -2107,6 +2203,10 @@ export async function createRfqRecord(
       notifKey: `notif-rfq-${inserted.id}-${Date.now()}`,
       title: "New Detailed RFQ Submitted",
       body: `${inserted.clientName} requested quotation for "${inserted.projectTitle}".`,
+      category: "RFQ",
+      relatedEntityType: "rfq",
+      relatedEntityId: String(inserted.id),
+      userId: resolvedCustomerUserId,
       isRead: false,
     });
 
@@ -2132,6 +2232,54 @@ export async function listRfqRecords() {
   } catch (error) {
     markDatabaseOffline(error);
     return listRfqRecordsMem();
+  }
+}
+
+export async function updateRfqRecord(
+  id: number,
+  patch: {
+    status?: string;
+    adminNotes?: string;
+    estimatedQuoteAmount?: string | number | null;
+    currency?: string;
+    assignedAdminId?: number | null;
+  }
+) {
+  if (isMemoryFallbackActive()) return updateRfqRecordMem(id, patch);
+  try {
+    await ensureDatabaseSeeded();
+    const [updated] = await db
+      .update(rfqRequests)
+      .set({
+        ...(patch.status !== undefined
+          ? { status: patch.status, reviewedAt: new Date() }
+          : {}),
+        ...(patch.adminNotes !== undefined ? { adminNotes: patch.adminNotes } : {}),
+        ...(patch.estimatedQuoteAmount !== undefined
+          ? {
+              estimatedQuoteAmount:
+                patch.estimatedQuoteAmount === null
+                  ? null
+                  : String(patch.estimatedQuoteAmount),
+            }
+          : {}),
+        ...(patch.currency !== undefined ? { currency: patch.currency } : {}),
+        ...(patch.assignedAdminId !== undefined
+          ? { assignedAdminId: patch.assignedAdminId }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(eq(rfqRequests.id, id))
+      .returning();
+    if (!updated) return null;
+    const atts = await db
+      .select()
+      .from(rfqAttachments)
+      .where(eq(rfqAttachments.rfqId, updated.id));
+    return { ...updated, attachments: atts };
+  } catch (error) {
+    markDatabaseOffline(error);
+    return updateRfqRecordMem(id, patch);
   }
 }
 
@@ -2430,6 +2578,10 @@ export async function listNotifications() {
       NotificationsID: n.notifKey,
       Notifications_Title: n.title,
       Notifications_Body: n.body,
+      category: n.category,
+      relatedEntityType: n.relatedEntityType || "",
+      relatedEntityId: n.relatedEntityId || "",
+      metadata: n.metadata,
       Date_Timestamp: n.createdAt.toISOString(),
       isRead: n.isRead,
     }));
@@ -2461,6 +2613,10 @@ export async function markNotificationRead(notifKey?: string) {
 export async function createNotificationRecord(input: {
   title: string;
   body: string;
+  category?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+  metadata?: Record<string, unknown>;
   userId?: number | null;
   notifKey?: string;
 }) {
@@ -2477,6 +2633,10 @@ export async function createNotificationRecord(input: {
         notifKey,
         title: input.title,
         body: input.body,
+        category: input.category || "GENERAL",
+        relatedEntityType: input.relatedEntityType || "",
+        relatedEntityId: input.relatedEntityId || "",
+        metadata: input.metadata || {},
         userId: input.userId ?? null,
         isRead: false,
       })
@@ -2486,6 +2646,10 @@ export async function createNotificationRecord(input: {
       NotificationsID: inserted.notifKey,
       Notifications_Title: inserted.title,
       Notifications_Body: inserted.body,
+      category: inserted.category,
+      relatedEntityType: inserted.relatedEntityType || "",
+      relatedEntityId: inserted.relatedEntityId || "",
+      metadata: inserted.metadata,
       Date_Timestamp: inserted.createdAt.toISOString(),
       isRead: inserted.isRead,
     };
@@ -2890,6 +3054,107 @@ export async function upsertAdminSecretConfig(input: {
   } catch (error) {
     markDatabaseOffline(error);
     return upsertAdminSecretConfigMem(input);
+  }
+}
+
+// ============================================================================
+// CONTACT INQUIRIES REPOSITORY
+// ============================================================================
+export async function listContactInquiries() {
+  if (isMemoryFallbackActive()) return listContactInquiriesMem();
+  try {
+    await ensureDatabaseSeeded();
+    return await db
+      .select()
+      .from(contactInquiries)
+      .orderBy(desc(contactInquiries.createdAt), desc(contactInquiries.id));
+  } catch (error) {
+    markDatabaseOffline(error);
+    return listContactInquiriesMem();
+  }
+}
+
+export async function createContactInquiryRecord(input: {
+  customerUserId?: number | null;
+  name: string;
+  email: string;
+  phone?: string;
+  department?: string;
+  intent?: string;
+  subject?: string;
+  message?: string;
+  source?: string;
+  ipAddress?: string;
+}) {
+  if (isMemoryFallbackActive()) return createContactInquiryRecordMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const cleanEmail = input.email.trim().toLowerCase();
+    let resolvedUserId: number | null = input.customerUserId ?? null;
+    if (resolvedUserId === null && cleanEmail) {
+      const matched = await db
+        .select({ id: users.id })
+        .from(users)
+        .where(eq(users.email, cleanEmail))
+        .limit(1);
+      resolvedUserId = matched[0]?.id ?? null;
+    }
+    const inquiryCode = `INQ-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+    const [inserted] = await db
+      .insert(contactInquiries)
+      .values({
+        inquiryCode,
+        customerUserId: resolvedUserId,
+        name: input.name.trim(),
+        email: cleanEmail,
+        phone: (input.phone || "").trim(),
+        department: (input.department || "General Consultation").trim(),
+        intent: (input.intent || "General Consultation").trim(),
+        subject: (input.subject || "").trim(),
+        message: (input.message || "").trim(),
+        source: (input.source || "web").trim(),
+        status: "NEW",
+        ipAddress: input.ipAddress || "",
+      })
+      .returning();
+    return inserted;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return createContactInquiryRecordMem(input);
+  }
+}
+
+export async function updateContactInquiryStatus(
+  idOrCode: string | number,
+  patch: {
+    status?: "NEW" | "IN_PROGRESS" | "RESOLVED" | "ARCHIVED";
+    assignedAdminId?: number | null;
+  }
+) {
+  if (isMemoryFallbackActive()) return updateContactInquiryStatusMem(idOrCode, patch);
+  try {
+    await ensureDatabaseSeeded();
+    const raw = String(idOrCode).trim();
+    const numericId = /^\d+$/.test(raw) ? Number(raw) : null;
+    const [updated] = await db
+      .update(contactInquiries)
+      .set({
+        ...(patch.status ? { status: patch.status } : {}),
+        ...(patch.assignedAdminId !== undefined
+          ? { assignedAdminId: patch.assignedAdminId }
+          : {}),
+        updatedAt: new Date(),
+      })
+      .where(
+        numericId !== null
+          ? eq(contactInquiries.id, numericId)
+          : eq(contactInquiries.inquiryCode, raw)
+      )
+      .returning();
+    return updated || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return updateContactInquiryStatusMem(idOrCode, patch);
   }
 }
 

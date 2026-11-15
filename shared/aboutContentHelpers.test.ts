@@ -33,7 +33,7 @@ import {
   normalizeHeroSlides,
   sanitizeAboutImage,
   type AboutCmsPayload,
-} from "./aboutContentHelpers";
+} from "./aboutContentHelpers.ts";
 
 const BASE_DEFAULTS: AboutCmsPayload = {
   slideshowSpeedMs: DEFAULT_SLIDESHOW_SPEED_MS,

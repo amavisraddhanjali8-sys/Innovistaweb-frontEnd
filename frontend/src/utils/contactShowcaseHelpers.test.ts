@@ -9,8 +9,8 @@ import {
   getContactIntentMeta,
   getNextPose,
   splitFullName,
-} from "./contactShowcaseHelpers";
-import { DEFAULT_SITE_CONTACT_SETTINGS } from "../../../shared/footerConsultationHelpers";
+} from "./contactShowcaseHelpers.ts";
+import { DEFAULT_SITE_CONTACT_SETTINGS } from "../../../shared/footerConsultationHelpers.ts";
 
 test("getNextPose cycles through handshake -> call -> quote -> handshake", () => {
   assert.equal(getNextPose("handshake"), "call");
