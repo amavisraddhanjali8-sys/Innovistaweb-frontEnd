@@ -8,12 +8,14 @@ import {
   createCategoryRecordMem,
   createFeedbackRecordMem,
   createMediaAssetRecordMem,
+  createNotificationRecordMem,
   createOrderRecordMem,
   createProductRecordMem,
   createProjectRecordMem,
   createRfqRecordMem,
   createSecurityChallengeMem,
   createUserAccountMem,
+  createUserSessionMem,
   deleteAppointmentDateRecordMem,
   deleteAppointmentSlotRecordMem,
   deleteBlogPostRecordMem,
@@ -26,10 +28,12 @@ import {
   deleteProjectRecordMem,
   deleteUserAccountMem,
   ensureMediaAssetIdForUrlMem,
+  getAdminSecretConfigMem,
   getAppointmentScheduleConfigMem,
   getCmsDocMem,
   getProductByAnyIdMem,
   getSecurityChallengeMem,
+  getUserSessionByTokenHashMem,
   incrementChallengeAttemptsMem,
   listAppointmentsMem,
   listAuditLogsMem,
@@ -51,7 +55,11 @@ import {
   reorderFeedbackRecordsMem,
   replaceRelatedPortalsMem,
   resetSeedDataCheckMem,
+  revokeAllUserSessionsForUserMem,
+  revokeUserSessionByTokenHashMem,
   setCmsDocMem,
+  toggleBlockedSiteVisitKeyMem,
+  touchUserSessionMem,
   updateAppointmentMetadataRecordMem,
   updateAppointmentSlotRecordMem,
   updateAppointmentStatusRecordMem,
@@ -61,14 +69,18 @@ import {
   updateProductRecordMem,
   updateProjectRecordMem,
   updateUserAccountMem,
+  upsertAdminSecretConfigMem,
   upsertAppointmentDateRecordMem,
   upsertBlogPostRecordMem,
   upsertChatbotFaqRecordMem,
   upsertMonthlyTemplateRecordMem,
 } from "./memoryRepositories.ts";
 import {
+  adminSecretConfigs,
   appointmentDates,
+  appointmentMonthlyTemplates,
   appointments,
+  appointmentSlotBlocks,
   appointmentSlots,
   auditLogs,
   blogPosts,
@@ -90,6 +102,7 @@ import {
   rfqRequests,
   securityChallenges,
   users,
+  userSessions,
 } from "./schema.ts";
 import { ensureDatabaseSeeded } from "./seed.ts";
 import {
@@ -1052,9 +1065,11 @@ export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleC
   if (isMemoryFallbackActive()) return getAppointmentScheduleConfigMem();
   try {
     await ensureDatabaseSeeded();
-    const [slotRows, dateRows, blockedDoc, monthlyDoc] = await Promise.all([
+    const [slotRows, dateRows, blockRows, templateRows, blockedDoc, monthlyDoc] = await Promise.all([
       db.select().from(appointmentSlots).orderBy(asc(appointmentSlots.sortOrder), asc(appointmentSlots.slotTime)),
       db.select().from(appointmentDates).orderBy(asc(appointmentDates.visitDate)),
+      db.select().from(appointmentSlotBlocks),
+      db.select().from(appointmentMonthlyTemplates),
       db.select().from(cmsDocuments).where(eq(cmsDocuments.key, "site_visit_blocked_keys")).limit(1),
       db.select().from(cmsDocuments).where(eq(cmsDocuments.key, "site_visit_monthly_templates")).limit(1),
     ]);
@@ -1080,16 +1095,28 @@ export async function getAppointmentScheduleConfig(): Promise<SiteVisitScheduleC
       };
     }
 
-    const blockedKeys = Array.isArray(blockedDoc[0]?.payload?.blockedKeys)
+    const legacyBlockedKeys = Array.isArray(blockedDoc[0]?.payload?.blockedKeys)
       ? (blockedDoc[0].payload.blockedKeys as string[])
       : [];
+    const tableBlockedKeys = blockRows.map((b) => b.blockKey);
+    const blockedKeys = Array.from(new Set([...tableBlockedKeys, ...legacyBlockedKeys]));
 
-    const monthlyTemplates =
+    const legacyMonthlyTemplates =
       monthlyDoc[0]?.payload &&
       typeof monthlyDoc[0].payload === "object" &&
       "monthlyTemplates" in monthlyDoc[0].payload
         ? (monthlyDoc[0].payload.monthlyTemplates as Record<string, MonthlySlotTemplate>)
         : {};
+    const monthlyTemplates: Record<string, MonthlySlotTemplate> = { ...legacyMonthlyTemplates };
+    for (const tpl of templateRows) {
+      monthlyTemplates[tpl.monthKey] = {
+        month: tpl.monthKey,
+        activeWeekdays: tpl.activeWeekdays,
+        closedDates: tpl.closedDates,
+        slots: tpl.slots,
+        note: tpl.note || undefined,
+      };
+    }
 
     return normalizeSiteVisitScheduleConfig({
       defaultSlots,
@@ -1485,6 +1512,7 @@ export async function upsertMonthlyTemplateRecord(input: {
   closedDates?: string[];
   note?: string;
   clearPerDateCustomSlots?: boolean;
+  updatedByUserId?: number | null;
 }): Promise<SiteVisitScheduleConfig> {
   if (isMemoryFallbackActive()) return upsertMonthlyTemplateRecordMem(input);
   try {
@@ -1505,6 +1533,32 @@ export async function upsertMonthlyTemplateRecord(input: {
       }
     }
 
+    const tpl = updated.monthlyTemplates?.[input.monthKey];
+    if (tpl) {
+      await db
+        .insert(appointmentMonthlyTemplates)
+        .values({
+          monthKey: input.monthKey,
+          activeWeekdays: tpl.activeWeekdays || [1, 2, 3, 4, 5, 6],
+          closedDates: tpl.closedDates || [],
+          slots: tpl.slots || [],
+          note: tpl.note || "",
+          updatedByUserId: input.updatedByUserId ?? null,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: appointmentMonthlyTemplates.monthKey,
+          set: {
+            activeWeekdays: tpl.activeWeekdays || [1, 2, 3, 4, 5, 6],
+            closedDates: tpl.closedDates || [],
+            slots: tpl.slots || [],
+            note: tpl.note || "",
+            updatedByUserId: input.updatedByUserId ?? null,
+            updatedAt: new Date(),
+          },
+        });
+    }
+
     await setCmsDoc("site_visit_monthly_templates", {
       monthlyTemplates: updated.monthlyTemplates || {},
     });
@@ -1523,6 +1577,9 @@ export async function deleteMonthlyTemplateRecord(
     await ensureDatabaseSeeded();
     const current = await getAppointmentScheduleConfig();
     const updated = deleteMonthlyTemplateFromSchedule(current, monthKey);
+    await db
+      .delete(appointmentMonthlyTemplates)
+      .where(eq(appointmentMonthlyTemplates.monthKey, monthKey));
     await setCmsDoc("site_visit_monthly_templates", {
       monthlyTemplates: updated.monthlyTemplates || {},
     });
@@ -1530,6 +1587,50 @@ export async function deleteMonthlyTemplateRecord(
   } catch (error) {
     markDatabaseOffline(error);
     return deleteMonthlyTemplateRecordMem(monthKey);
+  }
+}
+
+export async function toggleBlockedSiteVisitKey(input: {
+  date: string;
+  slotTime: string;
+  reason?: string;
+  blockedByUserId?: number | null;
+}): Promise<{ blocked: boolean; blockedKeys: string[] }> {
+  if (isMemoryFallbackActive()) return toggleBlockedSiteVisitKeyMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const key = `${input.date}|${input.slotTime}`;
+    const existing = await db
+      .select()
+      .from(appointmentSlotBlocks)
+      .where(eq(appointmentSlotBlocks.blockKey, key))
+      .limit(1);
+
+    let blocked = false;
+    if (existing[0]) {
+      await db.delete(appointmentSlotBlocks).where(eq(appointmentSlotBlocks.blockKey, key));
+      blocked = false;
+    } else {
+      await db
+        .insert(appointmentSlotBlocks)
+        .values({
+          blockKey: key,
+          visitDate: input.date,
+          slotTime: input.slotTime,
+          reason: input.reason || "",
+          blockedByUserId: input.blockedByUserId ?? null,
+        })
+        .onConflictDoNothing();
+      blocked = true;
+    }
+
+    const allBlocks = await db.select().from(appointmentSlotBlocks);
+    const blockedKeys = allBlocks.map((b) => b.blockKey);
+    await setCmsDoc("site_visit_blocked_keys", { blockedKeys });
+    return { blocked, blockedKeys };
+  } catch (error) {
+    markDatabaseOffline(error);
+    return toggleBlockedSiteVisitKeyMem(input);
   }
 }
 
@@ -1925,7 +2026,7 @@ export async function updateOrderStatusRecord(orderCode: string, status: string)
     await ensureDatabaseSeeded();
     const [updated] = await db
       .update(orders)
-      .set({ orderStatus: status })
+      .set({ orderStatus: status, updatedAt: new Date() })
       .where(eq(orders.orderCode, orderCode))
       .returning();
     if (!updated) return null;
@@ -1956,10 +2057,14 @@ export async function createRfqRecord(
       resolvedCustomerUserId = matchedCustomer[0]?.id ?? null;
     }
 
+    const rfqCode = `RFQ-${Date.now().toString(36).toUpperCase()}-${Math.floor(100 + Math.random() * 900)}`;
+    const refStr = input.projectReferenceNumber || "";
     const [inserted] = await db
       .insert(rfqRequests)
       .values({
+        rfqCode,
         customerUserId: resolvedCustomerUserId,
+        sourceSessionId: refStr.startsWith("sess-") ? refStr : "",
         clientName: input.clientName || "",
         contactPerson: input.contactPerson || "",
         email: input.email || "",
@@ -1968,7 +2073,7 @@ export async function createRfqRecord(
         projectTitle: input.projectTitle || "",
         location: input.location || "",
         projectType: input.projectType || "Other",
-        projectReferenceNumber: input.projectReferenceNumber || "",
+        projectReferenceNumber: refStr,
         projectDescription: input.projectDescription || "",
         installationConditions: input.installationConditions || "",
         siteConstraints: input.siteConstraints || "",
@@ -2353,6 +2458,43 @@ export async function markNotificationRead(notifKey?: string) {
   }
 }
 
+export async function createNotificationRecord(input: {
+  title: string;
+  body: string;
+  userId?: number | null;
+  notifKey?: string;
+}) {
+  const notifKey =
+    input.notifKey || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  if (isMemoryFallbackActive()) {
+    return createNotificationRecordMem({ ...input, notifKey });
+  }
+  try {
+    await ensureDatabaseSeeded();
+    const [inserted] = await db
+      .insert(notifications)
+      .values({
+        notifKey,
+        title: input.title,
+        body: input.body,
+        userId: input.userId ?? null,
+        isRead: false,
+      })
+      .returning();
+    return {
+      id: inserted.notifKey,
+      NotificationsID: inserted.notifKey,
+      Notifications_Title: inserted.title,
+      Notifications_Body: inserted.body,
+      Date_Timestamp: inserted.createdAt.toISOString(),
+      isRead: inserted.isRead,
+    };
+  } catch (error) {
+    markDatabaseOffline(error);
+    return createNotificationRecordMem({ ...input, notifKey });
+  }
+}
+
 export async function getCmsDoc<T>(key: string, fallback: T): Promise<T> {
   if (isMemoryFallbackActive()) return getCmsDocMem(key, fallback);
   try {
@@ -2595,3 +2737,159 @@ export async function listAuditLogs(filters?: {
     return listAuditLogsMem(filters);
   }
 }
+
+// ============================================================================
+// USER SESSIONS REPOSITORY (Tracked Refresh Tokens & Revocation)
+// ============================================================================
+export async function createUserSession(input: {
+  sessionKey: string;
+  userId: number;
+  tokenHash: string;
+  mfaVerified?: boolean;
+  ipAddress?: string;
+  userAgent?: string;
+  expiresAt: Date;
+}) {
+  if (isMemoryFallbackActive()) return createUserSessionMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const [created] = await db
+      .insert(userSessions)
+      .values({
+        sessionKey: input.sessionKey,
+        userId: input.userId,
+        tokenHash: input.tokenHash,
+        mfaVerified: Boolean(input.mfaVerified),
+        ipAddress: input.ipAddress || "",
+        userAgent: input.userAgent || "",
+        expiresAt: input.expiresAt,
+      })
+      .returning();
+    return created;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return createUserSessionMem(input);
+  }
+}
+
+export async function getUserSessionByTokenHash(tokenHash: string) {
+  if (!tokenHash) return null;
+  if (isMemoryFallbackActive()) return getUserSessionByTokenHashMem(tokenHash);
+  try {
+    const rows = await db
+      .select()
+      .from(userSessions)
+      .where(eq(userSessions.tokenHash, tokenHash))
+      .limit(1);
+    return rows[0] || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return getUserSessionByTokenHashMem(tokenHash);
+  }
+}
+
+export async function touchUserSession(sessionKey: string) {
+  if (isMemoryFallbackActive()) return touchUserSessionMem(sessionKey);
+  try {
+    const [updated] = await db
+      .update(userSessions)
+      .set({ lastUsedAt: new Date() })
+      .where(eq(userSessions.sessionKey, sessionKey))
+      .returning();
+    return updated || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return touchUserSessionMem(sessionKey);
+  }
+}
+
+export async function revokeUserSessionByTokenHash(tokenHash: string) {
+  if (!tokenHash) return false;
+  if (isMemoryFallbackActive()) return revokeUserSessionByTokenHashMem(tokenHash);
+  try {
+    const updated = await db
+      .update(userSessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(userSessions.tokenHash, tokenHash))
+      .returning();
+    return updated.length > 0;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return revokeUserSessionByTokenHashMem(tokenHash);
+  }
+}
+
+export async function revokeAllUserSessionsForUser(userId: number) {
+  if (isMemoryFallbackActive()) return revokeAllUserSessionsForUserMem(userId);
+  try {
+    const updated = await db
+      .update(userSessions)
+      .set({ revokedAt: new Date() })
+      .where(eq(userSessions.userId, userId))
+      .returning();
+    return updated.length;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return revokeAllUserSessionsForUserMem(userId);
+  }
+}
+
+// ============================================================================
+// ADMIN SECRET CONFIGS REPOSITORY (Isolated from CMS Documents)
+// ============================================================================
+export async function getAdminSecretConfig() {
+  if (isMemoryFallbackActive()) return getAdminSecretConfigMem();
+  try {
+    await ensureDatabaseSeeded();
+    const rows = await db
+      .select()
+      .from(adminSecretConfigs)
+      .where(eq(adminSecretConfigs.configKey, "primary"))
+      .limit(1);
+    return rows[0] || null;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return getAdminSecretConfigMem();
+  }
+}
+
+export async function upsertAdminSecretConfig(input: {
+  encryptedKey: string;
+  keyHash: string;
+  rotationCount: number;
+  updatedByUserId?: number | null;
+  updatedByEmail: string;
+}) {
+  if (isMemoryFallbackActive()) return upsertAdminSecretConfigMem(input);
+  try {
+    await ensureDatabaseSeeded();
+    const [saved] = await db
+      .insert(adminSecretConfigs)
+      .values({
+        configKey: "primary",
+        encryptedKey: input.encryptedKey,
+        keyHash: input.keyHash,
+        rotationCount: input.rotationCount,
+        updatedByUserId: input.updatedByUserId ?? null,
+        updatedByEmail: input.updatedByEmail,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: adminSecretConfigs.configKey,
+        set: {
+          encryptedKey: input.encryptedKey,
+          keyHash: input.keyHash,
+          rotationCount: input.rotationCount,
+          updatedByUserId: input.updatedByUserId ?? null,
+          updatedByEmail: input.updatedByEmail,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return saved;
+  } catch (error) {
+    markDatabaseOffline(error);
+    return upsertAdminSecretConfigMem(input);
+  }
+}
+

@@ -12,6 +12,7 @@ import {
   FiUpload,
 } from "react-icons/fi";
 import { clampRibbonSpeed, clampSlideshowSpeedMs } from "../../../shared/aboutContentHelpers";
+import AxiosConfig from "../Context/AxiosConfig";
 import {
   ACCESSORY_BRAND_LOGO_PRESETS,
   DEFAULT_ACCESSORIES_RIBBON_SPEED,
@@ -76,11 +77,8 @@ async function uploadAdminImageFile(file: File): Promise<string | null> {
   formData.append("file", file);
 
   try {
-    const res = await fetch("/api/upload", {
-      method: "POST",
-      body: formData,
-    });
-    const result = await res.json();
+    const res = await AxiosConfig.post<{ secure_url?: string; url?: string }>("/api/upload", formData);
+    const result = res.data;
     const url = result?.secure_url || result?.url;
     if (typeof url === "string" && url.trim()) {
       return url.trim();

@@ -1,7 +1,16 @@
-import { Suspense, lazy, useEffect, useMemo, useRef, useState, type FormEvent, type TouchEvent as ReactTouchEvent } from "react";
+import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type TouchEvent as ReactTouchEvent } from "react";
 import { Link } from "react-router-dom";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { FiChevronLeft, FiChevronRight, FiSend, FiSmartphone, FiX } from "react-icons/fi";
+import {
+  FiChevronLeft,
+  FiChevronRight,
+  FiHeadphones,
+  FiPaperclip,
+  FiSend,
+  FiSmartphone,
+  FiStar,
+  FiX,
+} from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
 import AxiosConfig from "../Context/AxiosConfig";
 import { useAuth } from "../Context/AuthContext";
@@ -14,7 +23,10 @@ import {
   buildSmsHref,
   buildWhatsAppChatUrl,
   formatChatTimestamp,
-  type ChatbotConfig,
+  type ChatAttachmentItem,
+  type LeadDataFields,
+  type PublicChatbotConfig,
+  type SupportedLanguage,
 } from "../../../shared/chatbotHelpers";
 import {
   computeNextOpenSlot,
@@ -42,13 +54,64 @@ const Chatbot3DReceptionistAvatar = lazy(
 
 interface ChatMessageItem {
   id: string;
-  role: "assistant" | "user";
+  role: "assistant" | "user" | "admin" | "system";
+  senderName?: string;
   text: string;
   timestamp: string;
   intent?: string;
+  source?: string;
+  quickReplies?: string[];
+  followUpSuggestions?: string[];
+  attachments?: ChatAttachmentItem[];
   whatsappUrl?: string;
   smsUrl?: string;
+  suggestSiteVisit?: boolean;
+  suggestQuote?: boolean;
+  suggestHandover?: boolean;
 }
+
+interface StoredSessionState {
+  sessionId: string;
+  sessionToken: string;
+  language: SupportedLanguage;
+}
+
+const SESSION_STORAGE_KEY = "innoassist_session";
+
+function loadStoredSession(): StoredSessionState | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredSessionState>;
+    if (parsed.sessionId && parsed.sessionToken) {
+      return {
+        sessionId: parsed.sessionId,
+        sessionToken: parsed.sessionToken,
+        language:
+          parsed.language === "si" || parsed.language === "ta" || parsed.language === "en"
+            ? parsed.language
+            : "en",
+      };
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return null;
+}
+
+function saveStoredSession(state: StoredSessionState): void {
+  try {
+    sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+const LANGUAGE_LABELS: Record<SupportedLanguage, string> = {
+  en: "EN",
+  si: "සිං",
+  ta: "தமிழ்",
+};
 
 const CHATBOT_VISIT_WIDGET_ID = "floating-chatbot-visit";
 
@@ -67,13 +130,29 @@ export default function FloatingChatbotWidget() {
   const [tab, setTab] = useState<"chat" | "visit">("chat");
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestDraft, setRequestDraft] = useState("");
-  const [config, setConfig] = useState<ChatbotConfig>(DEFAULT_CHATBOT_CONFIG);
+  const initialSession = useMemo(() => loadStoredSession(), []);
+  const [config, setConfig] = useState<PublicChatbotConfig>(DEFAULT_CHATBOT_CONFIG);
+  const [language, setLanguage] = useState<SupportedLanguage>(initialSession?.language || "en");
+  const [sessionId, setSessionId] = useState<string>(initialSession?.sessionId || "");
+  const [sessionToken, setSessionToken] = useState<string>(initialSession?.sessionToken || "");
+  const [supportMode, setSupportMode] = useState<"ai" | "waiting_human" | "human" | "resolved">("ai");
+  const [assignedAdminName, setAssignedAdminName] = useState<string>("");
+  const [collectedLead, setCollectedLead] = useState<LeadDataFields>({});
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachmentItem[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [submittedRating, setSubmittedRating] = useState<number | null>(null);
+  const [submittingRating, setSubmittingRating] = useState(false);
+
   const [messages, setMessages] = useState<ChatMessageItem[]>(() => [
     {
       id: "welcome-1",
       role: "assistant",
-      text: DEFAULT_CHATBOT_CONFIG.welcomeMessage,
+      text:
+        DEFAULT_CHATBOT_CONFIG.localizedWelcome[initialSession?.language || "en"] ||
+        DEFAULT_CHATBOT_CONFIG.welcomeMessage,
       timestamp: formatChatTimestamp(new Date()),
+      quickReplies: DEFAULT_CHATBOT_CONFIG.quickPrompts,
     },
   ]);
   const [inputValue, setInputValue] = useState("");
@@ -127,13 +206,20 @@ export default function FloatingChatbotWidget() {
 
   useEffect(() => {
     let active = true;
-    AxiosConfig.get<{ config?: ChatbotConfig }>("/api/chatbot/config")
+    AxiosConfig.get<{ config?: PublicChatbotConfig }>("/api/chatbot/config")
       .then((res) => {
         if (!active || !res.data?.config) return;
-        setConfig(res.data.config);
+        const cfg = res.data.config;
+        setConfig(cfg);
         setMessages((prev) =>
           prev.length === 1 && prev[0].id === "welcome-1"
-            ? [{ ...prev[0], text: res.data.config!.welcomeMessage }]
+            ? [
+                {
+                  ...prev[0],
+                  text: cfg.localizedWelcome?.[language] || cfg.welcomeMessage,
+                  quickReplies: cfg.quickPrompts,
+                },
+              ]
             : prev
         );
       })
@@ -143,7 +229,118 @@ export default function FloatingChatbotWidget() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [language]);
+
+  // Restore persisted conversation session on open/mount if sessionId & token exist
+  useEffect(() => {
+    if (!sessionId || !sessionToken) return;
+    let active = true;
+    AxiosConfig.get<{
+      mode: "ai" | "waiting_human" | "human" | "resolved";
+      language: SupportedLanguage;
+      assignedAdminName?: string;
+      collectedLead?: LeadDataFields;
+      rating?: number | null;
+      messages?: Array<{
+        id: string;
+        role: "user" | "assistant" | "admin" | "system";
+        senderName?: string;
+        text: string;
+        intent?: string;
+        source?: string;
+        quickReplies?: string[];
+        followUpSuggestions?: string[];
+        attachments?: ChatAttachmentItem[];
+        timestamp: string;
+      }>;
+    }>(`/api/chatbot/session/${encodeURIComponent(sessionId)}`, {
+      headers: {
+        "x-no-cache": "true",
+        "x-chat-session-token": sessionToken,
+      },
+    })
+      .then((res) => {
+        if (!active || !res.data) return;
+        setSupportMode(res.data.mode || "ai");
+        setAssignedAdminName(res.data.assignedAdminName || "");
+        if (res.data.collectedLead) setCollectedLead(res.data.collectedLead);
+        if (typeof res.data.rating === "number") setSubmittedRating(res.data.rating);
+        if (Array.isArray(res.data.messages) && res.data.messages.length > 0) {
+          setMessages(
+            res.data.messages.map((m) => ({
+              id: m.id,
+              role: m.role,
+              senderName: m.senderName,
+              text: m.text,
+              timestamp: formatChatTimestamp(new Date(m.timestamp)),
+              intent: m.intent,
+              source: m.source,
+              quickReplies: m.quickReplies,
+              followUpSuggestions: m.followUpSuggestions,
+              attachments: m.attachments,
+            }))
+          );
+        }
+      })
+      .catch(() => {
+        // Session may have expired past retention window
+      });
+    return () => {
+      active = false;
+    };
+  }, [sessionId, sessionToken]);
+
+  // Live Human Takeover Polling (fetches live admin replies every 4s when waiting/in human support)
+  useEffect(() => {
+    if (!isOpen || tab !== "chat" || !sessionId || !sessionToken) return;
+    if (supportMode !== "waiting_human" && supportMode !== "human") return;
+    const timer = window.setInterval(() => {
+      AxiosConfig.get<{
+        mode: "ai" | "waiting_human" | "human" | "resolved";
+        assignedAdminName?: string;
+        messages?: Array<{
+          id: string;
+          role: "user" | "assistant" | "admin" | "system";
+          senderName?: string;
+          text: string;
+          intent?: string;
+          source?: string;
+          quickReplies?: string[];
+          followUpSuggestions?: string[];
+          attachments?: ChatAttachmentItem[];
+          timestamp: string;
+        }>;
+      }>(`/api/chatbot/session/${encodeURIComponent(sessionId)}`, {
+        headers: {
+          "x-no-cache": "true",
+          "x-chat-session-token": sessionToken,
+        },
+      })
+        .then((res) => {
+          if (!res.data) return;
+          setSupportMode(res.data.mode || "ai");
+          setAssignedAdminName(res.data.assignedAdminName || "");
+          if (Array.isArray(res.data.messages) && res.data.messages.length > 0) {
+            setMessages(
+              res.data.messages.map((m) => ({
+                id: m.id,
+                role: m.role,
+                senderName: m.senderName,
+                text: m.text,
+                timestamp: formatChatTimestamp(new Date(m.timestamp)),
+                intent: m.intent,
+                source: m.source,
+                quickReplies: m.quickReplies,
+                followUpSuggestions: m.followUpSuggestions,
+                attachments: m.attachments,
+              }))
+            );
+          }
+        })
+        .catch(() => null);
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [isOpen, tab, sessionId, sessionToken, supportMode]);
 
   useEffect(() => {
     if (isOpen && tab === "chat") {
@@ -270,42 +467,128 @@ export default function FloatingChatbotWidget() {
       });
   };
 
+  const handleSwitchLanguage = (nextLang: SupportedLanguage) => {
+    setLanguage(nextLang);
+    if (sessionId && sessionToken) {
+      saveStoredSession({ sessionId, sessionToken, language: nextLang });
+    }
+    setMessages((prev) =>
+      prev.length === 1 && prev[0].id === "welcome-1"
+        ? [
+            {
+              ...prev[0],
+              text: config.localizedWelcome?.[nextLang] || config.welcomeMessage,
+            },
+          ]
+        : prev
+    );
+  };
+
+  const handleFileAttach = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setUploadError("");
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await AxiosConfig.post<{ attachment: ChatAttachmentItem }>(
+        "/api/chatbot/upload",
+        formData
+      );
+      if (res.data?.attachment) {
+        setPendingAttachments((prev) => [...prev, res.data.attachment]);
+      }
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { message?: string } } })?.response?.data?.message ||
+        "Could not upload file (allowed: PDF, images, DWG, DXF, XLSX, DOC).";
+      setUploadError(msg);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
   const sendMessage = async (textToSend: string) => {
-    const trimmed = textToSend.trim();
+    const trimmed =
+      textToSend.trim() ||
+      (pendingAttachments.length > 0
+        ? `Attached file(s): ${pendingAttachments.map((a) => a.fileName).join(", ")}`
+        : "");
     if (!trimmed || sending) return;
+
+    const attachmentsToSend = [...pendingAttachments];
+    setPendingAttachments([]);
+    setUploadError("");
 
     const userMsg: ChatMessageItem = {
       id: `user-${Date.now()}`,
       role: "user",
       text: trimmed,
       timestamp: formatChatTimestamp(new Date()),
+      attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
     };
-    const nextHistory = [...messages, userMsg];
-    setMessages(nextHistory);
+    setMessages((prev) => [...prev, userMsg]);
     setInputValue("");
     setSending(true);
 
     try {
       const res = await AxiosConfig.post<{
+        sessionId: string;
+        sessionToken: string;
         reply: string;
+        language: SupportedLanguage;
         intent?: string;
+        source?: string;
+        aiPaused?: boolean;
+        mode?: "ai" | "waiting_human" | "human" | "resolved";
+        quickReplies?: string[];
+        followUpSuggestions?: string[];
+        collectedLead?: LeadDataFields;
+        suggestSiteVisit?: boolean;
+        suggestQuote?: boolean;
+        suggestHandover?: boolean;
         whatsappUrl?: string;
-        smsUrl?: string;
+        smsHref?: string;
       }>("/api/chatbot/ask", {
         message: trimmed,
-        history: nextHistory.slice(-6).map((m) => ({ role: m.role, text: m.text })),
+        sessionId: sessionId || undefined,
+        sessionToken: sessionToken || undefined,
+        language,
+        attachments: attachmentsToSend.length > 0 ? attachmentsToSend : undefined,
       });
 
-      const assistantMsg: ChatMessageItem = {
-        id: `bot-${Date.now()}`,
-        role: "assistant",
-        text: res.data.reply,
-        timestamp: formatChatTimestamp(new Date()),
-        intent: res.data.intent,
-        whatsappUrl: res.data.whatsappUrl,
-        smsUrl: res.data.smsUrl,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+      if (res.data.sessionId && res.data.sessionToken) {
+        setSessionId(res.data.sessionId);
+        setSessionToken(res.data.sessionToken);
+        saveStoredSession({
+          sessionId: res.data.sessionId,
+          sessionToken: res.data.sessionToken,
+          language: res.data.language || language,
+        });
+      }
+      if (res.data.mode) setSupportMode(res.data.mode);
+      if (res.data.collectedLead) setCollectedLead(res.data.collectedLead);
+
+      if (res.data.reply && res.data.reply.trim().length > 0) {
+        const assistantMsg: ChatMessageItem = {
+          id: `bot-${Date.now()}`,
+          role: "assistant",
+          text: res.data.reply,
+          timestamp: formatChatTimestamp(new Date()),
+          intent: res.data.intent,
+          source: res.data.source,
+          quickReplies: res.data.quickReplies,
+          followUpSuggestions: res.data.followUpSuggestions,
+          whatsappUrl: res.data.whatsappUrl,
+          smsUrl: res.data.smsHref,
+          suggestSiteVisit: res.data.suggestSiteVisit,
+          suggestQuote: res.data.suggestQuote,
+          suggestHandover: res.data.suggestHandover,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
     } catch {
       setMessages((prev) => [
         ...prev,
@@ -324,6 +607,57 @@ export default function FloatingChatbotWidget() {
       ]);
     } finally {
       setSending(false);
+    }
+  };
+
+  const handleRequestHandover = async () => {
+    if (!sessionId || !sessionToken) {
+      await sendMessage("I would like to talk to a human specialist");
+      return;
+    }
+    try {
+      const res = await AxiosConfig.post<{
+        mode: "ai" | "waiting_human" | "human" | "resolved";
+        messages?: Array<{
+          id: string;
+          role: "user" | "assistant" | "admin" | "system";
+          senderName?: string;
+          text: string;
+          timestamp: string;
+        }>;
+      }>(`/api/chatbot/session/${encodeURIComponent(sessionId)}/handover`, {
+        sessionToken,
+      });
+      setSupportMode(res.data.mode || "waiting_human");
+      if (Array.isArray(res.data.messages) && res.data.messages.length > 0) {
+        setMessages(
+          res.data.messages.map((m) => ({
+            id: m.id,
+            role: m.role,
+            senderName: m.senderName,
+            text: m.text,
+            timestamp: formatChatTimestamp(new Date(m.timestamp)),
+          }))
+        );
+      }
+    } catch {
+      await sendMessage("Talk to a specialist");
+    }
+  };
+
+  const handleSubmitCsat = async (stars: number) => {
+    if (!sessionId || !sessionToken || submittingRating) return;
+    setSubmittingRating(true);
+    try {
+      await AxiosConfig.post(
+        `/api/chatbot/session/${encodeURIComponent(sessionId)}/feedback`,
+        { sessionToken, rating: stars }
+      );
+      setSubmittedRating(stars);
+    } catch {
+      // ignore quietly
+    } finally {
+      setSubmittingRating(false);
     }
   };
 
@@ -500,21 +834,43 @@ export default function FloatingChatbotWidget() {
                       <div className="text-[12px] text-[#64748B] truncate mt-0.5">
                         {sending
                           ? "Typing reply..."
-                          : contactSettings.email || "innovistametal@gmail.com"}
+                          : supportMode === "human"
+                            ? `${assignedAdminName || "Specialist"} Live`
+                            : supportMode === "waiting_human"
+                              ? "Waiting for specialist..."
+                              : contactSettings.email || "innovistametal@gmail.com"}
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {config.supportedLanguages && config.supportedLanguages.length > 1 && (
+                      <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50 p-0.5">
+                        {config.supportedLanguages.map((langCode) => (
+                          <button
+                            key={langCode}
+                            type="button"
+                            onClick={() => handleSwitchLanguage(langCode)}
+                            className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold cursor-pointer border-0 transition-colors ${
+                              language === langCode
+                                ? "bg-[#0A74C9] text-white"
+                                : "bg-transparent text-slate-600 hover:text-slate-900"
+                            }`}
+                          >
+                            {LANGUAGE_LABELS[langCode]}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <a
                       href={globalWhatsappUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       aria-label="Open WhatsApp chat"
                       title={config.whatsappTriggerLabel}
-                      className="btn-anim-fx w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/70 flex items-center justify-center no-underline transition-colors"
+                      className="btn-anim-fx w-9 h-9 rounded-full bg-slate-50 hover:bg-emerald-50 text-emerald-600 border border-slate-200/70 flex items-center justify-center no-underline transition-colors"
                     >
-                      <FaWhatsapp className="text-base sm:text-sm" />
+                      <FaWhatsapp className="text-sm" />
                     </a>
                     <button
                       type="button"
@@ -523,20 +879,64 @@ export default function FloatingChatbotWidget() {
                         setIsOpen(false);
                       }}
                       aria-label="Close chatbot"
-                      className="w-10 h-10 sm:w-9 sm:h-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center cursor-pointer border border-slate-200/70 transition-colors"
+                      className="w-9 h-9 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-900 flex items-center justify-center cursor-pointer border border-slate-200/70 transition-colors"
                     >
-                      <FiX className="text-base sm:text-sm" />
+                      <FiX className="text-sm" />
                     </button>
                   </div>
                 </div>
+
+                {/* Live Human Handover Status Banner */}
+                {(supportMode === "human" || supportMode === "waiting_human") && (
+                  <div
+                    className={`px-4 py-1.5 border-t text-[11px] font-semibold flex items-center justify-between gap-2 ${
+                      supportMode === "human"
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                        : "bg-amber-50 border-amber-200 text-amber-800"
+                    }`}
+                  >
+                    <span className="truncate">
+                      {supportMode === "human"
+                        ? `${assignedAdminName || "Specialist"} connected — AI replies paused`
+                        : "In live support queue — an Innovista specialist will join shortly"}
+                    </span>
+                    {supportMode === "human" && (
+                      <button
+                        type="button"
+                        onClick={() => sendMessage("back to ai")}
+                        className="px-2 py-0.5 rounded bg-white border border-emerald-300 text-emerald-700 text-[10px] font-bold cursor-pointer shrink-0"
+                      >
+                        Resume AI
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {tab === "chat" ? (
                 <>
                   {/* Messages Scroll Container */}
                   <div className="flex-1 overflow-y-auto px-4 py-3.5 space-y-3 bg-white">
-                    {messages.map((msg) => {
+                    {messages.map((msg, idx) => {
+                      if (msg.role === "system") {
+                        return (
+                          <div key={msg.id} className="flex justify-center">
+                            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-[10.5px] font-medium text-slate-600 text-center">
+                              {msg.text}
+                            </span>
+                          </div>
+                        );
+                      }
                       const isUser = msg.role === "user";
+                      const isAdmin = msg.role === "admin";
+                      const isLatestBot = idx === messages.length - 1 && !isUser;
+                      const chipSuggestions =
+                        msg.quickReplies && msg.quickReplies.length > 0
+                          ? msg.quickReplies
+                          : msg.followUpSuggestions && msg.followUpSuggestions.length > 0
+                            ? msg.followUpSuggestions
+                            : [];
+
                       return (
                         <motion.div
                           key={msg.id}
@@ -547,29 +947,81 @@ export default function FloatingChatbotWidget() {
                             isUser ? "items-end" : "items-start"
                           }`}
                         >
+                          {isAdmin && (
+                            <span className="text-[10px] font-bold text-emerald-700 mb-0.5 px-1">
+                              {msg.senderName || "Innovista Specialist"} · Live
+                            </span>
+                          )}
                           <div
-                            className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug ${
+                            style={
+                              isUser && config.accentColor
+                                ? { backgroundColor: config.accentColor }
+                                : undefined
+                            }
+                            className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-snug whitespace-pre-line ${
                               isUser
                                 ? "bg-[#0A74C9] text-white rounded-br-md shadow-xs"
-                                : "bg-[#EEF2F6] text-[#14171A] rounded-tl-md"
+                                : isAdmin
+                                  ? "bg-emerald-50 border border-emerald-200 text-[#14171A] rounded-tl-md"
+                                  : "bg-[#EEF2F6] text-[#14171A] rounded-tl-md"
                             }`}
                           >
                             {msg.text}
+                            {msg.attachments && msg.attachments.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {msg.attachments.map((att) => (
+                                  <a
+                                    key={att.id}
+                                    href={att.fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-semibold no-underline ${
+                                      isUser
+                                        ? "bg-white/20 text-white"
+                                        : "bg-white border border-slate-200 text-[#0A74C9]"
+                                    }`}
+                                  >
+                                    <FiPaperclip className="text-[10px]" />
+                                    <span className="truncate max-w-[140px]">{att.fileName}</span>
+                                  </a>
+                                ))}
+                              </div>
+                            )}
                           </div>
                           <span className="text-[11px] text-slate-400 mt-1 px-0.5 tabular-nums">
                             {msg.timestamp}
                           </span>
 
+                          {/* Interactive Quick Replies & Follow-up Suggestions */}
+                          {isLatestBot && chipSuggestions.length > 0 && msg.id !== "welcome-1" && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {chipSuggestions.map((chip) => (
+                                <button
+                                  key={chip}
+                                  type="button"
+                                  onClick={() => sendMessage(chip)}
+                                  className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 hover:border-[#0A74C9] text-[11px] font-semibold text-[#0A74C9] cursor-pointer transition-colors"
+                                >
+                                  {chip}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
                           {/* Contextual Action Pills */}
                           {!isUser &&
+                            !isAdmin &&
                             (msg.intent === "visit" ||
+                              msg.suggestSiteVisit ||
                               msg.intent === "whatsapp" ||
                               msg.intent === "sms" ||
                               msg.intent === "quote" ||
+                              msg.suggestQuote ||
+                              msg.suggestHandover ||
                               config.autoSuggestWhatsapp) &&
                             msg.id !== "welcome-1" && (
                               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                                {msg.intent === "visit" && (
+                                {(msg.intent === "visit" || msg.suggestSiteVisit) && (
                                   <button
                                     type="button"
                                     onClick={() => setTab("visit")}
@@ -578,7 +1030,7 @@ export default function FloatingChatbotWidget() {
                                     Pick Slot
                                   </button>
                                 )}
-                                {msg.intent === "quote" && (
+                                {(msg.intent === "quote" || msg.suggestQuote) && (
                                   <Link
                                     to={
                                       isLoggedIn
@@ -591,6 +1043,18 @@ export default function FloatingChatbotWidget() {
                                     Request Quote
                                   </Link>
                                 )}
+                                {config.handoverEnabled &&
+                                  supportMode === "ai" &&
+                                  (msg.suggestHandover || isLatestBot) && (
+                                    <button
+                                      type="button"
+                                      onClick={handleRequestHandover}
+                                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 text-[11px] font-semibold cursor-pointer"
+                                    >
+                                      <FiHeadphones className="text-[11px]" />
+                                      <span>Talk to Human</span>
+                                    </button>
+                                  )}
                                 {msg.whatsappUrl && (
                                   <a
                                     href={msg.whatsappUrl}
@@ -643,6 +1107,39 @@ export default function FloatingChatbotWidget() {
                       </div>
                     )}
 
+                    {/* Compact CSAT Feedback Bar */}
+                    {config.enableFeedbackRating &&
+                      sessionId &&
+                      messages.filter((m) => m.role === "assistant" || m.role === "admin").length >= 2 && (
+                        <div className="pt-1 flex items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-1.5">
+                          <span className="text-[10.5px] font-semibold text-slate-600">
+                            {submittedRating
+                              ? `Rated ${submittedRating}/5 — Thank you!`
+                              : "Helpful so far?"}
+                          </span>
+                          <div className="flex items-center gap-0.5">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <button
+                                key={star}
+                                type="button"
+                                disabled={submittingRating}
+                                aria-label={`Rate ${star} stars`}
+                                onClick={() => handleSubmitCsat(star)}
+                                className="p-0.5 bg-transparent border-0 cursor-pointer text-amber-400 hover:scale-110 transition-transform"
+                              >
+                                <FiStar
+                                  className={`text-xs ${
+                                    submittedRating && star <= submittedRating
+                                      ? "fill-amber-400 text-amber-500"
+                                      : "text-slate-300"
+                                  }`}
+                                />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
                     {sending && (
                       <div className="flex items-start">
                         <div className="px-3.5 py-2.5 rounded-2xl rounded-tl-md bg-[#EEF2F6] flex items-center gap-1">
@@ -667,8 +1164,15 @@ export default function FloatingChatbotWidget() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  {/* Clean Mode Pills + Rounded Composer matching reference UI */}
-                  <div className="px-4 pt-2.5 pb-3.5 border-t border-slate-100 bg-white space-y-2.5 shrink-0">
+                  {/* Clean Mode Pills + Rounded Composer */}
+                  <div className="px-4 pt-2.5 pb-3.5 border-t border-slate-100 bg-white space-y-2 shrink-0">
+                    {collectedLead.requiredService && (
+                      <div className="text-[10px] text-slate-500 truncate">
+                        Active inquiry: <strong className="text-slate-700">{collectedLead.requiredService}</strong>
+                        {collectedLead.projectLocation ? ` · ${collectedLead.projectLocation}` : ""}
+                      </div>
+                    )}
+
                     <div className="flex items-center gap-2 overflow-x-auto">
                       <button
                         type="button"
@@ -707,10 +1211,53 @@ export default function FloatingChatbotWidget() {
                       </button>
                     </div>
 
+                    {pendingAttachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {pendingAttachments.map((att) => (
+                          <span
+                            key={att.id}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 border border-sky-200 text-[#0A74C9] text-[10.5px] font-semibold"
+                          >
+                            <span className="truncate max-w-[150px]">{att.fileName}</span>
+                            <button
+                              type="button"
+                              aria-label={`Remove ${att.fileName}`}
+                              onClick={() =>
+                                setPendingAttachments((prev) => prev.filter((p) => p.id !== att.id))
+                              }
+                              className="bg-transparent border-0 p-0 text-slate-500 hover:text-red-600 cursor-pointer"
+                            >
+                              <FiX className="text-[11px]" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {uploadError && (
+                      <div className="text-[10.5px] font-medium text-[#e60000]">{uploadError}</div>
+                    )}
+
                     <form
                       onSubmit={handleChatSubmit}
-                      className="flex items-center gap-2"
+                      className="flex items-center gap-1.5"
                     >
+                      {config.enableFileUploads && (
+                        <label
+                          title="Upload drawing, BOQ, PDF or photo"
+                          className={`w-10 h-11 sm:h-10 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 flex items-center justify-center cursor-pointer shrink-0 transition-colors ${
+                            uploadingFile ? "opacity-50 pointer-events-none" : ""
+                          }`}
+                        >
+                          <FiPaperclip className="text-sm" />
+                          <input
+                            type="file"
+                            className="sr-only"
+                            accept=".pdf,.png,.jpg,.jpeg,.webp,.dwg,.dxf,.xlsx,.csv,.txt,.doc,.docx"
+                            onChange={handleFileAttach}
+                          />
+                        </label>
+                      )}
                       <label htmlFor="floating-chatbot-input" className="sr-only">
                         Ask a question
                       </label>
@@ -719,13 +1266,26 @@ export default function FloatingChatbotWidget() {
                         type="text"
                         value={inputValue}
                         onChange={(e) => setInputValue(e.target.value)}
-                        placeholder="Please review your request or ask..."
+                        placeholder={
+                          language === "si"
+                            ? "ඔබගේ ප්‍රශ්නය මෙහි ලියන්න..."
+                            : language === "ta"
+                              ? "உங்கள் கேள்வியை இங்கே தட்டச்சு செய்யவும்..."
+                              : "Ask about products, quotes, drawings..."
+                        }
                         className="flex-1 min-w-0 h-11 sm:h-10 px-3.5 py-2 rounded-xl border border-slate-200 bg-white focus:border-[#0A74C9] focus:outline-none text-base sm:text-[13px] text-[#14171A] placeholder:text-slate-400"
                       />
                       <button
                         type="submit"
-                        disabled={sending || !inputValue.trim()}
+                        disabled={
+                          sending ||
+                          uploadingFile ||
+                          (!inputValue.trim() && pendingAttachments.length === 0)
+                        }
                         aria-label="Send message"
+                        style={
+                          config.accentColor ? { backgroundColor: config.accentColor } : undefined
+                        }
                         className="w-11 h-11 sm:w-10 sm:h-10 rounded-xl bg-[#0A74C9] hover:bg-[#0862AD] text-white flex items-center justify-center cursor-pointer border-0 disabled:opacity-50 shrink-0 transition-colors"
                       >
                         <FiSend className="text-sm" />

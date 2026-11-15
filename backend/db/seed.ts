@@ -1,10 +1,12 @@
 import { count } from "drizzle-orm";
 import { db } from "./index.ts";
 import {
+  adminSecretConfigs,
   appointmentSlots,
   blogPosts,
   categories,
   chatbotFaqs,
+  chatbotWorkflows,
   cmsDocuments,
   customerFeedbacks,
   mediaAssets,
@@ -16,7 +18,12 @@ import {
   relatedPortals,
   users,
 } from "./schema.ts";
-import { hashPassword } from "../utils/securityHelpers.ts";
+import {
+  DEFAULT_ADMIN_SECRET_KEY,
+  encryptSecret,
+  hashPassword,
+  sha256Hex,
+} from "../utils/securityHelpers.ts";
 import {
   DEFAULT_ABOUT_SECTIONS,
   DEFAULT_CLIENTS,
@@ -57,7 +64,12 @@ import {
 } from "../../shared/siteContentHelpers.ts";
 import { DEFAULT_BLOGGER_CONFIG, DEFAULT_BLOG_POSTS } from "../../shared/blogBloggerHelpers.ts";
 import { DEFAULT_SITE_CONTACT_SETTINGS, normalizeSiteContactSettings } from "../../shared/footerConsultationHelpers.ts";
-import { DEFAULT_CHATBOT_CONFIG, DEFAULT_CHATBOT_FAQS } from "../../shared/chatbotHelpers.ts";
+import {
+  DEFAULT_CHATBOT_CONFIG,
+  DEFAULT_CHATBOT_FAQS,
+  DEFAULT_CHATBOT_WORKFLOWS,
+  DEFAULT_KNOWLEDGE_META,
+} from "../../shared/chatbotHelpers.ts";
 import { SITE_VISIT_SLOT_TEMPLATES } from "../../shared/siteVisitSchedulerHelpers.ts";
 import { DEFAULT_HOME_SLIDESHOW_CMS, normalizeHomeSlideshowCms } from "../../shared/homeSlideshowHelpers.ts";
 import { DEFAULT_HOME_SERVICES_CMS, normalizeHomeServicesCms } from "../../shared/homeServicesHelpers.ts";
@@ -411,10 +423,11 @@ async function runSeed(): Promise<void> {
     }
   }
 
-  // 8. Seed Chatbot FAQs
+  // 8. Seed Chatbot FAQs (including normalized multilingual & synonym metadata)
   const [{ value: existingFaqsCount }] = await db.select({ value: count() }).from(chatbotFaqs);
   if (Number(existingFaqsCount) === 0) {
     for (const faq of DEFAULT_CHATBOT_FAQS) {
+      const meta = DEFAULT_KNOWLEDGE_META[faq.id];
       await db
         .insert(chatbotFaqs)
         .values({
@@ -422,13 +435,63 @@ async function runSeed(): Promise<void> {
           question: faq.question,
           answer: faq.answer,
           category: faq.category,
+          subcategory: meta?.subcategory || "",
           keywords: faq.keywords,
+          alternativeQuestions: meta?.alternativeQuestions || [],
+          synonyms: meta?.synonyms || [],
+          relatedTopics: meta?.relatedTopics || [],
+          status: meta?.status || "published",
+          translations: meta?.translations || {},
+          attachments: meta?.attachments || [],
           enabled: faq.enabled,
           priority: faq.priority,
           createdByUserId: null,
         })
         .onConflictDoNothing();
     }
+  }
+
+  // 8B. Seed Default INNOASSIST Workflows
+  const [{ value: existingWorkflowsCount }] = await db
+    .select({ value: count() })
+    .from(chatbotWorkflows);
+  if (Number(existingWorkflowsCount) === 0) {
+    for (const wf of DEFAULT_CHATBOT_WORKFLOWS) {
+      await db
+        .insert(chatbotWorkflows)
+        .values({
+          workflowKey: wf.id,
+          name: wf.name,
+          intent: wf.intent,
+          category: wf.category,
+          description: wf.description,
+          enabled: wf.enabled,
+          priority: wf.priority,
+          triggerKeywords: wf.triggerKeywords,
+          steps: wf.steps as unknown as Array<Record<string, unknown>>,
+          completionAction: wf.completionAction,
+          completionMessage: wf.completionMessage,
+          localizedCompletionMessages: wf.localizedCompletionMessages || {},
+        })
+        .onConflictDoNothing();
+    }
+  }
+
+  // 8C. Seed Initial Admin Secret Config (isolated security table)
+  const [{ value: existingSecretCount }] = await db
+    .select({ value: count() })
+    .from(adminSecretConfigs);
+  if (Number(existingSecretCount) === 0) {
+    await db
+      .insert(adminSecretConfigs)
+      .values({
+        configKey: "primary",
+        encryptedKey: encryptSecret(DEFAULT_ADMIN_SECRET_KEY),
+        keyHash: sha256Hex(DEFAULT_ADMIN_SECRET_KEY),
+        rotationCount: 0,
+        updatedByEmail: "system",
+      })
+      .onConflictDoNothing();
   }
 
   // 9. Seed Related Portals

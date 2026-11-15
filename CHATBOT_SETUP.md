@@ -1,5 +1,7 @@
 # Innovista Chatbot, Google Calendar, Gmail & Site Visit Setup Guide
 
+> **Enhanced INNOASSIST AI Guide:** For full documentation on the 4-layer AI Credit Protection Engine, Multilingual (EN/SI/TA) Knowledge Base, 13 Dynamic Workflows, Live Human Takeover, Unanswered Queue, Security & BI Exports, see [`INNOASSIST_AI_SETUP.md`](./INNOASSIST_AI_SETUP.md).
+
 This guide covers configuring the floating website assistant, FAQ training in the Admin Portal, Google Calendar & Gmail confirmation sync, WhatsApp handoff, and direct phone SMS routing.
 
 ---

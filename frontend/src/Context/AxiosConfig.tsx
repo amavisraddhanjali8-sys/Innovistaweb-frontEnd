@@ -8,6 +8,7 @@ import {
   setCacheEntry,
   type ApiCacheEntry,
 } from "../utils/apiCacheHelpers";
+import { isAdminPortalPath } from "../utils/adminPortalHelpers";
 
 const AxiosConfig = axios.create({
   baseURL: "",
@@ -134,10 +135,10 @@ AxiosConfig.interceptors.response.use(
 
       if (!refreshToken) {
         isRefreshing = false;
-        const hashPath = window.location.hash.replace(/^#/, "").split("?")[0].toLowerCase();
-        if (hashPath.startsWith("/admin") || hashPath === "/customermanager" || hashPath === "/ordermanageadmin") {
+        const hashPath = window.location.hash.replace(/^#/, "").split("?")[0];
+        if (isAdminPortalPath(hashPath)) {
           window.location.hash = "#/admin-login";
-        } else if (hashPath === "/profile") {
+        } else if (hashPath.toLowerCase() === "/profile") {
           window.location.hash = "#/profile-login";
         }
         return Promise.reject(error);
@@ -160,11 +161,10 @@ AxiosConfig.interceptors.response.use(
         processQueue(err, null);
         sessionStorage.clear();
         localStorage.removeItem("refreshToken");
-        const hashPath = window.location.hash.replace(/^#/, "").split("?")[0].toLowerCase();
-        window.location.hash =
-          hashPath.startsWith("/admin") || hashPath === "/customermanager"
-            ? "#/admin-login"
-            : "#/profile-login";
+        const hashPath = window.location.hash.replace(/^#/, "").split("?")[0];
+        window.location.hash = isAdminPortalPath(hashPath)
+          ? "#/admin-login"
+          : "#/profile-login";
         return Promise.reject(err);
       } finally {
         isRefreshing = false;

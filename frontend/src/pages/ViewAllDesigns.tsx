@@ -124,17 +124,15 @@ function ViewAllDesigns() {
     data.append("file", file);
 
     try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        body: data,
-      });
-      const result = await res.json();
-      if (result.secure_url || result.url) {
+      const res = await AxiosConfig.post<{ secure_url?: string; url?: string }>("/api/upload", data);
+      const result = res.data;
+      const uploadedUrl = result.secure_url || result.url;
+      if (uploadedUrl) {
         setEditingDraft((prev) =>
           prev
             ? {
                 ...prev,
-                Design_Image: [...(prev.Design_Image || []), result.secure_url || result.url],
+                Design_Image: [...(prev.Design_Image || []), uploadedUrl],
               }
             : null
         );

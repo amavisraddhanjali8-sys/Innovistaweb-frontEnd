@@ -259,8 +259,8 @@ export default function BlogsAdmin() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json();
+      const res = await AxiosConfig.post<{ secure_url?: string; url?: string }>("/api/upload", fd);
+      const data = res.data;
       const uploadedUrl = data.secure_url || data.url;
       if (uploadedUrl) {
         setDraftCoverImage(uploadedUrl);

@@ -148,13 +148,11 @@ function AddProjects() {
         data.append("file", file);
 
         try {
-          const res = await fetch("/api/upload", {
-            method: "POST",
-            body: data,
-          });
-          const result = await res.json();
-          if (res.ok && (result.secure_url || result.url)) {
-            addedUrls.push(result.secure_url || result.url);
+          const res = await AxiosConfig.post<{ secure_url?: string; url?: string }>("/api/upload", data);
+          const result = res.data;
+          const uploadedUrl = result.secure_url || result.url;
+          if (uploadedUrl) {
+            addedUrls.push(uploadedUrl);
             continue;
           }
         } catch {

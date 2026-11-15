@@ -1046,6 +1046,26 @@ export function markNotificationReadMem(notifKey?: string): boolean {
   return true;
 }
 
+export function createNotificationRecordMem(input: {
+  title: string;
+  body: string;
+  notifKey?: string;
+}) {
+  const store = getMemoryStore();
+  const id =
+    input.notifKey || `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const notif = {
+    id,
+    NotificationsID: id,
+    Notifications_Title: input.title,
+    Notifications_Body: input.body,
+    Date_Timestamp: new Date().toISOString(),
+    isRead: false,
+  };
+  store.notifications.unshift(notif);
+  return notif;
+}
+
 export function getCmsDocMem<T>(key: string, fallback: T): T {
   const store = getMemoryStore();
   const found = store.cmsDocs.get(key);
@@ -1190,3 +1210,119 @@ export function listAuditLogsMem(filters?: {
   const limit = filters?.limit && filters.limit > 0 ? filters.limit : 500;
   return filtered.slice(0, limit);
 }
+
+// ============================================================================
+// USER SESSIONS, ADMIN SECRET CONFIG & SITE VISIT SLOT BLOCKS (Memory Fallback)
+// ============================================================================
+export function createUserSessionMem(input: {
+  sessionKey: string;
+  userId: number;
+  tokenHash: string;
+  mfaVerified?: boolean;
+  ipAddress?: string;
+  userAgent?: string;
+  expiresAt: Date;
+}) {
+  const store = getMemoryStore();
+  const now = new Date();
+  const record = {
+    id: store.nextUserSessionId++,
+    sessionKey: input.sessionKey,
+    userId: input.userId,
+    tokenHash: input.tokenHash,
+    mfaVerified: Boolean(input.mfaVerified),
+    ipAddress: input.ipAddress || "",
+    userAgent: input.userAgent || "",
+    expiresAt: input.expiresAt,
+    revokedAt: null,
+    lastUsedAt: now,
+    createdAt: now,
+  };
+  store.userSessions.unshift(record);
+  if (store.userSessions.length > 500) {
+    store.userSessions.length = 500;
+  }
+  return record;
+}
+
+export function getUserSessionByTokenHashMem(tokenHash: string) {
+  const store = getMemoryStore();
+  return store.userSessions.find((s) => s.tokenHash === tokenHash) || null;
+}
+
+export function touchUserSessionMem(sessionKey: string) {
+  const store = getMemoryStore();
+  const found = store.userSessions.find((s) => s.sessionKey === sessionKey);
+  if (found) found.lastUsedAt = new Date();
+  return found || null;
+}
+
+export function revokeUserSessionByTokenHashMem(tokenHash: string) {
+  const store = getMemoryStore();
+  const found = store.userSessions.find((s) => s.tokenHash === tokenHash);
+  if (!found) return false;
+  found.revokedAt = new Date();
+  return true;
+}
+
+export function revokeAllUserSessionsForUserMem(userId: number) {
+  const store = getMemoryStore();
+  const now = new Date();
+  let count = 0;
+  for (const s of store.userSessions) {
+    if (s.userId === userId && !s.revokedAt) {
+      s.revokedAt = now;
+      count++;
+    }
+  }
+  return count;
+}
+
+export function getAdminSecretConfigMem() {
+  return getMemoryStore().adminSecretConfig;
+}
+
+export function upsertAdminSecretConfigMem(input: {
+  encryptedKey: string;
+  keyHash: string;
+  rotationCount: number;
+  updatedByUserId?: number | null;
+  updatedByEmail: string;
+}) {
+  const store = getMemoryStore();
+  const now = new Date();
+  const next = {
+    id: store.adminSecretConfig?.id ?? 1,
+    configKey: "primary",
+    encryptedKey: input.encryptedKey,
+    keyHash: input.keyHash,
+    rotationCount: input.rotationCount,
+    updatedByUserId: input.updatedByUserId ?? null,
+    updatedByEmail: input.updatedByEmail,
+    updatedAt: now,
+    createdAt: store.adminSecretConfig?.createdAt ?? now,
+  };
+  store.adminSecretConfig = next;
+  return next;
+}
+
+export function toggleBlockedSiteVisitKeyMem(input: {
+  date: string;
+  slotTime: string;
+  reason?: string;
+}) {
+  const store = getMemoryStore();
+  const existing = (store.cmsDocs.get("site_visit_blocked_keys") as
+    | { blockedKeys?: string[] }
+    | undefined) || { blockedKeys: [] };
+  const blockedKeys = Array.isArray(existing.blockedKeys) ? [...existing.blockedKeys] : [];
+  const key = `${input.date}|${input.slotTime}`;
+  const isBlocked = blockedKeys.includes(key);
+  const nextBlocked = isBlocked ? blockedKeys.filter((k) => k !== key) : [...blockedKeys, key];
+  store.cmsDocs.set("site_visit_blocked_keys", { blockedKeys: nextBlocked });
+  return {
+    blocked: !isBlocked,
+    blockedKeys: nextBlocked,
+  };
+}
+

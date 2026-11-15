@@ -72,10 +72,11 @@ export default function PortalsAdmin() {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (data.secure_url || data.url) {
-        return data.secure_url || data.url;
+      const res = await AxiosConfig.post<{ secure_url?: string; url?: string }>("/api/upload", fd);
+      const data = res.data;
+      const uploadedUrl = data.secure_url || data.url;
+      if (uploadedUrl) {
+        return uploadedUrl;
       }
     } catch {
       // Fallback to FileReader below

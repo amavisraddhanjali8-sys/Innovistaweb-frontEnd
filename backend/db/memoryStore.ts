@@ -121,7 +121,34 @@ export interface MemorySecurityChallengeRecord {
   attempts: number;
   maxAttempts: number;
   consumed: boolean;
+  metadata?: Record<string, unknown>;
   expiresAt: Date;
+  createdAt: Date;
+}
+
+export interface MemoryUserSessionRecord {
+  id: number;
+  sessionKey: string;
+  userId: number;
+  tokenHash: string;
+  mfaVerified: boolean;
+  ipAddress: string;
+  userAgent: string;
+  expiresAt: Date;
+  revokedAt: Date | null;
+  lastUsedAt: Date;
+  createdAt: Date;
+}
+
+export interface MemoryAdminSecretConfigRecord {
+  id: number;
+  configKey: string;
+  encryptedKey: string;
+  keyHash: string;
+  rotationCount: number;
+  updatedByUserId: number | null;
+  updatedByEmail: string;
+  updatedAt: Date;
   createdAt: Date;
 }
 
@@ -251,6 +278,7 @@ export interface MemoryStoreState {
   initialized: boolean;
   nextUserId: number;
   nextChallengeId: number;
+  nextUserSessionId: number;
   nextAuditLogId: number;
   nextMediaId: number;
   nextProjectId: number;
@@ -258,6 +286,8 @@ export interface MemoryStoreState {
   nextRfqId: number;
   nextRfqAttachmentId: number;
   users: MemoryUserRecord[];
+  userSessions: MemoryUserSessionRecord[];
+  adminSecretConfig: MemoryAdminSecretConfigRecord | null;
   securityChallenges: MemorySecurityChallengeRecord[];
   auditLogs: MemoryAuditLogRecord[];
   mediaAssets: MemoryMediaAssetRecord[];
@@ -287,6 +317,7 @@ function createInitialStore(): MemoryStoreState {
     initialized: true,
     nextUserId: 2,
     nextChallengeId: 1,
+    nextUserSessionId: 1,
     nextAuditLogId: 1,
     nextMediaId: 1,
     nextProjectId: 5,
@@ -323,6 +354,8 @@ function createInitialStore(): MemoryStoreState {
         updatedAt: now,
       },
     ],
+    userSessions: [],
+    adminSecretConfig: null,
     securityChallenges: [],
     auditLogs: [],
     mediaAssets: [],

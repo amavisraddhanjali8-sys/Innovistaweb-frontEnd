@@ -125,8 +125,8 @@ export default function HomeTopPicksEditor({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
+      const res = await AxiosConfig.post<{ secure_url?: string; url?: string }>("/api/upload", formData);
+      const data = res.data;
       const url = data.secure_url || data.url;
       if (url) return url;
     } catch {

@@ -6,7 +6,6 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
-import { GoogleGenAI } from "@google/genai";
 import {
   DEFAULT_ABOUT_SECTIONS,
   DEFAULT_CLIENTS,
@@ -72,15 +71,44 @@ import {
   type SiteContactSettings,
 } from "../shared/footerConsultationHelpers.ts";
 import {
-  DEFAULT_CHATBOT_CONFIG,
-  buildSmsHref,
-  buildWhatsAppChatUrl,
-  detectChatIntent,
-  matchTrainedFaq,
+  getPublicChatbotConfig,
   normalizeChatbotConfig,
   normalizeChatbotFaq,
-  type ChatbotConfig,
+  type ChatAttachmentItem,
+  type KnowledgePublicationStatus,
+  type SupportedLanguage,
 } from "../shared/chatbotHelpers.ts";
+import {
+  clearAiResponseCache,
+  computeChatbotAnalytics,
+  convertUnansweredToKnowledge,
+  deleteChatbotWorkflow,
+  deleteKnowledgeDocument,
+  dismissOrDeleteUnanswered,
+  findCustomerContactHistory,
+  getAiUsageStats,
+  getChatSession,
+  getStoredChatbotConfig,
+  listChatbotConfigHistory,
+  listChatbotLeads,
+  listChatbotWorkflows,
+  listChatSessions,
+  listExtendedKnowledgeItems,
+  listKnowledgeDocuments,
+  listUnansweredQuestions,
+  removeKnowledgeMeta,
+  saveChatbotConfigWithHistory,
+  syncChatbotLeadToRfq,
+  updateChatbotLead,
+  upsertChatbotWorkflow,
+  upsertChatSession,
+  upsertExtendedKnowledgeMeta,
+  upsertKnowledgeDocument,
+} from "./db/chatbotStore.ts";
+import {
+  previewKnowledgeRetrieval,
+  processInnoassistMessage,
+} from "./services/innoassistEngine.ts";
 import {
   buildMonthlySiteVisitCalendar,
   computeAvailableSlotsForDate,
@@ -149,6 +177,7 @@ import {
   createCategoryRecord,
   createFeedbackRecord,
   createMediaAssetRecord,
+  createNotificationRecord,
   createOrderRecord,
   createProductRecord,
   createProjectRecord,
@@ -295,6 +324,7 @@ function createRateLimiter(bucketName: string, maxRequests: number, windowMs: nu
 
 const authRateLimiter = createRateLimiter("auth", 60, 60_000);
 const strictLoginRateLimiter = createRateLimiter("login", 25, 60_000);
+const publicSubmissionRateLimiter = createRateLimiter("public_submission", 30, 60_000);
 
 async function recordAuditEvent(
   req: AuthRequest | Request,
@@ -336,19 +366,53 @@ async function recordAuditEvent(
   }).catch(() => null);
 }
 
-// Static uploads directory
+// Static uploads directory (hardened against inline script execution)
 const uploadsDir = path.resolve(rootDir, "public", "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use("/uploads", express.static(uploadsDir));
+app.use(
+  "/uploads",
+  (_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    next();
+  },
+  express.static(uploadsDir)
+);
+
+const SAFE_UPLOAD_EXTENSIONS = new Set([
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".avif",
+  ".mp4",
+  ".webm",
+  ".mov",
+  ".m4v",
+  ".ogg",
+  ".ogv",
+  ".pdf",
+  ".dwg",
+  ".dxf",
+  ".xlsx",
+  ".xls",
+  ".csv",
+  ".txt",
+  ".md",
+  ".doc",
+  ".docx",
+]);
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || ".jpg";
+    const rawExt = path.extname(file.originalname || "").toLowerCase();
+    const ext = SAFE_UPLOAD_EXTENSIONS.has(rawExt) ? rawExt : ".bin";
     const uniqueName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
     cb(null, uniqueName);
   },
@@ -357,6 +421,14 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+    if (!ext || !SAFE_UPLOAD_EXTENSIONS.has(ext)) {
+      cb(new Error(`Unsupported or unsafe file type: ${ext || "unknown"}`));
+      return;
+    }
+    cb(null, true);
+  },
 });
 
 const DEFAULT_ABOUT_FALLBACK: AboutCmsPayload = {
@@ -378,19 +450,6 @@ const DEFAULT_ABOUT_FALLBACK: AboutCmsPayload = {
 };
 
 let lastAutoSyncAttemptAt = 0;
-
-function getServerGeminiClient(): GoogleGenAI | null {
-  const apiKey = (process.env.GEMINI_API_KEY || "").trim();
-  if (!apiKey) return null;
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
-    },
-  });
-}
 
 async function syncFromBloggerSource(targetUrl: string, blogId = "", apiKey = "") {
   const bloggerConfig = await getCmsDoc<BloggerConnectionConfig>(
@@ -512,7 +571,7 @@ app.get("/api/health", async (_req: Request, res: Response) => {
 
 app.post(
   "/api/upload",
-  optionalAuth,
+  requireAuth,
   upload.single("file"),
   async (req: AuthRequest, res: Response) => {
     if (!req.file) {
@@ -557,7 +616,7 @@ app.post(
   }
 );
 
-app.get("/api/media", async (req: Request, res: Response) => {
+app.get("/api/media", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const items = await listMediaAssets({
       kind: typeof req.query.kind === "string" ? req.query.kind : undefined,
@@ -572,7 +631,7 @@ app.get("/api/media", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/api/media", optionalAuth, async (req: AuthRequest, res: Response) => {
+app.post("/api/media", requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const asset = await createMediaAssetRecord({
       publicUrl: req.body?.publicUrl || req.body?.url,
@@ -592,7 +651,7 @@ app.post("/api/media", optionalAuth, async (req: AuthRequest, res: Response) => 
   }
 });
 
-app.delete("/api/media/:id", async (req: Request, res: Response) => {
+app.delete("/api/media/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     return res.status(400).json({ message: "Invalid media asset ID" });
@@ -2635,7 +2694,7 @@ app.get("/projects/getAllProjects", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/projects/createProject", async (req: Request, res: Response) => {
+app.post("/projects/createProject", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const body = req.body || {};
     const title = String(body.Project_Title || "").trim();
@@ -2663,7 +2722,7 @@ app.post("/projects/createProject", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/projects/deleteProject", async (req: Request, res: Response) => {
+app.delete("/projects/deleteProject", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.query.ProjectID || req.body?.ProjectID);
     if (!Number.isFinite(id) || id <= 0) {
@@ -2677,7 +2736,7 @@ app.delete("/projects/deleteProject", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/projects/updateProject", async (req: Request, res: Response) => {
+app.put("/projects/updateProject", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.body?.ProjectID || req.query.ProjectID);
     if (!Number.isFinite(id) || id <= 0) {
@@ -2732,7 +2791,7 @@ app.get("/api/products/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/api/products", async (req: Request, res: Response) => {
+app.post("/api/products", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const created = await createProductRecord(req.body || {});
     return res.status(201).json({ message: "Product created", data: created });
@@ -2741,7 +2800,7 @@ app.post("/api/products", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/api/products/:id", async (req: Request, res: Response) => {
+app.put("/api/products/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const updated = await updateProductRecord(String(req.params.id || ""), req.body || {});
     if (!updated) return res.status(404).json({ message: "Product not found" });
@@ -2751,7 +2810,7 @@ app.put("/api/products/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/api/products/:id", async (req: Request, res: Response) => {
+app.delete("/api/products/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const ok = await deleteProductRecord(String(req.params.id || ""));
     if (!ok) return res.status(404).json({ message: "Product not found" });
@@ -2811,7 +2870,7 @@ app.get("/designs/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/designs/create", async (req: Request, res: Response) => {
+app.post("/designs/create", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const created = await createProductRecord(req.body || {});
     return res.status(201).json({
@@ -2825,7 +2884,7 @@ app.post("/designs/create", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/designs/deleteDesign", async (req: Request, res: Response) => {
+app.delete("/designs/deleteDesign", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id =
       req.query.DesignID ||
@@ -2841,7 +2900,7 @@ app.delete("/designs/deleteDesign", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/designs/updateDesign", async (req: Request, res: Response) => {
+app.put("/designs/updateDesign", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const designId = req.body?.DesignID || req.query.DesignID || req.body?.id;
     const updated = await updateProductRecord(String(designId || ""), req.body || {});
@@ -2852,7 +2911,7 @@ app.put("/designs/updateDesign", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/designs/:id/related", async (req: Request, res: Response) => {
+app.put("/designs/:id/related", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const target = await getProductByAnyId(String(req.params.id || ""));
     if (!target) return res.status(404).json({ message: "Design not found" });
@@ -2877,7 +2936,7 @@ app.put("/designs/:id/related", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/designs/:id", async (req: Request, res: Response) => {
+app.put("/designs/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const updated = await updateProductRecord(String(req.params.id || ""), req.body || {});
     if (!updated) return res.status(404).json({ message: "Design not found" });
@@ -3198,7 +3257,7 @@ app.get("/order/getAllOrders", requireAuth, async (req: AuthRequest, res: Respon
   }
 });
 
-app.post("/order/createOrder", optionalAuth, async (req: AuthRequest, res: Response) => {
+app.post("/order/createOrder", publicSubmissionRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { Order_Status, Client_Name, Client_Email, Client_Number, Designs } = req.body || {};
     if (!Client_Name || !Client_Email) {
@@ -3281,6 +3340,7 @@ app.get("/api/rfq", requireAuth, async (req: AuthRequest, res: Response) => {
 
 app.post(
   "/api/rfq",
+  publicSubmissionRateLimiter,
   optionalAuth,
   upload.array("attachments", 12),
   async (req: AuthRequest, res: Response) => {
@@ -3361,7 +3421,7 @@ app.get("/feedback/allFeedbacks", async (req: Request, res: Response) => {
   }
 });
 
-app.delete("/feedback/deleteFeedback", async (req: Request, res: Response) => {
+app.delete("/feedback/deleteFeedback", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(
       req.query.Feed_backId ||
@@ -3378,7 +3438,7 @@ app.delete("/feedback/deleteFeedback", async (req: Request, res: Response) => {
   }
 });
 
-app.post("/feedback/createFeedback", async (req: Request, res: Response) => {
+app.post("/feedback/createFeedback", publicSubmissionRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   try {
     const existing = await listFeedbacks();
     const normalized = normalizeCustomerFeedbackRecord(req.body || {}, existing.length);
@@ -3393,7 +3453,7 @@ app.post("/feedback/createFeedback", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/feedback/updateFeedback/:id", async (req: Request, res: Response) => {
+app.put("/feedback/updateFeedback/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const updated = await updateFeedbackRecord(id, req.body || {});
@@ -3408,7 +3468,7 @@ app.put("/feedback/updateFeedback/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.patch("/feedback/toggleHome/:id", async (req: Request, res: Response) => {
+app.patch("/feedback/toggleHome/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const id = Number(req.params.id);
     const all = await listFeedbacks();
@@ -3427,7 +3487,7 @@ app.patch("/feedback/toggleHome/:id", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/feedback/reorder", async (req: Request, res: Response) => {
+app.put("/feedback/reorder", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const orderedIds = Array.isArray(req.body?.orderedIds)
       ? req.body.orderedIds.map((id: unknown) => Number(id))
@@ -3477,7 +3537,7 @@ app.get("/about/vision-mission", async (_req: Request, res: Response) => {
   }
 });
 
-app.put("/about/vision-mission", async (req: Request, res: Response) => {
+app.put("/about/vision-mission", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
     const normalized = normalizeAboutCmsPayload(req.body, current);
@@ -3496,7 +3556,7 @@ app.get("/about/hero-slides", async (_req: Request, res: Response) => {
   });
 });
 
-app.put("/about/hero-slides", async (req: Request, res: Response) => {
+app.put("/about/hero-slides", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
   const next = normalizeAboutCmsPayload(
     {
@@ -3523,7 +3583,7 @@ app.get("/about/partners", async (_req: Request, res: Response) => {
   });
 });
 
-app.put("/about/partners", async (req: Request, res: Response) => {
+app.put("/about/partners", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
   const next = normalizeAboutCmsPayload(
     {
@@ -3551,7 +3611,7 @@ app.get("/about/clients", async (_req: Request, res: Response) => {
   });
 });
 
-app.put("/about/clients", async (req: Request, res: Response) => {
+app.put("/about/clients", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<AboutCmsPayload>("about_cms", DEFAULT_ABOUT_FALLBACK);
   const next = normalizeAboutCmsPayload(
     {
@@ -3582,7 +3642,7 @@ app.get("/products/cms", async (_req: Request, res: Response) => {
   return res.json({ landing: cms, data: cms, categories: cats });
 });
 
-app.put("/products/cms", async (req: Request, res: Response) => {
+app.put("/products/cms", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<ProductLandingCms>(
     "product_landing_cms",
     DEFAULT_PRODUCT_LANDING_CMS
@@ -3602,7 +3662,7 @@ app.get(["/products/categories", "/api/categories"], async (_req: Request, res: 
   }
 });
 
-app.post(["/products/categories", "/api/categories"], async (req: Request, res: Response) => {
+app.post(["/products/categories", "/api/categories"], requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const existing = await listCategories();
     const candidateName = String(req.body?.name || "").trim();
@@ -3627,7 +3687,7 @@ app.post(["/products/categories", "/api/categories"], async (req: Request, res: 
   }
 });
 
-app.put("/products/categories/reorder", async (req: Request, res: Response) => {
+app.put("/products/categories/reorder", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const orderedIds: string[] = Array.isArray(req.body?.orderedIds)
       ? req.body.orderedIds.map((id: unknown) => String(id))
@@ -3641,7 +3701,8 @@ app.put("/products/categories/reorder", async (req: Request, res: Response) => {
 
 app.put(
   ["/products/categories/apply-theme", "/api/categories/apply-theme"],
-  async (req: Request, res: Response) => {
+  requireAdminOrStaff,
+  async (req: AuthRequest, res: Response) => {
     try {
       const rawTheme = req.body?.theme ?? req.body;
       const data = await applyHeroThemeToAllCategories(rawTheme || {});
@@ -3657,7 +3718,8 @@ app.put(
 
 app.put(
   ["/products/categories/:id", "/api/categories/:id"],
-  async (req: Request, res: Response) => {
+  requireAdminOrStaff,
+  async (req: AuthRequest, res: Response) => {
     try {
       const updated = await updateCategoryRecord(String(req.params.id || ""), req.body || {});
       if (!updated) return res.status(404).json({ message: "Category not found" });
@@ -3674,7 +3736,8 @@ app.put(
 
 app.delete(
   ["/products/categories/:id", "/api/categories/:id"],
-  async (req: Request, res: Response) => {
+  requireAdminOrStaff,
+  async (req: AuthRequest, res: Response) => {
     try {
       const removed = await deleteCategoryRecord(String(req.params.id || ""));
       if (!removed) return res.status(404).json({ message: "Category not found" });
@@ -3712,7 +3775,7 @@ app.get("/api/hero-themes", async (_req: Request, res: Response) => {
   }
 });
 
-app.put("/api/hero-themes", async (req: Request, res: Response) => {
+app.put("/api/hero-themes", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   try {
     const [currentPages, currentAbout, currentProduct] = await Promise.all([
       getCmsDoc<PageHeroThemesMap>("page_hero_themes", DEFAULT_PAGE_HERO_THEMES),
@@ -3822,14 +3885,14 @@ app.get("/ads/cms", async (req: Request, res: Response) => {
   return res.json({ pages: cms.pages, data: cms });
 });
 
-app.put("/ads/cms", async (req: Request, res: Response) => {
+app.put("/ads/cms", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<PageAdsCmsPayload>("page_ads_cms", DEFAULT_PAGE_ADS_CMS);
   const next = normalizePageAdsCms(req.body, current);
   await setCmsDoc("page_ads_cms", next as unknown as Record<string, unknown>);
   return res.json({ message: "Page advertisements updated", pages: next.pages, data: next });
 });
 
-app.put("/ads/cms/:pageKey", async (req: Request, res: Response) => {
+app.put("/ads/cms/:pageKey", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { pageKey } = req.params;
   if (!isValidAdPageKey(pageKey)) {
     return res.status(404).json({ message: "Unknown advertisement page key" });
@@ -3856,7 +3919,7 @@ app.put("/ads/cms/:pageKey", async (req: Request, res: Response) => {
   });
 });
 
-app.post("/ads/cms/:pageKey/ads", async (req: Request, res: Response) => {
+app.post("/ads/cms/:pageKey/ads", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { pageKey } = req.params;
   if (!isValidAdPageKey(pageKey)) {
     return res.status(404).json({ message: "Unknown advertisement page key" });
@@ -3879,7 +3942,7 @@ app.post("/ads/cms/:pageKey/ads", async (req: Request, res: Response) => {
   });
 });
 
-app.put("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) => {
+app.put("/ads/cms/:pageKey/ads/:adId", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { pageKey, adId } = req.params;
   if (!isValidAdPageKey(pageKey)) {
     return res.status(404).json({ message: "Unknown advertisement page key" });
@@ -3909,7 +3972,7 @@ app.put("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) => {
   });
 });
 
-app.delete("/ads/cms/:pageKey/ads/:adId", async (req: Request, res: Response) => {
+app.delete("/ads/cms/:pageKey/ads/:adId", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { pageKey, adId } = req.params;
   if (!isValidAdPageKey(pageKey)) {
     return res.status(404).json({ message: "Unknown advertisement page key" });
@@ -3968,14 +4031,14 @@ app.get("/api/resources/portals", async (_req: Request, res: Response) => {
   return res.json({ data });
 });
 
-app.put("/api/resources/portals", async (req: Request, res: Response) => {
+app.put("/api/resources/portals", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const incoming = Array.isArray(req.body?.portals) ? req.body.portals : req.body;
   const normalized = normalizeRelatedPortals(incoming);
   const saved = await replaceRelatedPortals(normalized);
   return res.json({ message: "Related hardware portals saved", data: saved });
 });
 
-app.post("/api/resources/portals", async (req: Request, res: Response) => {
+app.post("/api/resources/portals", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const existing = await listRelatedPortals();
   const item = normalizePortalTile(req.body || {}, existing.length);
   if (!item.name || !item.url) {
@@ -3985,7 +4048,7 @@ app.post("/api/resources/portals", async (req: Request, res: Response) => {
   return res.status(201).json({ message: "Portal tile added", portal: item, data: saved });
 });
 
-app.put("/api/resources/portals/:id", async (req: Request, res: Response) => {
+app.put("/api/resources/portals/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const existing = await listRelatedPortals();
   const idx = existing.findIndex((p) => p.id === id);
@@ -3996,7 +4059,7 @@ app.put("/api/resources/portals/:id", async (req: Request, res: Response) => {
   return res.json({ message: "Portal tile updated", portal: updated, data: saved });
 });
 
-app.delete("/api/resources/portals/:id", async (req: Request, res: Response) => {
+app.delete("/api/resources/portals/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const existing = await listRelatedPortals();
   const next = existing.filter((p) => p.id !== id);
@@ -4056,11 +4119,10 @@ app.get(["/api/blogs", "/api/blog-posts"], async (req: Request, res: Response) =
     allCount: currentPosts.length,
     homeSelectedCount: latestPosts.filter((p) => p.showOnHome).length,
     config: { ...latestConfig, apiKey: latestConfig.apiKey ? "••••••••" : "" },
-    rawConfig: latestConfig,
   });
 });
 
-app.post("/api/blogs/sync-blogger", async (req: Request, res: Response) => {
+app.post("/api/blogs/sync-blogger", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const currentConfig = await getCmsDoc<BloggerConnectionConfig>(
     "blogger_config",
     DEFAULT_BLOGGER_CONFIG
@@ -4116,7 +4178,7 @@ app.post("/api/blogs/sync-blogger", async (req: Request, res: Response) => {
   }
 });
 
-app.put("/api/blogs/config", async (req: Request, res: Response) => {
+app.put("/api/blogs/config", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const currentConfig = await getCmsDoc<BloggerConnectionConfig>(
     "blogger_config",
     DEFAULT_BLOGGER_CONFIG
@@ -4154,7 +4216,7 @@ app.put("/api/blogs/config", async (req: Request, res: Response) => {
   });
 });
 
-app.put("/api/blogs/home-selection", async (req: Request, res: Response) => {
+app.put("/api/blogs/home-selection", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const orderedIds: string[] = Array.isArray(req.body?.homePostIds)
     ? req.body.homePostIds.map((v: unknown) => String(v))
     : [];
@@ -4179,7 +4241,7 @@ app.put("/api/blogs/home-selection", async (req: Request, res: Response) => {
   });
 });
 
-app.post(["/api/blogs", "/api/blog-posts"], async (req: Request, res: Response) => {
+app.post(["/api/blogs", "/api/blog-posts"], requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const {
     title,
     contentHtml,
@@ -4239,7 +4301,7 @@ app.post(["/api/blogs", "/api/blog-posts"], async (req: Request, res: Response) 
   });
 });
 
-app.put(["/api/blogs/:id", "/api/blog-posts/:id"], async (req: Request, res: Response) => {
+app.put(["/api/blogs/:id", "/api/blog-posts/:id"], requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { id } = req.params;
   const allPosts = await listBlogPosts();
   const existing = allPosts.find((p) => p.id === id);
@@ -4286,7 +4348,7 @@ app.put(["/api/blogs/:id", "/api/blog-posts/:id"], async (req: Request, res: Res
   });
 });
 
-app.delete(["/api/blogs/:id", "/api/blog-posts/:id"], async (req: Request, res: Response) => {
+app.delete(["/api/blogs/:id", "/api/blog-posts/:id"], requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const ok = await deleteBlogPostRecord(String(req.params.id || ""));
   if (!ok) return res.status(404).json({ message: "Blog post not found" });
   return res.json({ message: "Blog post deleted", data: await listBlogPosts() });
@@ -4303,7 +4365,7 @@ app.get("/api/site-settings", async (_req: Request, res: Response) => {
   return res.json({ data });
 });
 
-app.put("/api/site-settings", async (req: Request, res: Response) => {
+app.put("/api/site-settings", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<SiteContactSettings>(
     "site_settings",
     DEFAULT_SITE_CONTACT_SETTINGS
@@ -4318,190 +4380,851 @@ app.put("/api/site-settings", async (req: Request, res: Response) => {
 });
 
 // ============================================================================
-// CHATBOT CONFIGURATION, ADMIN TRAINING FAQS & LIVE AI Q&A ROUTES
+// INNOASSIST CHATBOT CONFIGURATION, KNOWLEDGE BASE, WORKFLOWS, HANDOVER & BI
 // ============================================================================
-app.get("/api/chatbot/config", async (_req: Request, res: Response) => {
-  const [config, faqs, contact] = await Promise.all([
-    getCmsDoc<ChatbotConfig>("chatbot_config", DEFAULT_CHATBOT_CONFIG),
-    listChatbotFaqs(),
+const chatbotRateLimiter = createRateLimiter("chatbot_ask", 45, 60_000);
+const CHATBOT_ALLOWED_UPLOAD_EXT = new Set([
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".dwg",
+  ".dxf",
+  ".xlsx",
+  ".xls",
+  ".csv",
+  ".txt",
+  ".doc",
+  ".docx",
+]);
+
+function canAccessChatSession(
+  req: AuthRequest,
+  session: Awaited<ReturnType<typeof getChatSession>>
+): boolean {
+  if (!session) return false;
+  if (req.user?.role === "admin" || req.user?.role === "staff") return true;
+  const token = String(
+    req.headers["x-chat-session-token"] || req.query.token || req.body?.sessionToken || ""
+  ).trim();
+  if (token && token === session.sessionToken) return true;
+  if (req.user?.userId && session.customerUserId && Number(req.user.userId) === Number(session.customerUserId)) {
+    return true;
+  }
+  return false;
+}
+
+// Public Config (strips restricted topics, system instructions, and daily limits)
+app.get("/api/chatbot/config", optionalAuth, async (req: AuthRequest, res: Response) => {
+  const isStaff = req.user?.role === "admin" || req.user?.role === "staff";
+  const [config, kbItems, contact, workflows] = await Promise.all([
+    getStoredChatbotConfig(),
+    listExtendedKnowledgeItems(),
+    getCmsDoc<SiteContactSettings>("site_settings", DEFAULT_SITE_CONTACT_SETTINGS),
+    listChatbotWorkflows(),
+  ]);
+  const visibleFaqs = isStaff
+    ? kbItems
+    : kbItems.filter((f) => f.enabled && f.status === "published");
+  return res.json({
+    config: isStaff ? config : getPublicChatbotConfig(config),
+    faqs: visibleFaqs,
+    workflows: isStaff
+      ? workflows
+      : workflows
+          .filter((w) => w.enabled)
+          .map((w) => ({ id: w.id, name: w.name, intent: w.intent, category: w.category })),
+    contact,
+  });
+});
+
+// Admin Full Bundle (Protected)
+app.get("/api/chatbot/admin/bundle", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  const [
+    config,
+    configHistory,
+    faqs,
+    documents,
+    workflows,
+    sessions,
+    unanswered,
+    leads,
+    analytics,
+    aiUsage,
+    contact,
+  ] = await Promise.all([
+    getStoredChatbotConfig(),
+    listChatbotConfigHistory(),
+    listExtendedKnowledgeItems(),
+    listKnowledgeDocuments(),
+    listChatbotWorkflows(),
+    listChatSessions(),
+    listUnansweredQuestions(),
+    listChatbotLeads(),
+    computeChatbotAnalytics(),
+    getAiUsageStats(),
     getCmsDoc<SiteContactSettings>("site_settings", DEFAULT_SITE_CONTACT_SETTINGS),
   ]);
-  return res.json({ config, faqs, contact });
+  return res.json({
+    config,
+    configHistory,
+    faqs,
+    documents,
+    workflows,
+    sessions,
+    unanswered,
+    leads,
+    analytics,
+    aiUsage,
+    contact,
+  });
 });
 
-app.put("/api/chatbot/config", async (req: Request, res: Response) => {
-  const current = await getCmsDoc<ChatbotConfig>("chatbot_config", DEFAULT_CHATBOT_CONFIG);
+app.put("/api/chatbot/config", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const current = await getStoredChatbotConfig();
   const next = normalizeChatbotConfig(req.body || {}, current);
-  await setCmsDoc("chatbot_config", next as unknown as Record<string, unknown>);
-  return res.json({ message: "Chatbot configuration saved", config: next });
+  const editor = req.user?.email || req.user?.name || "Admin";
+  await saveChatbotConfigWithHistory(
+    next,
+    editor,
+    String(req.body?.changeSummary || "Updated INNOASSIST settings")
+  );
+  await recordAuditEvent(req, {
+    targetIdentifier: "chatbot_config",
+    action: "CHATBOT_CONFIG_UPDATED",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: `Updated INNOASSIST configuration (AI mode: ${next.aiMode}, limit: ${next.dailyAiCallLimit}/day).`,
+  });
+  return res.json({
+    message: "Chatbot configuration saved",
+    config: next,
+    configHistory: await listChatbotConfigHistory(),
+  });
 });
 
-app.post("/api/chatbot/faqs", async (req: Request, res: Response) => {
+// Knowledge Base CRUD (Admin/Staff only)
+app.post("/api/chatbot/faqs", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const existing = await listChatbotFaqs();
+  const body = (req.body || {}) as Record<string, unknown>;
+  const faqId = `faq-${Date.now()}`;
+  const statusInput = (body.status as KnowledgePublicationStatus) || "published";
   const nextFaq = normalizeChatbotFaq(
-    { ...(req.body || {}), id: `faq-${Date.now()}` },
+    {
+      ...body,
+      id: faqId,
+      enabled:
+        typeof body.enabled === "boolean"
+          ? body.enabled
+          : statusInput === "published" || statusInput === "approved",
+    },
     existing.length
   );
   if (!nextFaq.question || !nextFaq.answer) {
     return res.status(400).json({ message: "Question and answer are both required." });
   }
   const saved = await upsertChatbotFaqRecord(nextFaq);
+  await upsertExtendedKnowledgeMeta(
+    faqId,
+    {
+      subcategory: String(body.subcategory || ""),
+      alternativeQuestions: Array.isArray(body.alternativeQuestions)
+        ? (body.alternativeQuestions as string[])
+        : typeof body.alternativeQuestions === "string"
+          ? body.alternativeQuestions.split("\n")
+          : [],
+      synonyms: Array.isArray(body.synonyms)
+        ? (body.synonyms as string[])
+        : typeof body.synonyms === "string"
+          ? body.synonyms.split(",")
+          : [],
+      relatedTopics: Array.isArray(body.relatedTopics)
+        ? (body.relatedTopics as string[])
+        : typeof body.relatedTopics === "string"
+          ? body.relatedTopics.split(",")
+          : [],
+      status: statusInput,
+      translations: (body.translations as Record<string, { question?: string; answer?: string }>) || {},
+      attachments: Array.isArray(body.attachments) ? body.attachments : [],
+    },
+    req.user?.email || "Admin",
+    "Created knowledge base entry"
+  );
+  await recordAuditEvent(req, {
+    targetIdentifier: faqId,
+    action: "CHATBOT_KB_CREATED",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: `Created KB entry "${nextFaq.question.slice(0, 80)}" (${statusInput}).`,
+  });
   return res.status(201).json({
-    message: "Trained Q&A added",
+    message: "Knowledge base entry added",
     faq: saved,
-    faqs: await listChatbotFaqs(),
+    faqs: await listExtendedKnowledgeItems(),
   });
 });
 
-app.put("/api/chatbot/faqs/:id", async (req: Request, res: Response) => {
-  const { id } = req.params;
-  const all = await listChatbotFaqs();
+app.put("/api/chatbot/faqs/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id || "");
+  const all = await listExtendedKnowledgeItems();
   const idx = all.findIndex((f) => f.id === id);
   if (idx === -1) return res.status(404).json({ message: "FAQ entry not found" });
+
+  const body = (req.body || {}) as Record<string, unknown>;
+  const nextStatus = (body.status as KnowledgePublicationStatus) || all[idx].status;
   const updated = normalizeChatbotFaq(
-    { ...all[idx], ...(req.body || {}), id: all[idx].id },
+    {
+      ...all[idx],
+      ...body,
+      id: all[idx].id,
+      enabled:
+        typeof body.enabled === "boolean"
+          ? body.enabled
+          : body.status
+            ? nextStatus === "published" || nextStatus === "approved"
+            : all[idx].enabled,
+    },
     idx
   );
   if (!updated.question || !updated.answer) {
     return res.status(400).json({ message: "Question and answer cannot be empty." });
   }
   const saved = await upsertChatbotFaqRecord(updated);
+  await upsertExtendedKnowledgeMeta(
+    id,
+    {
+      subcategory:
+        body.subcategory !== undefined ? String(body.subcategory || "") : all[idx].subcategory,
+      alternativeQuestions:
+        body.alternativeQuestions !== undefined
+          ? Array.isArray(body.alternativeQuestions)
+            ? (body.alternativeQuestions as string[])
+            : String(body.alternativeQuestions || "").split("\n")
+          : all[idx].alternativeQuestions,
+      synonyms:
+        body.synonyms !== undefined
+          ? Array.isArray(body.synonyms)
+            ? (body.synonyms as string[])
+            : String(body.synonyms || "").split(",")
+          : all[idx].synonyms,
+      relatedTopics:
+        body.relatedTopics !== undefined
+          ? Array.isArray(body.relatedTopics)
+            ? (body.relatedTopics as string[])
+            : String(body.relatedTopics || "").split(",")
+          : all[idx].relatedTopics,
+      status: nextStatus,
+      translations:
+        body.translations !== undefined
+          ? (body.translations as Record<string, { question?: string; answer?: string }>)
+          : all[idx].translations,
+      attachments: Array.isArray(body.attachments) ? body.attachments : all[idx].attachments,
+    },
+    req.user?.email || "Admin",
+    String(body.revisionSummary || `Updated entry (${nextStatus})`)
+  );
+  await recordAuditEvent(req, {
+    targetIdentifier: id,
+    action: "CHATBOT_KB_UPDATED",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: `Updated KB entry "${updated.question.slice(0, 80)}" (${nextStatus}).`,
+  });
   return res.json({
-    message: "Trained Q&A updated",
+    message: "Knowledge base entry updated",
     faq: saved,
-    faqs: await listChatbotFaqs(),
+    faqs: await listExtendedKnowledgeItems(),
   });
 });
 
-app.delete("/api/chatbot/faqs/:id", async (req: Request, res: Response) => {
-  const ok = await deleteChatbotFaqRecord(String(req.params.id || ""));
+app.delete("/api/chatbot/faqs/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id || "");
+  const ok = await deleteChatbotFaqRecord(id);
   if (!ok) return res.status(404).json({ message: "FAQ entry not found" });
-  return res.json({ message: "Trained Q&A removed", faqs: await listChatbotFaqs() });
+  await removeKnowledgeMeta(id);
+  await recordAuditEvent(req, {
+    targetIdentifier: id,
+    action: "CHATBOT_KB_DELETED",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "WARNING",
+    details: `Deleted KB entry ${id}.`,
+  });
+  return res.json({
+    message: "Knowledge base entry removed",
+    faqs: await listExtendedKnowledgeItems(),
+  });
 });
 
-app.post("/api/chatbot/ask", async (req: Request, res: Response) => {
-  const userMessage = String(req.body?.message || "").trim();
-  const history = Array.isArray(req.body?.history)
-    ? (req.body.history as Array<{ role: string; text: string }>).slice(-6)
-    : [];
+// Admin KB Retrieval Preview
+app.post("/api/chatbot/kb/preview", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const query = String(req.body?.query || "").trim();
+  const language = (req.body?.language as SupportedLanguage) || "en";
+  const includeUnpublished = Boolean(req.body?.includeUnpublished);
+  if (!query) {
+    return res.status(400).json({ message: "Preview query text is required." });
+  }
+  const result = await previewKnowledgeRetrieval(query, language, includeUnpublished);
+  return res.json(result);
+});
 
+// Admin Company Documents / PDFs / Technical Catalogues
+app.post(
+  "/api/chatbot/kb/documents",
+  requireAdminOrStaff,
+  upload.single("file"),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const body = (req.body || {}) as Record<string, string>;
+      let fileUrl = String(body.fileUrl || "").trim();
+      let fileName = String(body.fileName || "").trim();
+      let mimeType = String(body.mimeType || "application/pdf");
+      let fileSizeBytes = 0;
+
+      if (req.file) {
+        const ext = path.extname(req.file.originalname || "").toLowerCase();
+        if (!CHATBOT_ALLOWED_UPLOAD_EXT.has(ext)) {
+          fs.unlink(req.file.path, () => {});
+          return res.status(400).json({ message: `Unsupported document file type: ${ext}` });
+        }
+        fileUrl = `/uploads/${req.file.filename}`;
+        fileName = req.file.originalname;
+        mimeType = req.file.mimetype;
+        fileSizeBytes = req.file.size;
+        await createMediaAssetRecord({
+          publicUrl: fileUrl,
+          sourceType: "UPLOAD",
+          kind: "DOCUMENT",
+          title: body.title || fileName,
+          originalName: fileName,
+          storageKey: `uploads/${req.file.filename}`,
+          mimeType,
+          fileSizeBytes,
+          entityScope: "chatbot_kb_doc",
+          uploadedByUserId: req.user?.userId ?? null,
+        }).catch(() => null);
+      }
+
+      if (!body.title || !fileUrl) {
+        return res.status(400).json({ message: "Document title and file are required." });
+      }
+
+      let extractedText = String(body.extractedText || "").trim();
+      if (!extractedText && req.file && /\.(txt|csv|md)$/i.test(req.file.originalname || "")) {
+        extractedText = fs.readFileSync(req.file.path, "utf-8").slice(0, 12000);
+      }
+
+      const saved = await upsertKnowledgeDocument({
+        id: body.id || undefined,
+        title: body.title,
+        category: body.category || "Technical Catalogue",
+        subcategory: body.subcategory || "",
+        language: (body.language as SupportedLanguage | "all") || "all",
+        fileUrl,
+        fileName: fileName || body.title,
+        mimeType,
+        fileSizeBytes,
+        summary: body.summary || "",
+        extractedText,
+        keywords: String(body.keywords || "")
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+        status: (body.status as KnowledgePublicationStatus) || "published",
+        uploadedBy: req.user?.email || "Admin",
+      });
+
+      return res.status(201).json({
+        message: "Knowledge document saved",
+        document: saved,
+        documents: await listKnowledgeDocuments(),
+      });
+    } catch (err) {
+      return res.status(500).json({ message: (err as Error).message });
+    }
+  }
+);
+
+app.put("/api/chatbot/kb/documents/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const id = String(req.params.id || "");
+  const list = await listKnowledgeDocuments();
+  const existing = list.find((d) => d.id === id);
+  if (!existing) return res.status(404).json({ message: "Document not found" });
+  const body = (req.body || {}) as Record<string, unknown>;
+  const saved = await upsertKnowledgeDocument({
+    ...existing,
+    ...body,
+    id,
+    title: String(body.title ?? existing.title),
+    fileUrl: existing.fileUrl,
+    fileName: existing.fileName,
+  });
+  return res.json({
+    message: "Knowledge document updated",
+    document: saved,
+    documents: await listKnowledgeDocuments(),
+  });
+});
+
+app.delete("/api/chatbot/kb/documents/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const ok = await deleteKnowledgeDocument(String(req.params.id || ""));
+  if (!ok) return res.status(404).json({ message: "Document not found" });
+  return res.json({
+    message: "Knowledge document deleted",
+    documents: await listKnowledgeDocuments(),
+  });
+});
+
+// Configurable Conversation Workflows (Admin/Staff)
+app.get("/api/chatbot/workflows", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  return res.json({ workflows: await listChatbotWorkflows() });
+});
+
+app.post("/api/chatbot/workflows", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const body = req.body || {};
+  if (!body.name) {
+    return res.status(400).json({ message: "Workflow name is required." });
+  }
+  const workflows = await upsertChatbotWorkflow(body);
+  await recordAuditEvent(req, {
+    targetIdentifier: String(body.id || body.name),
+    action: "CHATBOT_WORKFLOW_SAVED",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: `Saved conversation workflow "${body.name}".`,
+  });
+  return res.json({ message: "Workflow saved", workflows });
+});
+
+app.delete("/api/chatbot/workflows/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const ok = await deleteChatbotWorkflow(String(req.params.id || ""));
+  if (!ok) return res.status(404).json({ message: "Workflow not found" });
+  return res.json({ message: "Workflow removed", workflows: await listChatbotWorkflows() });
+});
+
+// Public Secure Attachment Upload (Drawings, BOQs, Images)
+app.post(
+  "/api/chatbot/upload",
+  chatbotRateLimiter,
+  optionalAuth,
+  upload.single("file"),
+  async (req: AuthRequest, res: Response) => {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded." });
+    }
+    const ext = path.extname(req.file.originalname || "").toLowerCase();
+    if (!CHATBOT_ALLOWED_UPLOAD_EXT.has(ext)) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({
+        message: "Allowed file types: PDF, PNG, JPG, WEBP, DWG, DXF, XLSX, CSV, TXT, DOC/DOCX.",
+      });
+    }
+    if (req.file.size > 15 * 1024 * 1024) {
+      fs.unlink(req.file.path, () => {});
+      return res.status(400).json({ message: "Maximum customer attachment size is 15 MB." });
+    }
+    const fileUrl = `/uploads/${req.file.filename}`;
+    await createMediaAssetRecord({
+      publicUrl: fileUrl,
+      sourceType: "UPLOAD",
+      kind: req.file.mimetype?.startsWith("image/") ? "IMAGE" : "DOCUMENT",
+      title: req.file.originalname,
+      originalName: req.file.originalname,
+      storageKey: `uploads/${req.file.filename}`,
+      mimeType: req.file.mimetype,
+      fileSizeBytes: req.file.size,
+      entityScope: "chatbot_attachment",
+      uploadedByUserId: req.user?.userId ?? null,
+    }).catch(() => null);
+
+    const attachment: ChatAttachmentItem = {
+      id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      fileName: req.file.originalname,
+      fileUrl,
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      uploadedAt: new Date().toISOString(),
+    };
+    return res.status(201).json({ attachment });
+  }
+);
+
+// Public Ask Endpoint (Credit-Shielded Hybrid Brain)
+app.post("/api/chatbot/ask", chatbotRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
+  const userMessage = String(req.body?.message || "").trim();
   if (!userMessage) {
     return res.status(400).json({ message: "Message text is required." });
   }
+  if (userMessage.length > 1500) {
+    return res.status(400).json({ message: "Message must be 1500 characters or fewer." });
+  }
 
-  const [config, faqs, contact, designs, cats] = await Promise.all([
-    getCmsDoc<ChatbotConfig>("chatbot_config", DEFAULT_CHATBOT_CONFIG),
-    listChatbotFaqs(),
-    getCmsDoc<SiteContactSettings>("site_settings", DEFAULT_SITE_CONTACT_SETTINGS),
-    listProducts(),
-    listCategories(),
-  ]);
-
-  const intent = detectChatIntent(userMessage);
-  const wantsSiteVisit = intent === "visit";
-  const wantsWhatsapp = intent === "whatsapp";
-  const wantsQuote = intent === "quote";
-
-  const whatsappUrl = buildWhatsAppChatUrl(
-    contact.whatsapp || contact.phone,
-    userMessage,
-    config.defaultWhatsappPrefix
-  );
-  const smsHref = buildSmsHref(
-    contact.phone,
-    `Hi Innovista, ${userMessage.slice(0, 140)}`
-  );
-
-  const faqMatch = matchTrainedFaq(userMessage, faqs);
-  if (faqMatch) {
-    return res.json({
-      reply: faqMatch.item.answer,
-      source: "trained-faq",
-      matchedFaqId: faqMatch.item.id,
-      suggestSiteVisit: wantsSiteVisit,
-      suggestWhatsapp: wantsWhatsapp || config.autoSuggestWhatsapp,
-      whatsappUrl,
-      smsHref,
+  try {
+    const result = await processInnoassistMessage({
+      message: userMessage,
+      sessionId: typeof req.body?.sessionId === "string" ? req.body.sessionId : undefined,
+      sessionToken:
+        typeof req.body?.sessionToken === "string"
+          ? req.body.sessionToken
+          : typeof req.headers["x-chat-session-token"] === "string"
+            ? req.headers["x-chat-session-token"]
+            : undefined,
+      preferredLanguage:
+        req.body?.language === "si" || req.body?.language === "ta" || req.body?.language === "en"
+          ? req.body.language
+          : undefined,
+      attachments: Array.isArray(req.body?.attachments) ? req.body.attachments : undefined,
+      customerUser: req.user
+        ? { userId: req.user.userId, name: req.user.name, email: req.user.email }
+        : null,
+      ipAddress: getClientIp(req),
+      userAgent: String(req.headers["user-agent"] || ""),
     });
+    return res.json(result);
+  } catch (err) {
+    console.error("INNOASSIST ask error:", err);
+    return res.status(500).json({ message: "Unable to process message right now." });
   }
+});
 
-  const ai = getServerGeminiClient();
-  if (ai) {
-    try {
-      const kbContext = faqs
-        .filter((f) => f.enabled)
-        .map((f) => `Q: ${f.question}\nA: ${f.answer}`)
-        .join("\n\n");
-      const catalogContext = designs
-        .slice(0, 8)
-        .map((d) => `- ${d.Design_Name} (${d.Categories.join(", ")}): ${d.Design_Description}`)
-        .join("\n");
-      const catNames = cats.map((c) => c.name).join(", ");
-      const transcript = history
-        .map((m) => `${m.role === "user" ? "Customer" : "Assistant"}: ${m.text}`)
-        .join("\n");
-
-      const systemPrompt = `${config.systemInstructions}
-
-Company Contact:
-- Phone / WhatsApp: ${contact.phone}
-- Email: ${contact.email}
-- Showrooms: Nawala (Colombo 05), Kelaniya Plant, Kandy Showroom
-- Product Categories: ${catNames}
-
-Catalog Highlights:
-${catalogContext}
-
-Trained FAQs:
-${kbContext}
-
-Rules: Keep replies concise (1-3 crisp sentences). If they ask to book a visit, mention the "Site Visit" tab. For custom pricing or drawings, mention WhatsApp or Request Quote.`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: transcript
-          ? `${transcript}\nCustomer: ${userMessage}`
-          : `Customer: ${userMessage}`,
-        config: { systemInstruction: systemPrompt, temperature: 0.4, maxOutputTokens: 220 },
-      });
-
-      const replyText = response.text?.trim();
-      if (replyText) {
-        return res.json({
-          reply: replyText,
-          source: "gemini",
-          suggestSiteVisit: wantsSiteVisit,
-          suggestWhatsapp: wantsWhatsapp || config.autoSuggestWhatsapp,
-          whatsappUrl,
-          smsHref,
-        });
-      }
-    } catch (err) {
-      console.warn("Gemini chatbot fallback:", err);
-    }
+// Public Session Poll / Handover / Feedback (Scoped by sessionToken or owner)
+app.get("/api/chatbot/session/:sessionId", optionalAuth, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.sessionId || ""));
+  if (!canAccessChatSession(req, session)) {
+    return res.status(403).json({ message: "Forbidden: Invalid session token." });
   }
-
-  let fallbackReply =
-    "Thanks for reaching out to Innovista Fabriconix! Share your dimensions or ask about doors, windows, partitions, or site visits—or continue directly on WhatsApp with our engineers.";
-  if (wantsSiteVisit) {
-    fallbackReply =
-      "We can arrange an engineer site measurement visit. Switch to the Site Visit tab right here to pick your preferred date and time slot.";
-  } else if (wantsQuote) {
-    fallbackReply =
-      "Share your rough dimensions via Request Quote or tap Chat on WhatsApp below—our estimating team returns a detailed BOQ within 24–48 business hours.";
-  } else if (wantsWhatsapp) {
-    fallbackReply =
-      "Tap Chat on WhatsApp or Text via SMS below to speak directly with our fabrication specialists.";
-  }
-
   return res.json({
-    reply: fallbackReply,
-    source: "fallback",
-    suggestSiteVisit: wantsSiteVisit,
-    suggestWhatsapp: true,
-    whatsappUrl,
-    smsHref,
+    sessionId: session!.sessionId,
+    mode: session!.mode,
+    status: session!.status,
+    language: session!.language,
+    assignedAdminName: session!.assignedAdminName || "",
+    collectedLead: session!.collectedLead,
+    messages: session!.messages,
+    rating: session!.rating ?? null,
   });
+});
+
+app.post("/api/chatbot/session/:sessionId/handover", optionalAuth, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.sessionId || ""));
+  if (!canAccessChatSession(req, session)) {
+    return res.status(403).json({ message: "Forbidden: Invalid session token." });
+  }
+  session!.mode = "waiting_human";
+  session!.status = "WAITING_HUMAN";
+  session!.handoverCount += 1;
+  session!.messages.push({
+    id: `sys-${Date.now()}`,
+    role: "system",
+    text: "You requested a live specialist. An Innovista administrator has been notified and will reply here shortly.",
+    timestamp: new Date().toISOString(),
+  });
+  await upsertChatSession(session!);
+  await createNotificationRecord({
+    title: "INNOASSIST: Live Specialist Requested",
+    body: `${session!.customerName || "Visitor"} (${session!.customerPhone || session!.sessionId}) requested live human assistance.`,
+  }).catch(() => null);
+  return res.json({
+    message: "Handover requested",
+    mode: session!.mode,
+    status: session!.status,
+    messages: session!.messages,
+  });
+});
+
+app.post("/api/chatbot/session/:sessionId/feedback", optionalAuth, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.sessionId || ""));
+  if (!canAccessChatSession(req, session)) {
+    return res.status(403).json({ message: "Forbidden: Invalid session token." });
+  }
+  const rating = Number(req.body?.rating);
+  if (!Number.isFinite(rating) || rating < 1 || rating > 5) {
+    return res.status(400).json({ message: "Rating must be between 1 and 5." });
+  }
+  session!.rating = Math.round(rating);
+  session!.feedbackComment = String(req.body?.comment || "").slice(0, 500);
+  await upsertChatSession(session!);
+  return res.json({ message: "Thank you for your feedback!", rating: session!.rating });
+});
+
+// Admin Human Support & Conversation Takeover Routes
+app.get("/api/chatbot/sessions", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const sessions = await listChatSessions({
+    status: typeof req.query.status === "string" ? req.query.status : undefined,
+    mode: typeof req.query.mode === "string" ? req.query.mode : undefined,
+    search: typeof req.query.search === "string" ? req.query.search : undefined,
+  });
+  return res.json({ sessions });
+});
+
+app.get("/api/chatbot/sessions/:id/history", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  const history = await findCustomerContactHistory({
+    email: session.customerEmail,
+    phone: session.customerPhone,
+    excludeSessionId: session.sessionId,
+  });
+  return res.json({ session, contactHistory: history });
+});
+
+app.post("/api/chatbot/sessions/:id/takeover", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  session.mode = "human";
+  session.status = "IN_HUMAN_SUPPORT";
+  session.assignedAdminId = req.user?.userId ?? null;
+  session.assignedAdminName = req.user?.name || req.user?.email || "Innovista Specialist";
+  session.assignedAdminEmail = req.user?.email || "";
+  session.messages.push({
+    id: `sys-${Date.now()}`,
+    role: "system",
+    text: `${session.assignedAdminName} joined the chat. AI auto-replies are paused.`,
+    timestamp: new Date().toISOString(),
+  });
+  const saved = await upsertChatSession(session);
+  await recordAuditEvent(req, {
+    targetIdentifier: session.sessionId,
+    action: "CHATBOT_HUMAN_TAKEOVER",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: `Admin ${session.assignedAdminName} took over session ${session.sessionId}.`,
+  });
+  return res.json({ message: "Takeover active — AI paused", session: saved });
+});
+
+app.post("/api/chatbot/sessions/:id/reply", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  const text = String(req.body?.message || "").trim();
+  if (!text) return res.status(400).json({ message: "Reply message is required." });
+
+  if (session.mode !== "human") {
+    session.mode = "human";
+    session.status = "IN_HUMAN_SUPPORT";
+  }
+  session.assignedAdminId = session.assignedAdminId || req.user?.userId || null;
+  session.assignedAdminName =
+    session.assignedAdminName || req.user?.name || req.user?.email || "Innovista Specialist";
+
+  session.messages.push({
+    id: `adm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    role: "admin",
+    senderName: session.assignedAdminName,
+    text,
+    language: session.language,
+    timestamp: new Date().toISOString(),
+  });
+  const saved = await upsertChatSession(session);
+  return res.json({ message: "Reply sent", session: saved });
+});
+
+app.post("/api/chatbot/sessions/:id/return-ai", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  session.mode = "ai";
+  session.status = req.body?.markResolved ? "CLOSED" : "OPEN";
+  session.messages.push({
+    id: `sys-${Date.now()}`,
+    role: "system",
+    text: "Human support session completed. INNOASSIST AI mode is active again.",
+    timestamp: new Date().toISOString(),
+  });
+  const saved = await upsertChatSession(session);
+  return res.json({ message: "Returned conversation to AI mode", session: saved });
+});
+
+app.post("/api/chatbot/sessions/:id/note", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  const note = String(req.body?.note || "").trim();
+  if (!note) return res.status(400).json({ message: "Note cannot be empty." });
+  session.internalNotes.unshift({
+    id: `note-${Date.now()}`,
+    authorName: req.user?.name || "Admin",
+    authorEmail: req.user?.email || "",
+    note,
+    createdAt: new Date().toISOString(),
+  });
+  const saved = await upsertChatSession(session);
+  return res.json({ message: "Internal note saved", session: saved });
+});
+
+app.post("/api/chatbot/sessions/:id/assign", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  session.assignedAdminId = req.body?.adminUserId ? Number(req.body.adminUserId) : null;
+  session.assignedAdminName = String(req.body?.adminName || "Assigned Staff").trim();
+  session.assignedAdminEmail = String(req.body?.adminEmail || "").trim();
+  const saved = await upsertChatSession(session);
+  return res.json({ message: "Conversation assigned/transferred", session: saved });
+});
+
+app.post("/api/chatbot/sessions/:id/status", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const session = await getChatSession(String(req.params.id || ""));
+  if (!session) return res.status(404).json({ message: "Session not found" });
+  const nextStatus = String(req.body?.status || "").toUpperCase();
+  if (
+    nextStatus !== "OPEN" &&
+    nextStatus !== "WAITING_HUMAN" &&
+    nextStatus !== "IN_HUMAN_SUPPORT" &&
+    nextStatus !== "ESCALATED" &&
+    nextStatus !== "CLOSED"
+  ) {
+    return res.status(400).json({ message: "Invalid session status." });
+  }
+  session.status = nextStatus;
+  if (nextStatus === "CLOSED") session.mode = "resolved";
+  const saved = await upsertChatSession(session);
+  return res.json({ message: "Status updated", session: saved });
+});
+
+// Unanswered Questions Queue Routes (Admin/Staff)
+app.get("/api/chatbot/unanswered", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  return res.json({ unanswered: await listUnansweredQuestions() });
+});
+
+app.post("/api/chatbot/unanswered/:id/convert", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const body = req.body || {};
+  if (!body.question || !body.answer) {
+    return res.status(400).json({ message: "Approved question and answer are required." });
+  }
+  const result = await convertUnansweredToKnowledge({
+    unansweredId: String(req.params.id || ""),
+    question: String(body.question),
+    answer: String(body.answer),
+    category: String(body.category || "General"),
+    subcategory: String(body.subcategory || ""),
+    keywords: Array.isArray(body.keywords)
+      ? body.keywords
+      : String(body.keywords || "")
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+    synonyms: Array.isArray(body.synonyms)
+      ? body.synonyms
+      : String(body.synonyms || "")
+          .split(",")
+          .map((k) => k.trim())
+          .filter(Boolean),
+    status: (body.status as KnowledgePublicationStatus) || "published",
+    editorName: req.user?.email || "Admin",
+  });
+  if (!result.unanswered) return res.status(404).json({ message: "Unanswered item not found." });
+  return res.json({
+    message: "Converted to Knowledge Base",
+    unanswered: await listUnansweredQuestions(),
+    faqs: await listExtendedKnowledgeItems(),
+  });
+});
+
+app.delete("/api/chatbot/unanswered/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const mode = req.query.mode === "dismiss" ? "dismiss" : "delete";
+  const ok = await dismissOrDeleteUnanswered(String(req.params.id || ""), mode);
+  if (!ok) return res.status(404).json({ message: "Unanswered item not found" });
+  return res.json({
+    message: mode === "dismiss" ? "Dismissed" : "Deleted",
+    unanswered: await listUnansweredQuestions(),
+  });
+});
+
+// Leads & RFQ Sync Routes (Admin/Staff)
+app.get("/api/chatbot/leads", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  return res.json({ leads: await listChatbotLeads() });
+});
+
+app.patch("/api/chatbot/leads/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const updated = await updateChatbotLead(String(req.params.id || ""), {
+    status: req.body?.status,
+    notes: req.body?.notes,
+  });
+  if (!updated) return res.status(404).json({ message: "Lead not found" });
+  return res.json({ message: "Lead updated", lead: updated, leads: await listChatbotLeads() });
+});
+
+app.post("/api/chatbot/leads/:id/sync-rfq", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const synced = await syncChatbotLeadToRfq(String(req.params.id || ""));
+  if (!synced) return res.status(404).json({ message: "Lead not found" });
+  return res.json({ message: "Synced to RFQ table", lead: synced, leads: await listChatbotLeads() });
+});
+
+// Analytics, CSV Export & AI Credit Cache Controls (Admin/Staff)
+app.get("/api/chatbot/analytics", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  const report = await computeChatbotAnalytics({
+    fromDate: typeof req.query.fromDate === "string" ? req.query.fromDate : undefined,
+    toDate: typeof req.query.toDate === "string" ? req.query.toDate : undefined,
+    language: typeof req.query.language === "string" ? req.query.language : undefined,
+  });
+  return res.json({ analytics: report });
+});
+
+app.get("/api/chatbot/analytics/export.csv", requireAdminOrStaff, async (_req: AuthRequest, res: Response) => {
+  const [sessions, leads] = await Promise.all([listChatSessions(), listChatbotLeads()]);
+  const escapeCsv = (val: unknown) => {
+    const s = String(val ?? "").replace(/"/g, '""');
+    return `"${s}"`;
+  };
+  const header = [
+    "SessionID",
+    "CustomerName",
+    "Email",
+    "Phone",
+    "Language",
+    "Intent",
+    "Status",
+    "Mode",
+    "Rating",
+    "ResponseTimeMs",
+    "LeadQualified",
+    "RequiredService",
+    "Location",
+    "LastActivityAt",
+  ].join(",");
+
+  const rows = sessions.map((s) => {
+    const lead = leads.find((l) => l.sessionId === s.sessionId);
+    return [
+      s.sessionId,
+      s.customerName || lead?.fields.name || "",
+      s.customerEmail || lead?.fields.email || "",
+      s.customerPhone || lead?.fields.contactNumber || "",
+      s.language,
+      s.detectedIntent,
+      s.status,
+      s.mode,
+      s.rating ?? "",
+      s.avgResponseTimeMs,
+      lead?.isQualified ? "YES" : "NO",
+      lead?.fields.requiredService || "",
+      lead?.fields.projectLocation || "",
+      s.lastActivityAt,
+    ]
+      .map(escapeCsv)
+      .join(",");
+  });
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="innoassist-analytics-${new Date().toISOString().slice(0, 10)}.csv"`);
+  return res.send([header, ...rows].join("\n"));
+});
+
+app.post("/api/chatbot/ai-cache/clear", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
+  await clearAiResponseCache();
+  await recordAuditEvent(req, {
+    targetIdentifier: "chatbot_ai_cache",
+    action: "CHATBOT_AI_CACHE_CLEARED",
+    category: "CHATBOT",
+    status: "SUCCESS",
+    severity: "INFO",
+    details: "Cleared INNOASSIST AI response cache.",
+  });
+  return res.json({ message: "AI response cache cleared." });
 });
 
 // ============================================================================
@@ -4575,15 +5298,24 @@ app.get(["/api/site-visits/slots", "/api/appointments/slots"], optionalAuth, asy
   });
 });
 
-app.get(["/api/site-visits", "/api/appointments"], async (req: Request, res: Response) => {
+app.get(["/api/site-visits", "/api/appointments"], requireAuth, async (req: AuthRequest, res: Response) => {
   const [bookings, schedule] = await Promise.all([
     listAppointments(),
     getAppointmentScheduleConfig(),
   ]);
+  const isAdmin = req.user?.role === "admin" || req.user?.role === "staff";
+  const userEmail = (req.user?.email || "").toLowerCase();
+  const scopedBookings = isAdmin
+    ? bookings
+    : bookings.filter(
+        (b) =>
+          (b.visitorEmail || "").toLowerCase() === userEmail ||
+          (req.user?.userId && Number((b as { userId?: number | null }).userId) === Number(req.user.userId))
+      );
   const payload = buildSiteVisitSchedulePayload(schedule, bookings, req.query.month);
   return res.json({
-    bookings,
-    data: bookings,
+    bookings: scopedBookings,
+    data: scopedBookings,
     schedule,
     dates: payload.managedDates,
     managedDates: payload.managedDates,
@@ -4607,7 +5339,7 @@ app.get("/api/site-visits/schedule", async (req: Request, res: Response) => {
   });
 });
 
-app.put("/api/site-visits/schedule/monthly", async (req: Request, res: Response) => {
+app.put("/api/site-visits/schedule/monthly", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { monthKey, slots, activeWeekdays, closedDates, note, clearPerDateCustomSlots } =
     req.body || {};
   const cleanMonth = String(monthKey || "").trim();
@@ -4639,7 +5371,7 @@ app.put("/api/site-visits/schedule/monthly", async (req: Request, res: Response)
   });
 });
 
-app.delete("/api/site-visits/schedule/monthly/:monthKey", async (req: Request, res: Response) => {
+app.delete("/api/site-visits/schedule/monthly/:monthKey", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const cleanMonth = String(req.params.monthKey || "").trim();
   if (!/^\d{4}-\d{2}$/.test(cleanMonth)) {
     return res.status(400).json({ message: "Valid YYYY-MM monthKey parameter required." });
@@ -4659,7 +5391,7 @@ app.delete("/api/site-visits/schedule/monthly/:monthKey", async (req: Request, r
   });
 });
 
-app.post("/api/site-visits/dates", async (req: Request, res: Response) => {
+app.post("/api/site-visits/dates", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { date, available, note } = req.body || {};
   const cleanDate = String(date || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
@@ -4685,7 +5417,7 @@ app.post("/api/site-visits/dates", async (req: Request, res: Response) => {
   });
 });
 
-app.patch("/api/site-visits/dates/:date", async (req: Request, res: Response) => {
+app.patch("/api/site-visits/dates/:date", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const cleanDate = String(req.params.date || "").trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
     return res.status(400).json({ message: "Valid YYYY-MM-DD date parameter required." });
@@ -4713,7 +5445,7 @@ app.patch("/api/site-visits/dates/:date", async (req: Request, res: Response) =>
   });
 });
 
-app.delete("/api/site-visits/dates/:date", async (req: Request, res: Response) => {
+app.delete("/api/site-visits/dates/:date", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const cleanDate = String(req.params.date || "").trim();
   const [schedule, bookings] = await Promise.all([
     deleteAppointmentDateRecord(cleanDate),
@@ -4730,7 +5462,7 @@ app.delete("/api/site-visits/dates/:date", async (req: Request, res: Response) =
   });
 });
 
-app.post(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Request, res: Response) => {
+app.post(["/api/site-visits/slots", "/api/appointments/slots"], requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { scope, date, time, endTime, label, available } = req.body || {};
   if (!time || !/^\d{1,2}:\d{2}$/.test(String(time).trim())) {
     return res.status(400).json({ message: "Valid HH:mm start time is required." });
@@ -4758,7 +5490,8 @@ app.post(["/api/site-visits/slots", "/api/appointments/slots"], async (req: Requ
 
 app.put(
   ["/api/site-visits/slots/:slotId", "/api/appointments/slots/:slotId"],
-  async (req: Request, res: Response) => {
+  requireAdminOrStaff,
+  async (req: AuthRequest, res: Response) => {
     const slotId = String(req.params.slotId || "");
     const { scope, date, time, endTime, label, available } = req.body || {};
     const targetDate = scope === "default" ? undefined : date ? String(date) : undefined;
@@ -4785,7 +5518,8 @@ app.put(
 
 app.delete(
   ["/api/site-visits/slots/:slotId", "/api/appointments/slots/:slotId"],
-  async (req: Request, res: Response) => {
+  requireAdminOrStaff,
+  async (req: AuthRequest, res: Response) => {
     const slotId = String(req.params.slotId || "");
     const scope = typeof req.query.scope === "string" ? req.query.scope : undefined;
     const targetDate =
@@ -4810,7 +5544,7 @@ app.delete(
   }
 );
 
-app.post(["/api/site-visits", "/api/appointments"], optionalAuth, async (req: AuthRequest, res: Response) => {
+app.post(["/api/site-visits", "/api/appointments"], publicSubmissionRateLimiter, optionalAuth, async (req: AuthRequest, res: Response) => {
   const { date, slotTime, locationName, visitorName, visitorEmail, visitorPhone, notes } =
     req.body || {};
 
@@ -4883,9 +5617,15 @@ app.post(["/api/site-visits", "/api/appointments"], optionalAuth, async (req: Au
   });
 });
 
-app.patch(["/api/site-visits/:id", "/api/appointments/:id"], async (req: Request, res: Response) => {
+app.patch(["/api/site-visits/:id", "/api/appointments/:id"], optionalAuth, async (req: AuthRequest, res: Response) => {
   const bookingId = String(req.params.id || "");
+  const isAdmin = req.user?.role === "admin" || req.user?.role === "staff";
   const rawStatus = req.body?.status !== undefined ? String(req.body.status).toUpperCase() : undefined;
+  if (rawStatus !== undefined && !isAdmin) {
+    return res.status(req.user ? 403 : 401).json({
+      message: "Administrator privileges required to update booking status.",
+    });
+  }
   if (rawStatus && !["CONFIRMED", "COMPLETED", "CANCELLED"].includes(rawStatus)) {
     return res.status(400).json({ message: "Invalid booking status." });
   }
@@ -4910,7 +5650,7 @@ app.patch(["/api/site-visits/:id", "/api/appointments/:id"], async (req: Request
   return res.json({ message: "Booking updated", booking: updated });
 });
 
-app.post("/api/site-visits/slots/toggle-block", async (req: Request, res: Response) => {
+app.post("/api/site-visits/slots/toggle-block", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const { date, slotTime } = req.body || {};
   if (!date || !slotTime) {
     return res.status(400).json({ message: "date and slotTime are required." });
@@ -4941,7 +5681,7 @@ app.get("/api/home-slideshow", async (_req: Request, res: Response) => {
   return res.json({ data });
 });
 
-app.put("/api/home-slideshow", async (req: Request, res: Response) => {
+app.put("/api/home-slideshow", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<HomeSlideshowCmsPayload>(
     "home_slideshow",
     DEFAULT_HOME_SLIDESHOW_CMS
@@ -4951,7 +5691,7 @@ app.put("/api/home-slideshow", async (req: Request, res: Response) => {
   return res.json({ message: "Home slideshow settings updated.", data: next });
 });
 
-app.post("/api/home-slideshow/slides", async (req: Request, res: Response) => {
+app.post("/api/home-slideshow/slides", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<HomeSlideshowCmsPayload>(
     "home_slideshow",
     DEFAULT_HOME_SLIDESHOW_CMS
@@ -4966,7 +5706,7 @@ app.post("/api/home-slideshow/slides", async (req: Request, res: Response) => {
   });
 });
 
-app.put("/api/home-slideshow/slides/:id", async (req: Request, res: Response) => {
+app.put("/api/home-slideshow/slides/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id || "");
   const current = await getCmsDoc<HomeSlideshowCmsPayload>(
     "home_slideshow",
@@ -4984,7 +5724,7 @@ app.put("/api/home-slideshow/slides/:id", async (req: Request, res: Response) =>
   });
 });
 
-app.delete("/api/home-slideshow/slides/:id", async (req: Request, res: Response) => {
+app.delete("/api/home-slideshow/slides/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id || "");
   const current = await getCmsDoc<HomeSlideshowCmsPayload>(
     "home_slideshow",
@@ -5006,7 +5746,7 @@ app.get("/api/home-services", async (_req: Request, res: Response) => {
   return res.json({ data });
 });
 
-app.put("/api/home-services", async (req: Request, res: Response) => {
+app.put("/api/home-services", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<HomeServicesCmsPayload>(
     "home_services",
     DEFAULT_HOME_SERVICES_CMS
@@ -5016,7 +5756,7 @@ app.put("/api/home-services", async (req: Request, res: Response) => {
   return res.json({ message: "What We Build For You settings updated.", data: next });
 });
 
-app.post("/api/home-services/items", async (req: Request, res: Response) => {
+app.post("/api/home-services/items", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<HomeServicesCmsPayload>(
     "home_services",
     DEFAULT_HOME_SERVICES_CMS
@@ -5031,7 +5771,7 @@ app.post("/api/home-services/items", async (req: Request, res: Response) => {
   });
 });
 
-app.put("/api/home-services/items/:id", async (req: Request, res: Response) => {
+app.put("/api/home-services/items/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id || "");
   const current = await getCmsDoc<HomeServicesCmsPayload>(
     "home_services",
@@ -5049,7 +5789,7 @@ app.put("/api/home-services/items/:id", async (req: Request, res: Response) => {
   });
 });
 
-app.delete("/api/home-services/items/:id", async (req: Request, res: Response) => {
+app.delete("/api/home-services/items/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id || "");
   const current = await getCmsDoc<HomeServicesCmsPayload>(
     "home_services",
@@ -5074,7 +5814,7 @@ app.get("/api/home-featured-products", async (_req: Request, res: Response) => {
   return res.json({ data, allDesigns });
 });
 
-app.put("/api/home-featured-products", async (req: Request, res: Response) => {
+app.put("/api/home-featured-products", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
     "home_featured_products",
     DEFAULT_HOME_FEATURED_PRODUCTS_CMS
@@ -5084,7 +5824,7 @@ app.put("/api/home-featured-products", async (req: Request, res: Response) => {
   return res.json({ message: "Top Picks & Accessories Ribbon updated.", data: next });
 });
 
-app.post("/api/home-featured-products/accessories", async (req: Request, res: Response) => {
+app.post("/api/home-featured-products/accessories", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
     "home_featured_products",
     DEFAULT_HOME_FEATURED_PRODUCTS_CMS
@@ -5105,7 +5845,7 @@ app.post("/api/home-featured-products/accessories", async (req: Request, res: Re
   });
 });
 
-app.put("/api/home-featured-products/accessories/:id", async (req: Request, res: Response) => {
+app.put("/api/home-featured-products/accessories/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id || "");
   const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
     "home_featured_products",
@@ -5130,7 +5870,7 @@ app.put("/api/home-featured-products/accessories/:id", async (req: Request, res:
   });
 });
 
-app.delete("/api/home-featured-products/accessories/:id", async (req: Request, res: Response) => {
+app.delete("/api/home-featured-products/accessories/:id", requireAdminOrStaff, async (req: AuthRequest, res: Response) => {
   const id = String(req.params.id || "");
   const current = await getCmsDoc<HomeFeaturedProductsCmsPayload>(
     "home_featured_products",
@@ -5145,6 +5885,16 @@ app.delete("/api/home-featured-products/accessories/:id", async (req: Request, r
   };
   await setCmsDoc("home_featured_products", next as unknown as Record<string, unknown>);
   return res.json({ message: "Accessory ribbon image removed.", data: next });
+});
+
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({ message: err.message });
+  }
+  if (err instanceof Error && err.message.startsWith("Unsupported or unsafe file type")) {
+    return res.status(400).json({ message: err.message });
+  }
+  return next(err);
 });
 
 // ============================================================================

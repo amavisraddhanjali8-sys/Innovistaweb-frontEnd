@@ -1,5 +1,5 @@
-import { Suspense, lazy } from "react";
-import { HashRouter as Router, Routes, Route, useLocation } from "react-router-dom";
+import { Suspense, lazy, type ReactNode } from "react";
+import { HashRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { App as AntdApp, ConfigProvider, Spin } from "antd";
 import { MotionConfig, motion } from "framer-motion";
 import Navbar from "../components/Navbar";
@@ -8,7 +8,7 @@ import ScrollToTop from "../components/ScrollToTop";
 import FloatingChatbotWidget from "../components/FloatingChatbotWidget";
 import InnovistaLoader, { InnovistaSpinIndicator } from "../components/InnovistaLoader";
 import Home from "../pages/Home";
-import { AuthProvider } from "./AuthContext";
+import { AuthProvider, useAuth } from "./AuthContext";
 import { SiteSettingsProvider } from "./SiteSettingsContext";
 import { SiteVisitSlotProvider } from "./SiteVisitSlotContext";
 import BookingToastContainer from "../components/BookingToastContainer";
@@ -61,6 +61,22 @@ function RouteFallback() {
   );
 }
 
+function RequireAdminRoute({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (!user || user.role !== "admin") {
+    return <Navigate to="/admin-login" replace />;
+  }
+  return <>{children}</>;
+}
+
+function RequireAuthRoute({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  if (!user) {
+    return <Navigate to="/profile-login" replace />;
+  }
+  return <>{children}</>;
+}
+
 function MainContent() {
   const location = useLocation();
   const isAuthPage =
@@ -94,31 +110,31 @@ function MainContent() {
                 <Route path="/contact" element={<Contact />} />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/profile-login" element={<ProfileLogin />} />
-                <Route path="/profile" element={<UserProfile />} />
+                <Route path="/profile" element={<RequireAuthRoute><UserProfile /></RequireAuthRoute>} />
                 <Route path="/admin-login" element={<AdminLogin />} />
-                <Route path="/admin-home" element={<AdminHome />} />
-                <Route path="/admin-register" element={<AdminHome defaultMode="register" />} />
-                <Route path="/ManageAllAdmins" element={<AdminHome defaultMode="team" />} />
-                <Route path="/DesignAdded" element={<DesignAdded />} />
-                <Route path="/ViewAllDesigns" element={<ViewAllDesigns />} />
-                <Route path="/ProductCategoriesAdmin" element={<ProductCategoriesAdmin />} />
-                <Route path="/PageAdsAdmin" element={<PageAdsAdmin />} />
-                <Route path="/PortalsAdmin" element={<PortalsAdmin />} />
-                <Route path="/CustomerManager" element={<CustomerManager />} />
+                <Route path="/admin-home" element={<RequireAdminRoute><AdminHome /></RequireAdminRoute>} />
+                <Route path="/admin-register" element={<RequireAdminRoute><AdminHome defaultMode="register" /></RequireAdminRoute>} />
+                <Route path="/ManageAllAdmins" element={<RequireAdminRoute><AdminHome defaultMode="team" /></RequireAdminRoute>} />
+                <Route path="/DesignAdded" element={<RequireAdminRoute><DesignAdded /></RequireAdminRoute>} />
+                <Route path="/ViewAllDesigns" element={<RequireAdminRoute><ViewAllDesigns /></RequireAdminRoute>} />
+                <Route path="/ProductCategoriesAdmin" element={<RequireAdminRoute><ProductCategoriesAdmin /></RequireAdminRoute>} />
+                <Route path="/PageAdsAdmin" element={<RequireAdminRoute><PageAdsAdmin /></RequireAdminRoute>} />
+                <Route path="/PortalsAdmin" element={<RequireAdminRoute><PortalsAdmin /></RequireAdminRoute>} />
+                <Route path="/CustomerManager" element={<RequireAdminRoute><CustomerManager /></RequireAdminRoute>} />
                 <Route path="/CustomerVerify" element={<CustomerVerify />} />
-                <Route path="/OrdermanageAdmin" element={<OrdermanageAdmin />} />
-                <Route path="/AdminFeedback" element={<AdminFeedback />} />
-                <Route path="/Notification" element={<Notification />} />
+                <Route path="/OrdermanageAdmin" element={<RequireAdminRoute><OrdermanageAdmin /></RequireAdminRoute>} />
+                <Route path="/AdminFeedback" element={<RequireAdminRoute><AdminFeedback /></RequireAdminRoute>} />
+                <Route path="/Notification" element={<RequireAdminRoute><Notification /></RequireAdminRoute>} />
                 <Route path="/product-details" element={<ProductDetails />} />
-                <Route path="/AddProjects" element={<AddProjects />} />
+                <Route path="/AddProjects" element={<RequireAdminRoute><AddProjects /></RequireAdminRoute>} />
                 <Route path="/DesignViwe" element={<CategoryLanding />} />
                 <Route path="/OrderCart" element={<OrderCart />} />
                 <Route path="/milestones" element={<Milestones />} />
                 <Route path="/request-quote" element={<RequestQuotePage />} />
-                <Route path="/EditVisionMission" element={<EditVisionMission />} />
-                <Route path="/BlogsAdmin" element={<BlogsAdmin />} />
-                <Route path="/ChatbotAdmin" element={<ChatbotAdmin />} />
-                <Route path="/AdminSecurity" element={<AdminSecurityAudit />} />
+                <Route path="/EditVisionMission" element={<RequireAdminRoute><EditVisionMission /></RequireAdminRoute>} />
+                <Route path="/BlogsAdmin" element={<RequireAdminRoute><BlogsAdmin /></RequireAdminRoute>} />
+                <Route path="/ChatbotAdmin" element={<RequireAdminRoute><ChatbotAdmin /></RequireAdminRoute>} />
+                <Route path="/AdminSecurity" element={<RequireAdminRoute><AdminSecurityAudit /></RequireAdminRoute>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

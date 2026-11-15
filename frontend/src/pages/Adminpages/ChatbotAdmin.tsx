@@ -1,26 +1,46 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
+  FiActivity,
   FiCalendar,
   FiCheck,
   FiChevronLeft,
   FiChevronRight,
   FiClock,
   FiEdit2,
+  FiGitBranch,
+  FiHeadphones,
+  FiHelpCircle,
   FiMessageCircle,
   FiPlus,
   FiRotateCcw,
   FiSave,
-  FiSend,
+  FiSliders,
   FiTrash2,
 } from "react-icons/fi";
-import { FaWhatsapp } from "react-icons/fa";
 import AxiosConfig from "../../Context/AxiosConfig";
 import { useSiteVisitSlots } from "../../Context/SiteVisitSlotContext";
 import AdminPortalShell from "../../components/AdminPortalShell";
+import KnowledgeBaseTab from "../../components/chatbotAdmin/KnowledgeBaseTab";
+import WorkflowsTab from "../../components/chatbotAdmin/WorkflowsTab";
+import LiveSupportLeadsTab from "../../components/chatbotAdmin/LiveSupportLeadsTab";
+import UnansweredQueueTab from "../../components/chatbotAdmin/UnansweredQueueTab";
+import AnalyticsBiTab from "../../components/chatbotAdmin/AnalyticsBiTab";
+import SetupAndSecurityTab from "../../components/chatbotAdmin/SetupAndSecurityTab";
+import type {
+  AdminStaffOption,
+  AiUsageLedger,
+  ChatbotAnalyticsReport,
+  ChatbotLeadRecord,
+  ChatbotSessionRecord,
+  ChatbotWorkflow,
+  ConfigHistoryEntry,
+  ExtendedFaq,
+  KnowledgeDocumentItem,
+  UnansweredQuestionRecord,
+} from "../../components/chatbotAdmin/types";
 import {
   DEFAULT_CHATBOT_CONFIG,
   type ChatbotConfig,
-  type ChatbotFaqItem,
 } from "../../../../shared/chatbotHelpers";
 import {
   DEFAULT_ACTIVE_WEEKDAYS,
@@ -43,11 +63,29 @@ import {
   type SlotAvailabilityItem,
 } from "../../../../shared/siteVisitSchedulerHelpers";
 
+type AdminChatbotTab =
+  | "visits"
+  | "faqs"
+  | "workflows"
+  | "support"
+  | "unanswered"
+  | "analytics"
+  | "setup";
+
 export default function ChatbotAdmin() {
   const { releaseSlot } = useSiteVisitSlots();
-  const [activeTab, setActiveTab] = useState<"setup" | "faqs" | "visits">("visits");
+  const [activeTab, setActiveTab] = useState<AdminChatbotTab>("visits");
   const [config, setConfig] = useState<ChatbotConfig>(DEFAULT_CHATBOT_CONFIG);
-  const [faqs, setFaqs] = useState<ChatbotFaqItem[]>([]);
+  const [configHistory, setConfigHistory] = useState<ConfigHistoryEntry[]>([]);
+  const [faqs, setFaqs] = useState<ExtendedFaq[]>([]);
+  const [documents, setDocuments] = useState<KnowledgeDocumentItem[]>([]);
+  const [workflows, setWorkflows] = useState<ChatbotWorkflow[]>([]);
+  const [sessions, setSessions] = useState<ChatbotSessionRecord[]>([]);
+  const [unanswered, setUnanswered] = useState<UnansweredQuestionRecord[]>([]);
+  const [leads, setLeads] = useState<ChatbotLeadRecord[]>([]);
+  const [analytics, setAnalytics] = useState<ChatbotAnalyticsReport | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageLedger | null>(null);
+  const [staffList, setStaffList] = useState<AdminStaffOption[]>([]);
   const [bookings, setBookings] = useState<SiteVisitBooking[]>([]);
   const [schedule, setSchedule] = useState<SiteVisitScheduleConfig>(() =>
     createDefaultSiteVisitSchedule()
@@ -55,28 +93,9 @@ export default function ChatbotAdmin() {
   const [managedDates, setManagedDates] = useState<ManagedDateSummary[]>(() =>
     getManagedSiteVisitDates(createDefaultSiteVisitSchedule(), [], 10)
   );
-  const [quickPromptsText, setQuickPromptsText] = useState(
-    DEFAULT_CHATBOT_CONFIG.quickPrompts.join(", ")
-  );
 
-  const [savingConfig, setSavingConfig] = useState(false);
   const [statusNotice, setStatusNotice] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
-
-  // Add / Edit FAQ State
-  const [editingFaqId, setEditingFaqId] = useState<string | null>(null);
-  const [faqQuestion, setFaqQuestion] = useState("");
-  const [faqAnswer, setFaqAnswer] = useState("");
-  const [faqCategory, setFaqCategory] = useState("Products");
-  const [faqKeywords, setFaqKeywords] = useState("");
-  const [faqPriority, setFaqPriority] = useState(8);
-  const [savingFaq, setSavingFaq] = useState(false);
-
-  // Live Chatbot Test Preview
-  const [testInput, setTestInput] = useState("");
-  const [testReply, setTestReply] = useState("");
-  const [testWhatsappUrl, setTestWhatsappUrl] = useState("");
-  const [testingChat, setTestingChat] = useState(false);
 
   // Site Visit Date & Slot CRUD State
   const todayIso = formatIsoDateLocal(new Date());
@@ -146,24 +165,43 @@ export default function ChatbotAdmin() {
 
   const loadAll = useCallback(async () => {
     try {
-      const [botRes, visitsRes] = await Promise.all([
-        AxiosConfig.get<{ config: ChatbotConfig; faqs: ChatbotFaqItem[] }>(
-          "/api/chatbot/config"
-        ),
+      const [bundleRes, visitsRes, adminsRes] = await Promise.all([
+        AxiosConfig.get<{
+          config?: ChatbotConfig;
+          configHistory?: ConfigHistoryEntry[];
+          faqs?: ExtendedFaq[];
+          documents?: KnowledgeDocumentItem[];
+          workflows?: ChatbotWorkflow[];
+          sessions?: ChatbotSessionRecord[];
+          unanswered?: UnansweredQuestionRecord[];
+          leads?: ChatbotLeadRecord[];
+          analytics?: ChatbotAnalyticsReport;
+          aiUsage?: AiUsageLedger;
+        }>("/api/chatbot/admin/bundle", { headers: { "x-no-cache": "true" } }),
         AxiosConfig.get<{
           data: SiteVisitBooking[];
           schedule?: SiteVisitScheduleConfig;
           dates?: ManagedDateSummary[];
           managedDates?: ManagedDateSummary[];
         }>(`/api/site-visits?month=${encodeURIComponent(adminMonth)}`),
+        AxiosConfig.get<{ admin?: AdminStaffOption[] }>("/auth/getAllAdmins").catch(
+          () => ({ data: { admin: [] } })
+        ),
       ]);
-      if (botRes.data?.config) {
-        setConfig(botRes.data.config);
-        setQuickPromptsText(botRes.data.config.quickPrompts.join(", "));
+      if (bundleRes.data?.config) setConfig(bundleRes.data.config);
+      if (Array.isArray(bundleRes.data?.configHistory)) {
+        setConfigHistory(bundleRes.data.configHistory);
       }
-      if (Array.isArray(botRes.data?.faqs)) {
-        setFaqs(botRes.data.faqs);
-      }
+      if (Array.isArray(bundleRes.data?.faqs)) setFaqs(bundleRes.data.faqs);
+      if (Array.isArray(bundleRes.data?.documents)) setDocuments(bundleRes.data.documents);
+      if (Array.isArray(bundleRes.data?.workflows)) setWorkflows(bundleRes.data.workflows);
+      if (Array.isArray(bundleRes.data?.sessions)) setSessions(bundleRes.data.sessions);
+      if (Array.isArray(bundleRes.data?.unanswered)) setUnanswered(bundleRes.data.unanswered);
+      if (Array.isArray(bundleRes.data?.leads)) setLeads(bundleRes.data.leads);
+      if (bundleRes.data?.analytics) setAnalytics(bundleRes.data.analytics);
+      if (bundleRes.data?.aiUsage) setAiUsage(bundleRes.data.aiUsage);
+      if (Array.isArray(adminsRes.data?.admin)) setStaffList(adminsRes.data.admin);
+
       if (Array.isArray(visitsRes.data?.data)) {
         setBookings(visitsRes.data.data);
       }
@@ -205,114 +243,9 @@ export default function ChatbotAdmin() {
     setRefreshTick((t) => t + 1);
   };
 
-  const handleSaveConfig = async (e: FormEvent) => {
-    e.preventDefault();
-    setSavingConfig(true);
-    setStatusNotice("");
-    try {
-      const prompts = quickPromptsText
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      const res = await AxiosConfig.put<{ config: ChatbotConfig; message: string }>(
-        "/api/chatbot/config",
-        {
-          ...config,
-          quickPrompts: prompts,
-        }
-      );
-      if (res.data?.config) setConfig(res.data.config);
-      setStatusNotice("Chatbot settings saved.");
-      setRefreshTick((t) => t + 1);
-    } finally {
-      setSavingConfig(false);
-    }
-  };
-
-  const handleSaveFaq = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!faqQuestion.trim() || !faqAnswer.trim()) return;
-    setSavingFaq(true);
-    setStatusNotice("");
-    try {
-      const payload = {
-        question: faqQuestion.trim(),
-        answer: faqAnswer.trim(),
-        category: faqCategory.trim() || "General",
-        keywords: faqKeywords
-          .split(",")
-          .map((k) => k.trim())
-          .filter(Boolean),
-        priority: Number(faqPriority) || 5,
-        enabled: true,
-      };
-      if (editingFaqId) {
-        const res = await AxiosConfig.put<{ faqs: ChatbotFaqItem[] }>(
-          `/api/chatbot/faqs/${editingFaqId}`,
-          payload
-        );
-        setFaqs(res.data.faqs || []);
-        setStatusNotice("Trained FAQ updated.");
-      } else {
-        const res = await AxiosConfig.post<{ faqs: ChatbotFaqItem[] }>(
-          "/api/chatbot/faqs",
-          payload
-        );
-        setFaqs(res.data.faqs || []);
-        setStatusNotice("New FAQ added to chatbot training.");
-      }
-      setEditingFaqId(null);
-      setFaqQuestion("");
-      setFaqAnswer("");
-      setFaqKeywords("");
-      setFaqPriority(8);
-    } finally {
-      setSavingFaq(false);
-    }
-  };
-
-  const handleToggleFaqEnabled = async (item: ChatbotFaqItem) => {
-    const res = await AxiosConfig.put<{ faqs: ChatbotFaqItem[] }>(
-      `/api/chatbot/faqs/${item.id}`,
-      { enabled: !item.enabled }
-    );
-    setFaqs(res.data.faqs || []);
-  };
-
-  const handleDeleteFaq = async (id: string) => {
-    const res = await AxiosConfig.delete<{ faqs: ChatbotFaqItem[] }>(
-      `/api/chatbot/faqs/${id}`
-    );
-    setFaqs(res.data.faqs || []);
-    setStatusNotice("FAQ training item removed.");
-  };
-
-  const handleEditFaq = (item: ChatbotFaqItem) => {
-    setEditingFaqId(item.id);
-    setFaqQuestion(item.question);
-    setFaqAnswer(item.answer);
-    setFaqCategory(item.category);
-    setFaqKeywords(item.keywords.join(", "));
-    setFaqPriority(item.priority);
-    setActiveTab("faqs");
-  };
-
-  const handleTestChatbot = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!testInput.trim()) return;
-    setTestingChat(true);
-    try {
-      const res = await AxiosConfig.post<{
-        reply: string;
-        whatsappUrl?: string;
-      }>("/api/chatbot/ask", {
-        message: testInput.trim(),
-      });
-      setTestReply(res.data.reply);
-      setTestWhatsappUrl(res.data.whatsappUrl || "");
-    } finally {
-      setTestingChat(false);
-    }
+  const notifyAdmin = (msg: string) => {
+    setStatusNotice(msg);
+    setRefreshTick((t) => t + 1);
   };
 
   const handleUpdateBookingStatus = async (id: string, status: SiteVisitStatus) => {
@@ -553,15 +486,21 @@ export default function ChatbotAdmin() {
           schedule
         );
 
-  const activeFaqCount = faqs.filter((f) => f.enabled).length;
+  const activeFaqCount = faqs.filter((f) => f.enabled && f.status === "published").length;
   const confirmedVisitCount = bookings.filter((b) => b.status === "CONFIRMED").length;
+  const waitingSupportCount = sessions.filter(
+    (s) => s.status === "WAITING_HUMAN" || s.status === "ESCALATED"
+  ).length;
+  const pendingUnansweredCount = unanswered.filter((u) => u.status === "PENDING").length;
 
   return (
     <AdminPortalShell
-      sectionTitle="Chatbot"
+      sectionTitle="INNOASSIST & Chatbot"
       refreshTrigger={refreshTick}
       stats={[
-        { label: "FAQs", value: activeFaqCount, tone: "navy" },
+        { label: "Published KB", value: activeFaqCount, tone: "navy" },
+        { label: "Live Queue", value: waitingSupportCount, tone: waitingSupportCount > 0 ? "red" : "navy" },
+        { label: "Leads", value: leads.length, tone: "green" },
         { label: "Visits", value: confirmedVisitCount, tone: "green" },
         { label: "Widget", value: config.enabled ? "Live" : "Paused" },
       ]}
@@ -572,13 +511,31 @@ export default function ChatbotAdmin() {
           <div className="flex flex-wrap items-center gap-2">
             {[
               { id: "visits", label: "Schedule", icon: <FiCalendar /> },
-              { id: "faqs", label: "FAQs", icon: <FiMessageCircle /> },
-              { id: "setup", label: "Setup", icon: <FiSave /> },
+              { id: "faqs", label: "Knowledge Base", icon: <FiMessageCircle /> },
+              { id: "workflows", label: "Workflows", icon: <FiGitBranch /> },
+              {
+                id: "support",
+                label:
+                  waitingSupportCount > 0
+                    ? `Live Support & Leads (${waitingSupportCount})`
+                    : "Live Support & Leads",
+                icon: <FiHeadphones />,
+              },
+              {
+                id: "unanswered",
+                label:
+                  pendingUnansweredCount > 0
+                    ? `Unanswered (${pendingUnansweredCount})`
+                    : "Unanswered",
+                icon: <FiHelpCircle />,
+              },
+              { id: "analytics", label: "Analytics & BI", icon: <FiActivity /> },
+              { id: "setup", label: "AI & Security", icon: <FiSliders /> },
             ].map((tabItem) => (
               <button
                 key={tabItem.id}
                 type="button"
-                onClick={() => setActiveTab(tabItem.id as "faqs" | "setup" | "visits")}
+                onClick={() => setActiveTab(tabItem.id as AdminChatbotTab)}
                 className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold cursor-pointer transition-colors ${
                   activeTab === tabItem.id
                     ? "bg-[#22577A] text-white border-0"
@@ -1314,329 +1271,70 @@ export default function ChatbotAdmin() {
           </div>
         )}
 
-        {/* TAB 2: FAQs */}
+        {/* TAB 2: ADVANCED KNOWLEDGE BASE, DOCUMENTS & PREVIEW */}
         {activeTab === "faqs" && (
-          <div className="space-y-5">
-            <form
-              onSubmit={handleSaveFaq}
-              className="rounded-xl border border-slate-200 bg-[#F8FAFC] p-4 sm:p-5 space-y-3"
-            >
-              <div className="text-xs font-bold text-[#14171A] uppercase tracking-wider">
-                {editingFaqId ? "Edit" : "Training"}
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="sm:col-span-2">
-                  <label htmlFor="faq-question" className="sr-only">
-                    Customer Question
-                  </label>
-                  <input
-                    id="faq-question"
-                    type="text"
-                    required
-                    placeholder="Frequently asked question (e.g. What is delivery lead time?)"
-                    value={faqQuestion}
-                    onChange={(e) => setFaqQuestion(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="faq-category" className="sr-only">
-                    Category
-                  </label>
-                  <input
-                    id="faq-category"
-                    type="text"
-                    placeholder="Category (e.g. Pricing)"
-                    value={faqCategory}
-                    onChange={(e) => setFaqCategory(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="faq-answer" className="sr-only">
-                  Assistant Answer
-                </label>
-                <textarea
-                  id="faq-answer"
-                  rows={3}
-                  required
-                  placeholder="Exact verified answer..."
-                  value={faqAnswer}
-                  onChange={(e) => setFaqAnswer(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-xs sm:text-sm resize-none"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
-                <div className="sm:col-span-2">
-                  <label htmlFor="faq-keywords" className="sr-only">
-                    Trigger Keywords
-                  </label>
-                  <input
-                    id="faq-keywords"
-                    type="text"
-                    placeholder="Keywords comma-separated (e.g. lead time, delivery, weeks)"
-                    value={faqKeywords}
-                    onChange={(e) => setFaqKeywords(e.target.value)}
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs"
-                  />
-                </div>
-                <div className="flex items-center gap-2 justify-end">
-                  {editingFaqId && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingFaqId(null);
-                        setFaqQuestion("");
-                        setFaqAnswer("");
-                        setFaqKeywords("");
-                      }}
-                      className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-semibold text-slate-600 cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                  )}
-                  <button
-                    type="submit"
-                    disabled={savingFaq}
-                    className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-bold cursor-pointer border-0"
-                  >
-                    <FiPlus />
-                    <span>{editingFaqId ? "Save" : "Add"}</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-
-            {/* Trained Q&A List */}
-            <div className="space-y-2.5">
-              {faqs.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl border border-slate-200 bg-white p-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3"
-                >
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-md bg-sky-50 text-[#22577A] text-[10px] font-bold uppercase">
-                        {item.category}
-                      </span>
-                      <span className="text-sm font-bold text-[#14171A]">
-                        {item.question}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 m-0 leading-relaxed">
-                      {item.answer}
-                    </p>
-                    {item.keywords.length > 0 && (
-                      <div className="text-[11px] text-slate-400">
-                        Keywords: {item.keywords.join(", ")}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleFaqEnabled(item)}
-                      className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold cursor-pointer border ${
-                        item.enabled
-                          ? "bg-emerald-50 border-emerald-200 text-emerald-700"
-                          : "bg-slate-100 border-slate-200 text-slate-500"
-                      }`}
-                    >
-                      {item.enabled ? "Active" : "Paused"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleEditFaq(item)}
-                      aria-label={`Edit ${item.question}`}
-                      className="p-2 rounded-lg border border-slate-200 bg-white hover:border-[#22577A] text-slate-600 cursor-pointer"
-                    >
-                      <FiEdit2 className="text-xs" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteFaq(item.id)}
-                      aria-label={`Delete ${item.question}`}
-                      className="p-2 rounded-lg border border-slate-200 bg-white hover:border-[#E60000] text-slate-600 hover:text-[#E60000] cursor-pointer"
-                    >
-                      <FiTrash2 className="text-xs" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+          <KnowledgeBaseTab
+            faqs={faqs}
+            documents={documents}
+            onFaqsChange={setFaqs}
+            onDocumentsChange={setDocuments}
+            onNotify={notifyAdmin}
+          />
         )}
 
-        {/* TAB 3: BOT CONFIGURATION & LIVE TEST */}
+        {/* TAB 3: CONFIGURABLE CONVERSATION WORKFLOWS */}
+        {activeTab === "workflows" && (
+          <WorkflowsTab
+            workflows={workflows}
+            onWorkflowsChange={setWorkflows}
+            onNotify={notifyAdmin}
+          />
+        )}
+
+        {/* TAB 4: LIVE SUPPORT HANDOVER & LEADS */}
+        {activeTab === "support" && (
+          <LiveSupportLeadsTab
+            sessions={sessions}
+            leads={leads}
+            staffList={staffList}
+            onSessionsChange={setSessions}
+            onLeadsChange={setLeads}
+            onNotify={notifyAdmin}
+          />
+        )}
+
+        {/* TAB 5: UNANSWERED QUESTIONS REVIEW QUEUE */}
+        {activeTab === "unanswered" && (
+          <UnansweredQueueTab
+            unanswered={unanswered}
+            onUnansweredChange={setUnanswered}
+            onFaqsChange={setFaqs}
+            onNotify={notifyAdmin}
+          />
+        )}
+
+        {/* TAB 6: BUSINESS INTELLIGENCE & EXPORTS */}
+        {activeTab === "analytics" && (
+          <AnalyticsBiTab
+            analytics={analytics}
+            sessions={sessions}
+            leads={leads}
+            unanswered={unanswered}
+            onAnalyticsChange={setAnalytics}
+            onNotify={notifyAdmin}
+          />
+        )}
+
+        {/* TAB 7: AI, CREDIT GUARD, SECURITY & CONFIG HISTORY */}
         {activeTab === "setup" && (
-          <div className="grid grid-cols-1 xl:grid-cols-12 gap-5">
-            <form onSubmit={handleSaveConfig} className="xl:col-span-7 space-y-3.5">
-              <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-[#F8FAFC] px-4 py-3">
-                <span className="text-xs font-bold text-[#14171A]">
-                  Show Floating 3D Receptionist Across Public Pages
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
-                  }
-                  className={`px-3 py-1 rounded-lg text-xs font-bold cursor-pointer border ${
-                    config.enabled
-                      ? "bg-emerald-600 border-emerald-600 text-white"
-                      : "bg-white border-slate-300 text-slate-600"
-                  }`}
-                >
-                  {config.enabled ? "Enabled" : "Disabled"}
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                    Receptionist Name
-                  </label>
-                  <input
-                    type="text"
-                    value={config.assistantName}
-                    onChange={(e) =>
-                      setConfig((prev) => ({ ...prev, assistantName: e.target.value }))
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                    WhatsApp Button Label
-                  </label>
-                  <input
-                    type="text"
-                    value={config.whatsappTriggerLabel}
-                    onChange={(e) =>
-                      setConfig((prev) => ({
-                        ...prev,
-                        whatsappTriggerLabel: e.target.value,
-                      }))
-                    }
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  Welcome Greeting
-                </label>
-                <input
-                  type="text"
-                  value={config.welcomeMessage}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, welcomeMessage: e.target.value }))
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  WhatsApp Prefill Prefix
-                </label>
-                <input
-                  type="text"
-                  value={config.defaultWhatsappPrefix}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      defaultWhatsappPrefix: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  Quick Prompts (comma-separated)
-                </label>
-                <input
-                  type="text"
-                  value={quickPromptsText}
-                  onChange={(e) => setQuickPromptsText(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 mb-1">
-                  System Instructions (Tone &amp; Rules)
-                </label>
-                <textarea
-                  rows={3}
-                  value={config.systemInstructions}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      systemInstructions: e.target.value,
-                    }))
-                  }
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs sm:text-sm resize-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={savingConfig}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-[#22577A] hover:bg-[#19435E] text-white text-xs font-bold cursor-pointer border-0"
-              >
-                <FiSave />
-                <span>{savingConfig ? "Saving..." : "Save"}</span>
-              </button>
-            </form>
-
-            {/* Test */}
-            <div className="xl:col-span-5 rounded-xl border border-slate-200 bg-[#F8FAFC] p-4 space-y-3">
-              <div className="text-xs font-bold text-[#14171A] uppercase tracking-wider">
-                Test
-              </div>
-              <form onSubmit={handleTestChatbot} className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Ask..."
-                  value={testInput}
-                  onChange={(e) => setTestInput(e.target.value)}
-                  className="flex-1 px-3 py-2 rounded-lg border border-slate-200 bg-white text-xs"
-                />
-                <button
-                  type="submit"
-                  disabled={testingChat}
-                  aria-label="Send"
-                  className="px-3.5 py-2 rounded-lg bg-[#22577A] text-white text-xs font-bold cursor-pointer border-0"
-                >
-                  <FiSend />
-                </button>
-              </form>
-              {testReply && (
-                <div className="rounded-xl border border-slate-200 bg-white p-3.5 space-y-2.5 text-xs text-slate-800">
-                  <div>{testReply}</div>
-                  {testWhatsappUrl && (
-                    <a
-                      href={testWhatsappUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="btn-anim-fx inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold no-underline"
-                    >
-                      <FaWhatsapp />
-                      <span>WhatsApp</span>
-                    </a>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
+          <SetupAndSecurityTab
+            config={config}
+            configHistory={configHistory}
+            aiUsage={aiUsage}
+            onConfigChange={setConfig}
+            onHistoryChange={setConfigHistory}
+            onNotify={notifyAdmin}
+          />
         )}
       </div>
     </AdminPortalShell>
